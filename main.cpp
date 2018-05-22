@@ -13,6 +13,9 @@
 
 #include "ShotPanelWidget.h"
 
+#include <QtPlugin>
+Q_IMPORT_PLUGIN(BasicToolsPlugin)
+
 int main(int argc, char *argv[])
 {
 	QApplication app(argc, argv);

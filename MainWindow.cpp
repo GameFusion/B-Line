@@ -4,8 +4,9 @@
 #include "MainWindow.h"
 //#include "Database.h"
 #include "BezierPath.h"
-
-
+#include "SceneNode.h"
+#include "SceneGraph.h"
+#include "AttributeEditor.h"
 
 #include <QTimer>
 #include <QDragEnterEvent>
@@ -15,6 +16,7 @@
 #include "QtUtils.h"
 
 #include "ShotPanelWidget.h"
+#include "MainWindowPaint.h"
 
 using namespace GameFusion;
 
@@ -43,6 +45,10 @@ MainWindow::MainWindow(QWidget *parent)
 	ShotPanelWidget *shotPanel = new ShotPanelWidget;
 	ui->splitter->insertWidget(0, shotPanel);
 	shotPanel->show();
+
+	MainWindowPaint *paint = new MainWindowPaint;
+	ui->splitter->insertWidget(1, paint);
+	paint->show();
 
 	return;
 	//
