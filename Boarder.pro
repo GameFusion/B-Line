@@ -2,6 +2,9 @@
 TEMPLATE = app
 TARGET = Boarder
 
+VERSION = 1.0.0
+DEFINES += VERSION_STRING=\\\"$$VERSION\\\"
+
 message(GameFusion env value set to $$(GameFusion))
 GF=$$(GameFusion)
 isEmpty(GF) {
@@ -11,6 +14,8 @@ isEmpty(GF) {
 	message(Found GameFusion at $$(GameFusion))
 	GF=$$(GameFusion)
 }
+
+CONFIG += no_batch
 
 DEPENDPATH += .
 INCLUDEPATH += .
@@ -27,6 +32,7 @@ INCLUDEPATH += ../../GameEngine/EzRun
 INCLUDEPATH += ../../GameEngine/Collision
 INCLUDEPATH += ../../GameEngine/GameWeb
 INCLUDEPATH += ../../Projects/PhoneDEC/dec_phone_corr/
+INCLUDEPATH += $$GF/GameEngine/Demos/Draw
 
 RESOURCES += $$GF/Applications/CommonQt/qdarkstyle/style.qrc
 
@@ -98,30 +104,24 @@ win32 {
 		LIBS += ../../ExternalLibs/harmonicBlender/x64/Debug/harmonicBlender.lib
 		LIBS += ../../ExternalLibs/libharu-2.1.0/x64/Debug/libharu.lib
 		
-		#LIBS += ../../Projects/PhoneDEC/dec_phone_corr/x64/Debug/Phone.obj
-		#LIBS += ../../Projects/PhoneDEC/dec_phone_corr/x64/Debug/DEC.obj
 		LIBS += comdlg32.lib
-		#SOURCES += ../../Projects/PhoneDEC/dec_phone_corr/PhoneDEC.cpp
 		SOURCES += ../../Projects/PhoneDEC/dec_phone_corr/Phone.cpp
 		SOURCES += ../../Projects/PhoneDEC/dec_phone_corr/DEC.cpp
 		 LIBS += ..\..\ExternalLibs\libjpeg-win64\x64\Debug\jpeg.lib
 		LIBS += ../../ExternalLibs/libpng-1.6.24/build-win64/Debug/libpng16_staticd.lib
 		LIBS += ../../ExternalLibs/zlib/Debug/zlib.lib
-		} else {
+	} else {
 		LIBS	+= ..\..\GameEngine\x64\Release\GameEngine.lib ..\..\GameEngine\x64\Release\GameEngineGL.lib ..\..\GameEngine\x64\Release\GameFramework.lib
 		LIBS += ../../ExternalLibs/harmonicBlender/x64/Release/harmonicBlender.lib
 		LIBS += ../../ExternalLibs/libharu-2.1.0/x64/Release/libharu.lib
-	#	LIBS += ../../Projects/PhoneDEC/dec_phone_corr/x64/Release/PhoneDEC.obj
-		#LIBS += ../../Projects/PhoneDEC/dec_phone_corr/x64/Release/Phone.obj
-		#LIBS += ../../Projects/PhoneDEC/dec_phone_corr/x64/Release/DEC.obj
 		SOURCES += ../../Projects/PhoneDEC/dec_phone_corr/Phone.cpp
 		SOURCES += ../../Projects/PhoneDEC/dec_phone_corr/DEC.cpp
-		 LIBS += ..\..\ExternalLibs\libjpeg-win64\x64\Release\jpeg.lib
-		 LIBS += ../../ExternalLibs/libpng-1.6.24/build-win64/Release/libpng16_static.lib
-		 LIBS += ../../ExternalLibs/zlib/Release/zlib.lib
+		LIBS += ..\..\ExternalLibs\libjpeg-win64\x64\Release\jpeg.lib
+		LIBS += ../../ExternalLibs/libpng-1.6.24/build-win64/Release/libpng16_static.lib
+		LIBS += ../../ExternalLibs/zlib/Release/zlib.lib
 		LIBS += comdlg32.lib
    }
-    
+
    LIBS += ..\..\ExternalLibs\ffmpeg-git-41a097a-win64-dev\lib\avformat.lib
    LIBS += ..\..\ExternalLibs\ffmpeg-git-41a097a-win64-dev\lib\avcodec.lib
    LIBS += ..\..\ExternalLibs\ffmpeg-git-41a097a-win64-dev\lib\avutil.lib
@@ -129,6 +129,13 @@ win32 {
    SOURCES += ../../GameEngine/GenericDevice/GenericDevice.cpp
    SOURCES += ../../GameEngine/GenericDevice/GenericInput.cpp
 }
+
+#
+# plug and paint tools
+
+
+#
+# Boarder main window
 
 INCLUDEPATH += $$GF/Applications/CommonQt
 SOURCES += $$GF/Applications/CommonQt/QtUtils.cpp
@@ -142,5 +149,30 @@ HEADERS += MainWindow.h ShotPanelWidget.h
 SOURCES += ./main.cpp MainWindow.cpp ShotPanelWidget.cpp
 
 
-
-
+#
+# plug and paint tools
+HEADERS       += $$GF/Applications/plugandpaint/app/interfaces.h \
+                 $$GF/Applications/plugandpaint/app/mainwindowpaint.h \
+                 $$GF/Applications/plugandpaint/app/paintarea.h \
+                 $$GF/Applications/plugandpaint/app/plugindialog.h
+				 
+SOURCES       += $$GF/Applications/plugandpaint/app/mainwindowpaint.cpp \
+                 $$GF/Applications/plugandpaint/app/paintarea.cpp \
+                 $$GF/Applications/plugandpaint/app/plugindialog.cpp \
+				 $$GF/GameEngine/Demos/Draw/FitCurves.c \
+				 $$GF/GameEngine/Demos/Draw/GraphicsGems.c
+INCLUDEPATH   += $$GF/Applications/plugandpaint/app
+LIBS          += -L$$GF/Applications/plugandpaint/plugins
+macx-xcode {
+    LIBS += -lpnp_basictools$($${QMAKE_XCODE_LIBRARY_SUFFIX_SETTING})
+} else {
+	CONFIG(debug, debug|release) {
+    	LIBS += -lpnp_basictoolsd
+	}else{
+		LIBS += -lpnp_basictoolsd
+	}
+	if(!debug_and_release|build_pass):CONFIG(debug, debug|release) {
+        mac:LIBS = $$member(LIBS, 0) $$member(LIBS, 1)_debug
+        ##### win32:LIBS = $$member(LIBS, 0) $$member(LIBS, 1)d
+    }
+}

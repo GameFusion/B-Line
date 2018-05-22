@@ -6,12 +6,12 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1015</width>
-    <height>646</height>
+    <width>1741</width>
+    <height>1116</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>Boarder</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
@@ -37,7 +37,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1015</width>
+     <width>1741</width>
      <height>31</height>
     </rect>
    </property>
@@ -143,7 +143,7 @@
          <item>
           <widget class="QLabel" name="label">
            <property name="text">
-            <string>ShapeTarget</string>
+            <string>Brush Size</string>
            </property>
           </widget>
          </item>
@@ -182,27 +182,35 @@
            <item row="0" column="0">
             <widget class="QLabel" name="label_2">
              <property name="text">
-              <string>TextLabel</string>
+              <string>Opacity</string>
              </property>
             </widget>
            </item>
            <item row="0" column="1">
-            <widget class="QLineEdit" name="lineEdit"/>
+            <widget class="QLineEdit" name="lineEdit">
+             <property name="text">
+              <string>100 %</string>
+             </property>
+            </widget>
            </item>
            <item row="2" column="0">
             <widget class="QLabel" name="label_3">
              <property name="text">
-              <string>TextLabel longer</string>
+              <string>Smooth</string>
              </property>
             </widget>
            </item>
            <item row="2" column="1">
-            <widget class="QLineEdit" name="lineEdit_2"/>
+            <widget class="QLineEdit" name="lineEdit_2">
+             <property name="text">
+              <string>64 pix</string>
+             </property>
+            </widget>
            </item>
            <item row="3" column="0">
             <widget class="QLabel" name="label_4">
              <property name="text">
-              <string>TextLabel</string>
+              <string>Opacity</string>
              </property>
             </widget>
            </item>
@@ -478,6 +486,31 @@
        </column>
        <column>
         <property name="text">
+         <string>Episode</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Task Template</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Status</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Type</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Time Of Day</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
          <string>Restore</string>
         </property>
        </column>
@@ -491,10 +524,354 @@
          <string>Notes</string>
         </property>
        </column>
+       <item>
+        <property name="text">
+         <string>SH032.00</string>
+        </property>
+        <property name="text">
+         <string>33</string>
+        </property>
+        <property name="text">
+         <string>106</string>
+        </property>
+        <property name="text">
+         <string>Shot Task</string>
+        </property>
+        <property name="text">
+         <string>rdy</string>
+        </property>
+        <property name="text">
+         <string>3D</string>
+        </property>
+        <property name="text">
+         <string>DAY</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="text">
+         <string>Let's have this a standard 3/4 of Sadie's house that we will re-use for establishing shots throughout show. Have someone mid shot walking away from camera on footpath (So no expression needed) any generis person, with a generic walk.</string>
+        </property>
+        <item>
+         <property name="text">
+          <string>A</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="text">
+          <string>rdy</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>B</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="text">
+          <string>rdy</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+        </item>
+       </item>
+       <item>
+        <property name="text">
+         <string>SH034.00</string>
+        </property>
+        <property name="text">
+         <string>443</string>
+        </property>
+        <property name="text">
+         <string>106</string>
+        </property>
+        <property name="text">
+         <string>Shot Task</string>
+        </property>
+        <property name="text">
+         <string>rdy</string>
+        </property>
+        <property name="text">
+         <string>3D</string>
+        </property>
+        <property name="text">
+         <string>DAY</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="text">
+         <string>OVER ALL POV CAMERA NOTE FOR PHONE FRAME; The phone frame should have a slight moving hold on it to give impression it's being held by Teepee. The magic FX fades out after the marker appears. GILBERT: On time code 1:44:21, he is rubbing his nose where it hit the phone as he look down to camera and growls to Teepee (He as a bit grumpy that Teepee hit him in nose)</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>SH033.00AB</string>
+        </property>
+        <property name="text">
+         <string>39</string>
+        </property>
+        <property name="text">
+         <string>106</string>
+        </property>
+        <property name="text">
+         <string>Shot Task</string>
+        </property>
+        <property name="text">
+         <string>rdy</string>
+        </property>
+        <property name="text">
+         <string>3D</string>
+        </property>
+        <property name="text">
+         <string>DAY</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>SH035.00</string>
+        </property>
+        <property name="text">
+         <string>30</string>
+        </property>
+        <property name="text">
+         <string>106</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </item>
       </widget>
      </item>
     </layout>
    </widget>
+  </widget>
+  <widget class="QDockWidget" name="dockCameraAndLayers">
+   <property name="floating">
+    <bool>false</bool>
+   </property>
+   <property name="windowTitle">
+    <string>Layers</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>2</number>
+   </attribute>
+   <widget class="QWidget" name="dockWidgetContents_2">
+    <layout class="QVBoxLayout" name="verticalLayout_2">
+     <item>
+      <layout class="QHBoxLayout" name="horizontalLayout_4">
+       <item>
+        <widget class="QComboBox" name="comboBox">
+         <item>
+          <property name="text">
+           <string>Normal</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="label_5">
+         <property name="text">
+          <string>Opacity</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QSpinBox" name="spinBox">
+         <property name="frame">
+          <bool>false</bool>
+         </property>
+         <property name="buttonSymbols">
+          <enum>QAbstractSpinBox::PlusMinus</enum>
+         </property>
+         <property name="specialValueText">
+          <string/>
+         </property>
+         <property name="showGroupSeparator" stdset="0">
+          <bool>false</bool>
+         </property>
+         <property name="suffix">
+          <string> %</string>
+         </property>
+         <property name="maximum">
+          <number>100</number>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="toolButton_2">
+         <property name="text">
+          <string>...</string>
+         </property>
+         <property name="arrowType">
+          <enum>Qt::DownArrow</enum>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <widget class="QListWidget" name="listWidget">
+       <item>
+        <property name="text">
+         <string>Calque 2</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Calque 1</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Background</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+     <item>
+      <layout class="QHBoxLayout" name="horizontalLayout_5">
+       <item>
+        <spacer name="horizontalSpacer">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QToolButton" name="toolButton_5">
+         <property name="font">
+          <font>
+           <italic>true</italic>
+          </font>
+         </property>
+         <property name="text">
+          <string>fx</string>
+         </property>
+         <property name="toolButtonStyle">
+          <enum>Qt::ToolButtonFollowStyle</enum>
+         </property>
+         <property name="arrowType">
+          <enum>Qt::NoArrow</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="toolButton_3">
+         <property name="text">
+          <string>+</string>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normaloff>digital-photography.svg</normaloff>digital-photography.svg</iconset>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="toolButton_4">
+         <property name="text">
+          <string>-</string>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normaloff>delete-trash-bin.svg</normaloff>delete-trash-bin.svg</iconset>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <widget class="QDockWidget" name="dockWidget">
+   <property name="windowTitle">
+    <string>Cameras</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>2</number>
+   </attribute>
+   <widget class="QWidget" name="dockWidgetContents_4"/>
   </widget>
   <action name="actionOpen">
    <property name="text">
