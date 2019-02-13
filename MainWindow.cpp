@@ -50,6 +50,37 @@ MainWindow::MainWindow(QWidget *parent)
 	ui->splitter->insertWidget(1, paint);
 	paint->show();
 
+	//
+	// Test image in shot tree
+	//new QTreeWidgetItem(shotsTreeWidget);
+	QTreeWidget *shotTree = ui->shotsTreeWidget;
+	shotTree->setIconSize(QSize(256, 256));
+
+	QTreeWidgetItem *newItem = new QTreeWidgetItem(shotTree);
+	newItem->setText(0, "Something");
+	newItem->setIcon(1, QIcon("2019-01-05.png"));
+
+	shotTree->topLevelItem(0)->setIcon(1, QIcon("2018-12-03 (1).png"));
+	shotTree->topLevelItem(1)->setIcon(1, QIcon("2018-12-03.png"));
+	shotTree->topLevelItem(2)->setIcon(1, QIcon("2018-12-15.png"));
+	shotTree->topLevelItem(3)->setIcon(1, QIcon("2019-01-05 (5).png"));
+	newItem = new QTreeWidgetItem(shotTree);
+	newItem->setText(0, "SH100");
+	newItem->setIcon(1, QIcon("2018-09-15 (6).png"));
+	newItem = new QTreeWidgetItem(shotTree);
+	newItem->setText(0, "SH101");
+	newItem->setIcon(1, QIcon("2018-09-12 (3).png"));
+	newItem = new QTreeWidgetItem(shotTree);
+	newItem->setText(0, "SH102");
+	newItem->setIcon(1, QIcon("2018-09-15 (4).png"));
+	//newItem->setSizeHint(1, QSize(256, 144));
+	
+	
+	//shotTree->addTopLeveItem(newItem);
+	
+	//
+	//// RETURN
+
 	return;
 	//
 	QList <int> list;
