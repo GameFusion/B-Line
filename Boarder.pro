@@ -169,7 +169,7 @@ macx-xcode {
 	CONFIG(debug, debug|release) {
     	LIBS += -lpnp_basictoolsd
 	}else{
-		LIBS += -lpnp_basictoolsd
+		LIBS += -lpnp_basictools
 	}
 	if(!debug_and_release|build_pass):CONFIG(debug, debug|release) {
         mac:LIBS = $$member(LIBS, 0) $$member(LIBS, 1)_debug
