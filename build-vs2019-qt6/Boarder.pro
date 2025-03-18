@@ -79,7 +79,9 @@ CONFIG(debug, debug|release) {
     #DATA_DIR.path = Contents/Resources
     #QMAKE_BUNDLE_DATA += DATA_DIR
 
-        QMAKE_CXXFLAGS += -std=c++20
+    QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.15
+
+        QMAKE_CXXFLAGS += -std=c++20 -DUSE_NATIVE_MENU -Wregister -Wimplicit-function-declaration
 
         LIBS += ../../../../plugandpaint/plugins/build/plugins/libpnp_basictools_debug.a
 }
