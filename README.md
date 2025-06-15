@@ -42,7 +42,7 @@ B-Line is an open-source professional-grade storyboarding application built with
 
 The shot panel is the core of the storyboard workflow, allowing detailed organization and annotation of each visual element in your story.
 
-![B-Line Shot Panel](d/to/shot-panel-screenshot.png)
+![B-Line Shot Panel](docs/images/shot-panel-screenshot.png)
 
 *The shot panel interface showing shot organization, dialog, and action notes*
 
