@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
 	f.setPointSize(9);
 	app.setFont(f);
 
-	SetDarkTheme();
+    SetDarkXTheme();
 	//SetWhiteTheme();
 	//SetBlackTheme();
 
