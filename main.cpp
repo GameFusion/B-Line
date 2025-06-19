@@ -13,8 +13,12 @@
 
 #include "ShotPanelWidget.h"
 
+#include "ConsoleDialog.h"
+
 #include <QtPlugin>
 Q_IMPORT_PLUGIN(BasicToolsPlugin)
+
+using GameFusion::Log;
 
 int main(int argc, char *argv[])
 {
@@ -71,11 +75,20 @@ int main(int argc, char *argv[])
 
 
 
+
 	MainWindow w;
+
+    ConsoleDialog *console = new ConsoleDialog(&w);
+    console->enableCommandPrompt(true);
+    console->show();
+    w.connect(console->inputBox(), &QComboBox::activated, &w, &MainWindow::consoleCommandActivated);
+
 	w.show();
 
 	ShotPanelWidget sp;
 	sp.show();
+
+    Log().info() << "Welcome to B-Line - Ai Powered Storyboarder\n";
 
 	return app.exec();
 }

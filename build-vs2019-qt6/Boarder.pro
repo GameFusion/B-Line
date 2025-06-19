@@ -41,7 +41,8 @@ INCLUDEPATH += $$GF/GameEngine/Demos/Draw
 RESOURCES += $$GF/Applications/CommonQt/qdarkstyle/style.qrc
 
 macx {
-	
+        QMAKE_CXXFLAGS += -std=c++20
+
 CONFIG(debug, debug|release) {
         message("+++++ debug mode")
 
@@ -118,6 +119,8 @@ unix:!macx{
 
 
 win32 {
+   CONFIG += c++17
+
    LIBS	+= -lglu32 -lopengl32 -lUser32
    LIBS += legacy_stdio_definitions.lib 
    
@@ -179,19 +182,28 @@ FORMS += ../BoarderMainWindow.ui ../ShotPanelWidget.ui
 HEADERS += ../MainWindow.h ../ShotPanelWidget.h
 SOURCES += ../main.cpp ../MainWindow.cpp ../ShotPanelWidget.cpp
 
+SOURCES += ../ScriptBreakdown.cpp
+HEADERS += ../ScriptBreakdown.h
 
+SOURCES += $$GF/Applications/LlamaEngine/LlamaClient.cpp
+INCLUDEPATH += $$GF/Applications/LlamaEngine
 #
 # plug and paint tools
 HEADERS       += $$GF/Applications/plugandpaint/app/interfaces.h \
                  $$GF/Applications/plugandpaint/app/mainwindowpaint.h \
                  $$GF/Applications/plugandpaint/app/paintarea.h \
-                 $$GF/Applications/plugandpaint/app/plugindialog.h
+                 $$GF/Applications/plugandpaint/app/plugindialog.h \
+                 $$GF/Applications/CommonQt/ConsoleDialog.h
 				 
 SOURCES       += $$GF/Applications/plugandpaint/app/mainwindowpaint.cpp \
                  $$GF/Applications/plugandpaint/app/paintarea.cpp \
                  $$GF/Applications/plugandpaint/app/plugindialog.cpp \
 				 $$GF/GameEngine/Demos/Draw/FitCurves.c \
-				 $$GF/GameEngine/Demos/Draw/GraphicsGems.c
+                                 $$GF/GameEngine/Demos/Draw/GraphicsGems.c \
+                                 $$GF/Applications/CommonQt/ConsoleDialog.cpp
+
+FORMS         += $$GF/Applications/CommonQt/ConsoleDialog.ui
+
 INCLUDEPATH   += $$GF/Applications/plugandpaint/app
 LIBS          += -L$$GF/Applications/plugandpaint/plugins
 macx-xcode {

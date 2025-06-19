@@ -10,7 +10,8 @@
 #include "GameScript.h"
 #include "HashMap.h"
 #include "GameTime.h"
-
+#include "ScriptBreakdown.h"
+#include "LlamaClient.h"
 
 namespace Ui {
 	class MainWindowBoarder;
@@ -27,7 +28,7 @@ public:
 	MainWindow(QWidget *parent = 0);
 	virtual ~MainWindow();
 
-	public slots:
+public slots:
 
 	void update();
 	void postIssue();
@@ -40,11 +41,18 @@ public:
 	void setDarkTheme();
 	void setBlackTheme();
 
+    void importScript();
+
+    void consoleCommandActivated(int index);
+    bool consoleCommand(const QString &);
+
 protected:
 	void dragEnterEvent(QDragEnterEvent *event) override;
 	//void dragMoveEvent(QDragMoveEvent *event) override;
 	//void dragLeaveEvent(QDragLeaveEvent *event) override;
 	void dropEvent(QDropEvent *event) override;
+
+    bool initializeLlamaClient(const QString& modelPath, const QString& backend);
 
 protected:
 	Ui::MainWindowBoarder *ui;
@@ -52,6 +60,9 @@ protected:
 	GameFusion::Str tasks;
 	GameFusion::GameScript script_tasks;
 	GameFusion::GameTime animation_time;
+
+    LlamaClient* llamaClient; // Externally managed LlamaClient
+    GameFusion::ScriptBreakdown* scriptBreakdown; // Current script breakdown instance
 };
 
 
