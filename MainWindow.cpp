@@ -13,18 +13,21 @@
 #include <QMimeData>
 #include <QMessageBox>
 #include <QFileDialog>
+#include <QThread>
 
 #include "QtUtils.h"
 
 #include "ShotPanelWidget.h"
 #include "MainWindowPaint.h"
+#include "LlamaModel.h"
+#include "BreakdownWorker.h"
 
 #include "Log.h"
 
 using namespace GameFusion;
 
 MainWindow::MainWindow(QWidget *parent)
-	: QMainWindow(parent), ui(new Ui::MainWindowBoarder)
+    : QMainWindow(parent), ui(new Ui::MainWindowBoarder), llamaModel(nullptr)
 {
 	ui->setupUi(this);
 
@@ -232,8 +235,10 @@ void MainWindow::about()
 
 }
 
-bool MainWindow::initializeLlamaClient(const QString& modelPath, const QString& backend)
+bool MainWindow::initializeLlamaClient()
 {
+    QString modelPath ="/Users/andreascarlen/Library/Application Support/StarGit/models/Qwen2.5-7B-Instruct-1M-Q4_K_M.gguf";
+    QString backend = "Metal";
     if (llamaClient) {
         return true; // Already initialized
     }
@@ -262,14 +267,73 @@ bool MainWindow::initializeLlamaClient(const QString& modelPath, const QString& 
             qDebug() << "Model load:" << msg;
         })) {
         QMessageBox::critical(this, tr("Error"), tr("Failed to load Llama model: %1").arg(modelPath));
+        delete llamaClient;
+        llamaClient=nullptr;
         return false;
     }
+
+    llamaModel = new LlamaModel(nullptr, llamaClient);
 
     return llamaClient->createSession(1);
 }
 
+void addShot(QTreeWidgetItem* shotItem, const GameFusion::Shot &shot) {
+
+    QString cameraText = QString::fromStdString(shot.camera.movement + " / " + shot.camera.framing);
+    QString audioText = QString::fromStdString(shot.audio.ambient);
+    if (!shot.audio.sfx.empty()) {
+        audioText += " | SFX: ";
+        for (size_t i = 0; i < shot.audio.sfx.size(); ++i) {
+            audioText += QString::fromStdString(shot.audio.sfx[i]);
+            if (i < shot.audio.sfx.size() - 1) audioText += ", ";
+        }
+    }
+
+    QString characterDialogSummary;
+    for (const auto& c : shot.characters) {
+        QString line = QString::fromStdString(c.name);
+        if (!c.dialogue.empty()) {
+            line += ": ";
+            if (!c.dialogParenthetical.empty())
+                line += "(" + QString::fromStdString(c.dialogParenthetical) + ") ";
+            line += QString::fromStdString(c.dialogue);
+        }
+        characterDialogSummary += line + "\n";
+    }
+    characterDialogSummary = characterDialogSummary.trimmed();
+
+    shotItem->setText(0, QString::fromStdString(shot.name));
+    shotItem->setText(1, QString::fromStdString(shot.type));
+    shotItem->setText(2, QString::fromStdString(shot.transition));
+    shotItem->setText(3, cameraText);
+    shotItem->setText(4, QString::fromStdString(shot.lighting));
+    shotItem->setText(5, audioText);
+    shotItem->setText(6, QString::fromStdString(shot.description));
+    shotItem->setText(7, QString::number(shot.frameCount));
+    shotItem->setText(8, QString::fromStdString(shot.timeOfDay));
+    shotItem->setText(9, shot.restore ? "true" : "false");
+    shotItem->setText(10, QString::fromStdString(shot.fx));
+    shotItem->setText(11, QString::fromStdString(shot.notes));
+    shotItem->setText(12, QString::fromStdString(shot.intent));
+    shotItem->setText(13, characterDialogSummary);
+
+    if(!shot.characters.empty()){
+        for (const auto& c : shot.characters) {
+            auto* charItem = new QTreeWidgetItem(shotItem);
+            charItem->setText(0, QString::fromStdString(c.name));
+            charItem->setText(1, QString::number(c.dialogNumber));
+            charItem->setText(2, QString::fromStdString(c.emotion));
+            charItem->setText(3, QString::fromStdString(c.intent));
+            charItem->setText(4, c.onScreen ? "on screen" : "off screen");
+            charItem->setText(5, QString::fromStdString(c.dialogParenthetical));
+            charItem->setText(6, QString::fromStdString(c.dialogue));
+        }
+    }
+}
+
 void MainWindow::importScript()
 {
+
     // Open file dialog to select .fdx file
     QString fileName = QFileDialog::getOpenFileName(this, tr("Import Script"), "", tr("Final Draft Files (*.fdx)"));
     if (fileName.isEmpty()) {
@@ -277,7 +341,7 @@ void MainWindow::importScript()
     }
 
     // Initialize LlamaClient if not already done (adjust model path as needed)
-    if (!initializeLlamaClient("/Users/andreascarlen/Library/Application Support/StarGit/models/Qwen2.5-7B-Instruct-1M-Q4_K_M.gguf", "Metal")) {
+    if (!initializeLlamaClient()) {
         return;
     }
 
@@ -289,74 +353,80 @@ void MainWindow::importScript()
 
     scriptBreakdown = new ScriptBreakdown(fileName.toStdString().c_str(), dictionary, dictionaryCustom, llamaClient);
 
-    // Perform breakdown (use ChunkedContext mode and enable sequences for testing)
-    if (!scriptBreakdown->breakdownScript(llamaClient, "/Users/andreascarlen/Library/Application Support/StarGit/models/Qwen2.5-7B-Instruct-1M-Q4_K_M.gguf", "Metal",
-                                          GameFusion::ScriptBreakdown::BreakdownMode::ChunkedContext, true)) {
-        QMessageBox::critical(this, tr("Error"), tr("Failed to process script: %1").arg(fileName));
-        delete scriptBreakdown;
-        scriptBreakdown = nullptr;
-        return;
-    }
 
-    // Clear existing tree items
-    ui->shotsTreeWidget->clear();
+    // Threaded breakdown using QThread
+    QThread* thread = new QThread;
+    BreakdownWorker* worker = new BreakdownWorker(scriptBreakdown);
 
-    // Populate shotsTreeWidget with sequences, scenes, and shots
-    const auto& sequences = scriptBreakdown->getSequences();
-    if (!sequences.empty()) {
-        for (const auto& seq : sequences) {
-            QTreeWidgetItem* seqItem = new QTreeWidgetItem(ui->shotsTreeWidget);
-            seqItem->setText(0, QString::fromStdString(seq.name));
-            seqItem->setIcon(1, QIcon("sequence_icon.png")); // Placeholder icon
-            for (const auto& scene : seq.scenes) {
-                QTreeWidgetItem* sceneItem = new QTreeWidgetItem(seqItem);
+    worker->moveToThread(thread);
+
+    // Connect signals
+    connect(thread, &QThread::started, worker, &BreakdownWorker::process);
+    connect(worker, &BreakdownWorker::finished, this, [=](bool success) {
+        thread->quit();
+        thread->wait();
+        worker->deleteLater();
+        thread->deleteLater();
+
+        if (!success) {
+            QMessageBox::critical(this, tr("Error"), tr("Failed to process script: %1").arg(fileName));
+            delete scriptBreakdown;
+            scriptBreakdown = nullptr;
+            return;
+        }
+
+        // Reuse your existing UI update code here ↓
+        ui->shotsTreeWidget->clear();
+
+        //const auto& shots = scriptBreakdown->getShots();
+
+        const auto& sequences = scriptBreakdown->getSequences();
+        if (!sequences.empty()) {
+            for (const auto& seq : sequences) {
+                QTreeWidgetItem* seqItem = new QTreeWidgetItem(ui->shotsTreeWidget);
+
+
+                seqItem->setText(0, QString::fromStdString(seq.name));
+                seqItem->setIcon(1, QIcon("sequence_icon.png"));
+                for (const auto& scene : seq.scenes) {
+                    QTreeWidgetItem* sceneItem = new QTreeWidgetItem(seqItem);
+
+                    sceneItem->setText(0, QString::fromStdString(scene.name));
+                    sceneItem->setIcon(1, QIcon("scene_icon.png"));
+                    for (const auto& shot : scene.shots) {
+                        QTreeWidgetItem* shotItem = new QTreeWidgetItem(sceneItem);
+                        addShot(shotItem, shot);
+
+                    }
+                }
+           }
+        } else {
+            const auto& scenes = scriptBreakdown->getScenes();
+            for (const auto& scene : scenes) {
+                QTreeWidgetItem* sceneItem = new QTreeWidgetItem(ui->shotsTreeWidget);
                 sceneItem->setText(0, QString::fromStdString(scene.name));
-                sceneItem->setIcon(1, QIcon("scene_icon.png")); // Placeholder icon
+                sceneItem->setIcon(1, QIcon("scene_icon.png"));
                 for (const auto& shot : scene.shots) {
                     QTreeWidgetItem* shotItem = new QTreeWidgetItem(sceneItem);
-                    shotItem->setText(0, QString::fromStdString(shot.name));
-                    shotItem->setIcon(1, QIcon("shot_icon.png")); // Placeholder icon
-                    shotItem->setData(0, Qt::UserRole, QVariant::fromValue(&shot)); // Store shot data
+                    addShot(shotItem, shot);
                 }
             }
         }
-    } else {
-        // Fallback to scenes if sequences are disabled
-        const auto& scenes = scriptBreakdown->getScenes();
-        for (const auto& scene : scenes) {
-            QTreeWidgetItem* sceneItem = new QTreeWidgetItem(ui->shotsTreeWidget);
-            sceneItem->setText(0, QString::fromStdString(scene.name));
-            sceneItem->setIcon(1, QIcon("scene_icon.png")); // Placeholder icon
-            for (const auto& shot : scene.shots) {
-                QTreeWidgetItem* shotItem = new QTreeWidgetItem(sceneItem);
-                shotItem->setText(0, QString::fromStdString(shot.name));
-                shotItem->setIcon(1, QIcon("shot_icon.png")); // Placeholder icon
-                shotItem->setData(0, Qt::UserRole, QVariant::fromValue(&shot)); // Store shot data
-            }
-        }
-    }
 
-    // Update ShotPanelWidget (pseudo-code, adjust based on ShotPanelWidget API)
-    ShotPanelWidget* shotPanel = ui->splitter->findChild<ShotPanelWidget*>();
-    if (shotPanel) {
-        // Clear existing panels
-        // shotPanel->clearPanels();
-        // for (const auto& scene : scriptBreakdown->getScenes()) {
-        //     for (const auto& shot : scene.shots) {
-        //         shotPanel->addShot({
-        //             .name = QString::fromStdString(shot.name),
-        //             .type = QString::fromStdString(shot.type),
-        //             .description = QString::fromStdString(shot.description),
-        //             .frameCount = shot.frameCount,
-        //             .dialogue = QString::fromStdString(shot.dialogue),
-        //             .fx = QString::fromStdString(shot.fx),
-        //             .notes = QString::fromStdString(shot.notes)
-        //         });
-        //     }
-        // }
-    }
+        ui->shotsTreeWidget->expandAll();
 
-    QMessageBox::information(this, tr("Success"), tr("Script imported successfully: %1").arg(fileName));
+        QMessageBox::information(this, tr("Success"), tr("Script imported successfully: %1").arg(fileName));
+    });
+
+    connect(thread, &QThread::finished, thread, &QThread::deleteLater);
+
+    // Optional per-shot signal
+    /*
+    connect(worker, &BreakdownWorker::shotCreated, this, [=](const QString& sequence, const QString& scene, const QString& shotName) {
+        // Implement UI progressive update here if breakdownScript supports emitting per shot
+    });
+    */
+    thread->start();
 }
 
 void MainWindow::consoleCommandActivated(int index)
@@ -372,9 +442,123 @@ void MainWindow::consoleCommandActivated(int index)
         comboBox->setCurrentText("");
 }
 
+
+
+void MainWindow::updateShots(){
+    if(!scriptBreakdown) return;
+
+    ui->shotsTreeWidget->clear();
+
+    const auto& shots = scriptBreakdown->getShots();
+    for (const auto& shot : shots) {
+        QTreeWidgetItem* shotItem = new QTreeWidgetItem(ui->shotsTreeWidget);
+        addShot(shotItem, shot);
+    }
+
+    ui->shotsTreeWidget->expandAll();
+}
+
+void MainWindow::updateScenes(){
+    if(!scriptBreakdown) return;
+
+    ui->shotsTreeWidget->clear();
+
+    const auto& scenes = scriptBreakdown->getScenes();
+    for (const auto& scene : scenes) {
+        QTreeWidgetItem* sceneItem = new QTreeWidgetItem(ui->shotsTreeWidget);
+        sceneItem->setText(0, QString::fromStdString(scene.name));
+        sceneItem->setIcon(1, QIcon("scene_icon.png"));
+        for (const auto& shot : scene.shots) {
+            QTreeWidgetItem* shotItem = new QTreeWidgetItem(sceneItem);
+            addShot(shotItem, shot);
+        }
+    }
+
+    ui->shotsTreeWidget->expandAll();
+}
+
+void MainWindow::updateCharacters(){
+    if(!scriptBreakdown) return;
+
+    ui->shotsTreeWidget->clear();
+
+    const auto& characters = scriptBreakdown->getCharacters();
+    for (const auto& character : characters) {
+        QTreeWidgetItem* characterItem = new QTreeWidgetItem(ui->shotsTreeWidget);
+
+        characterItem->setText(0, QString::fromStdString(character.name));                          // Column 0: Name
+        characterItem->setText(1, QString::fromStdString(character.emotion));                      // Column 1: Emotion
+        characterItem->setText(2, QString::fromStdString(character.intent));                       // Column 2: Intent
+        characterItem->setText(3, character.onScreen ? "true" : "false");                          // Column 3: OnScreen
+        characterItem->setText(4, QString::number(character.dialogNumber));                        // Column 4: Dialogue #
+        characterItem->setText(5, QString::fromStdString(character.dialogParenthetical));          // Column 5: Parenthetical
+        characterItem->setText(6, QString::fromStdString(character.dialogue));                     // Column 6: Line
+    }
+
+    ui->shotsTreeWidget->expandAll();
+}
+
 bool MainWindow::consoleCommand(const QString &the_command_line)
 {
     Log().info() << the_command_line.toUtf8().constData() << "\n";
 
+    if(the_command_line == "printShots"){
+        if(scriptBreakdown)
+            scriptBreakdown->printShots();
+        return true;
+    }
+
+    if(the_command_line == "printScenes"){
+        if(scriptBreakdown)
+            scriptBreakdown->printScenes();
+        return true;
+    }
+
+    if(the_command_line == "printCharacters"){
+        if(scriptBreakdown)
+            scriptBreakdown->printCharacters();
+        return true;
+    }
+
+    if(the_command_line == "updateShots"){
+        updateShots();
+        return true;
+    }
+
+    if(the_command_line == "updateScenes"){
+        updateScenes();
+        return true;
+    }
+
+    if(the_command_line == "updateCharacters"){
+        updateCharacters();
+        return true;
+    }
+
+    // Initialize LlamaClient if not already done (adjust model path as needed)
+    if (!initializeLlamaClient()) {
+        return false;
+    }
+
+    if(llamaModel){
+        QString prompt = the_command_line;
+        QString response = llamaModel->generateResponse(
+            prompt,
+            [](const QString &msg){
+                Log().info() << msg.toUtf8().constData();
+                QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+            },
+            [](const QString final){
+                Log().info() << "\n";
+                QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+            }
+            );
+        qDebug() << "Response: " << response;
+    }
+    else
+        return false;
+
     return true;
 }
+
+

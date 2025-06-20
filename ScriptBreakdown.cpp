@@ -2,6 +2,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QApplication>
+
 #include <sstream>
 
 #include "Paragraph.h"
@@ -18,14 +20,13 @@ ScriptBreakdown::ScriptBreakdown(const Str& fileName, GameScript* dictionary, Ga
 
 ScriptBreakdown::~ScriptBreakdown() {}
 
-bool ScriptBreakdown::breakdownScript(LlamaClient* client, const std::string& modelPath, const std::string& backend,
-                                      BreakdownMode mode, bool enableSequences) {
+bool ScriptBreakdown::breakdownScript(BreakdownMode mode, bool enableSequences) {
     if (!load()) {
         Log::error("Failed to load script file: %s\n", (char*)m_fileName);
         return false;
     }
 
-    if (!initializeLlamaClient(client, modelPath, backend)) {
+    if (!llamaClient) {
         Log::error("Failed to initialize LlamaClient\n");
         return false;
     }
@@ -45,45 +46,6 @@ bool ScriptBreakdown::breakdownScript(LlamaClient* client, const std::string& mo
 
     populateUI();
     return true;
-}
-
-bool ScriptBreakdown::initializeLlamaClient(LlamaClient* client, const std::string& modelPath, const std::string& backend) {
-    if (!client) {
-        Log::error("Null LlamaClient provided\n");
-        return false;
-    }
-
-    if (!client->isModelLoaded()) {
-#ifdef _WIN32
-        client = LlamaClient::Create(backend, "LlamaEngine.dll");
-#elif __APPLE__
-        client = LlamaClient::Create(backend, "LlamaEngine.dylib");
-#endif
-        if (!client) {
-            Log::error("LlamaClient creation failed: %s\n", LlamaClient::GetCreateError().c_str());
-            return false;
-        }
-
-        // Define parameter values
-        float temperature = 0.7f;
-        int max_tokens = 512;
-
-        // Initialize ModelParameter array
-        ModelParameter params[] = {
-            {"temperature", PARAM_FLOAT, &temperature},
-            {"max_tokens", PARAM_INT, &max_tokens}
-        };
-
-        if (!client->loadModel(modelPath, params, 2, [](const char* msg) {
-                Log::info("Model load: %s\n", msg);
-            })) {
-            Log::error("Failed to load Llama model: %s\n", modelPath.c_str());
-            return false;
-        }
-    }
-    else return true;
-
-    return client->createSession(1);
 }
 
 bool ScriptBreakdown::processScenes(BreakdownMode mode) {
@@ -140,10 +102,71 @@ QString cleanJsonMessage(const QString& commitMessage) {
     return finalMessage.join("\n");
 }
 
+void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene, int& shotCount) {
+    Shot shot;
+    shot.name = Str().sprintf("SHOT_%04d", ++shotCount * 10).c_str();
+
+    // Core shot fields
+    shot.type = obj["type"].toString().toStdString();
+    shot.description = obj["description"].toString().toStdString();
+    shot.frameCount = obj["frameCount"].toInt();
+    shot.timeOfDay = obj["timeOfDay"].toString().toStdString();
+    shot.restore = obj.contains("restore") && obj["restore"].toBool();
+    shot.fx = obj["fx"].toString().toStdString();
+    shot.notes = obj["notes"].toString().toStdString();
+    shot.transition = obj["transition"].toString().toStdString();
+    shot.lighting = obj["lighting"].toString().toStdString();
+    shot.intent = obj["intent"].toString().toStdString();
+
+    // Camera block
+    if (obj.contains("camera")) {
+        QJsonObject cameraObj = obj["camera"].toObject();
+        shot.camera.movement = cameraObj["movement"].toString().toStdString();
+        shot.camera.framing = cameraObj["framing"].toString().toStdString();
+    }
+
+    // Audio block
+    if (obj.contains("audio")) {
+        QJsonObject audioObj = obj["audio"].toObject();
+        shot.audio.ambient = audioObj["ambient"].toString().toStdString();
+
+        QJsonArray sfxArray = audioObj["sfx"].toArray();
+        for (const auto& sfxItem : sfxArray) {
+            shot.audio.sfx.push_back(sfxItem.toString().toStdString());
+        }
+    }
+
+    // Characters (with optional dialog)
+    QJsonArray characterArray = obj["characters"].toArray();
+    for (const auto& characterJson : characterArray) {
+        QJsonObject characterObj = characterJson.toObject();
+        CharacterDialog character;
+
+        character.name = characterObj["name"].toString().toStdString();
+        character.emotion = characterObj["emotion"].toString().toStdString();
+        character.intent = characterObj["intent"].toString().toStdString();
+        character.onScreen = characterObj.contains("onScreen") ? characterObj["onScreen"].toBool() : true;
+        character.dialogNumber = characterObj.contains("dialogNumber") ? characterObj["dialogNumber"].toInt() : -1;
+        character.dialogParenthetical = characterObj["dialogParenthetical"].toString().toStdString();
+        character.dialogue = characterObj["dialogue"].toString().toStdString();
+
+        shot.characters.push_back(character);
+
+        characters.push_back(character);
+    }
+
+    scene.shots.push_back(shot);
+    shots.push_back(shot);
+
+
+    printCharacters();
+}
 
 bool ScriptBreakdown::processShots(Scene& scene, int sceneIndex, BreakdownMode mode) {
     int shotCount = 0;
     CallbackData callbackData;
+
+    llamaClient->clearSession(1);
 
     if (mode == BreakdownMode::FullContext) {
         std::string context;
@@ -152,13 +175,22 @@ bool ScriptBreakdown::processShots(Scene& scene, int sceneIndex, BreakdownMode m
             if (p.styleName() == "SCENE" && i != sceneIndex) {
                 break; // Next scene starts
             }
-            if(!p.text().isEmpty())
-                context += p.text().c_str();
-            context += "\n";
+
+            if(p.styleName() == "ACTION" || p.styleName() == "CHARACTER")
+                context += "\n";
+
+            if(!p.text().isEmpty()){
+                context += p.styleName() + ": " + p.text().c_str();
+                context += "\n";
+            }
         }
 
+        if(context.empty())
+            return false;
+
         std::string prompt = generatePrompt("shots", context);
-        llamaClient->clearSession(1);
+
+        Log::info() << "Prompt: " << prompt.c_str() << "\n";
         if (!llamaClient->generateResponse(1, prompt, streamCallback, finishedCallback, &callbackData)) {
             Log::error("Failed to generate shots for scene: %s\n", scene.name.c_str());
             return false;
@@ -184,16 +216,8 @@ bool ScriptBreakdown::processShots(Scene& scene, int sceneIndex, BreakdownMode m
             if (!doc.isNull()) {
                 QJsonArray shotsArray = doc.array();
                 for (const auto& shotJson : shotsArray) {
-                    QJsonObject obj = shotJson.toObject();
-                    Shot shot;
-                    shot.name = Str().sprintf("SHOT_%04d", ++shotCount * 10).c_str();
-                    shot.type = obj["type"].toString().toStdString();
-                    shot.description = obj["description"].toString().toStdString();
-                    shot.frameCount = obj["frameCount"].toInt();
-                    shot.dialogue = obj["dialogue"].toString().toStdString();
-                    shot.fx = obj["fx"].toString().toStdString();
-                    shot.notes = obj["notes"].toString().toStdString();
-                    scene.shots.push_back(shot);
+                    QJsonObject shotObj = shotJson.toObject();
+                    addShotFromJson(shotObj, scene, shotCount);
                 }
             }
         }
@@ -208,16 +232,10 @@ bool ScriptBreakdown::processShots(Scene& scene, int sceneIndex, BreakdownMode m
 
     QJsonArray shotsArray = doc.array();
     for (const auto& shotJson : shotsArray) {
-        QJsonObject obj = shotJson.toObject();
-        Shot shot;
-        shot.name = Str().sprintf("SHOT_%04d", ++shotCount * 10).c_str();
-        shot.type = obj["type"].toString().toStdString();
-        shot.description = obj["description"].toString().toStdString();
-        shot.frameCount = obj["frameCount"].toInt();
-        shot.dialogue = obj["dialogue"].toString().toStdString();
-        shot.fx = obj["fx"].toString().toStdString();
-        shot.notes = obj["notes"].toString().toStdString();
-        scene.shots.push_back(shot);
+        QJsonObject shotObj = shotJson.toObject();
+        addShotFromJson(shotObj, scene, shotCount);
+
+
     }
 
     return true;
@@ -321,18 +339,87 @@ bool ScriptBreakdown::processActs(BreakdownMode mode) {
 }
 
 std::string ScriptBreakdown::generatePrompt(const std::string& type, const std::string& content) {
-    std::stringstream prompt;
+
     if (type == "shots") {
-        prompt << "Analyze the following script excerpt and break it into shots. For each shot, provide a JSON object with fields: name (format SHOT_XXXX, increment by 10), type (e.g., CLOSE, MEDIUM, WIDE), description, frameCount (estimate based on content), dialogue, fx, and notes. Ensure names follow ShotGrid conventions.\n\n"
-               << content << "\n\nOutput as a JSON array.";
+        std::string prompt;
+        //prompt = "Analyze the following script excerpt and break it into shots. For each shot, provide a JSON object with fields: name (format SHOT_XXXX, increment by 10), type (e.g., CLOSE, MEDIUM, WIDE), description, frameCount (estimate based on content), dialogue, fx, and notes. Ensure names follow ShotGrid conventions.\n\n"
+         //      << content << "\n\nOutput as a JSON array.";
+
+
+        prompt = R"(Analyze the following script excerpt and break it into shots. For each shot, provide a JSON object with the following fields:
+
+- name (format SHOT_XXXX, increment by 10)
+- type (e.g., CLOSE, MEDIUM, WIDE)
+- description (clear summary of what's shown)
+- frameCount (estimated based on content and pacing)
+- timeOfDay (e.g., DAY, NIGHT, SUNSET)
+- restore (true/false or empty if not applicable)
+- dialogs: a list of dialog objects, each containing:
+    - dialogNumber
+    - character (name of the speaker)
+    - dialogue (the spoken line)
+- fx (e.g., sound effects, lighting changes, VFX)
+- cameraTransition (e.g., CUT, FADE IN, DISSOLVE, WIPE, MATCH CUT)
+- cameraMovement (e.g., STATIC, PAN LEFT, ZOOM IN, DOLLY IN, CRANE UP)
+- emotion (e.g., TENSE, JOYFUL, CURIOUS — based on tone and mood)
+- notes (storyboarding notes or direction)
+
+Ensure shot names follow ShotGrid conventions.
+Do not summarize. Every action and line of dialogue should be assigned to one or more shots.
+Do not combine separate beats into one shot. Each character movement, reaction, or dialog should get its own shot if needed.
+
+)" + content + R"(
+
+Output as a JSON array.)";
+
+        prompt = R"(Analyze the following script excerpt and break it into shots. For each shot, provide a JSON object with the following fields:
+
+- name (format SHOT_XXXX, increment by 10)
+- type (e.g., CLOSE, MEDIUM, WIDE)
+- description
+- frameCount (estimate based on content)
+- timeOfDay (e.g., DAY, NIGHT, SUNSET)
+- restore (true/false or empty if not applicable)
+- transition (e.g., CUT, FADE IN, DISSOLVE)
+- camera:
+    - movement (e.g., PAN LEFT, STATIC)
+    - framing (e.g., OVER-THE-SHOULDER, WIDE ANGLE)
+- lighting (e.g., flickering neon, soft sunlight)
+- audio:
+    - ambient (e.g., street noise, birdsong)
+    - sfx (list of sound effects)
+- intent (narrative or emotional purpose of the shot)
+- characters: a list of character objects with optional dialog, each containing:
+    - name
+    - emotion (current emotion of the character)
+    - intent (character's emotional or narrative intent)
+    - onScreen (true/false)
+    - dialogNumber (if applicable)
+    - dialogParenthetical (if applicable)
+    - dialogue (if applicable, the spoken line)
+- notes (any extra information for storyboarding, blocking, or animation)
+
+Each new spoken line should create a new character entry in the list (even if from the same character).
+Ensure shot names follow ShotGrid conventions.
+Do not summarize. Every action and line of dialogue should be assigned to one or more shots.
+Do not combine separate beats into one shot. Each character movement, reaction, or dialog should get its own shot if needed.
+
+)" + content + R"(
+
+Output as a JSON array.)";
+        return prompt;
     } else if (type == "sequences") {
+        std::stringstream prompt;
         prompt << "Analyze the following scene list and group scenes into sequences based on narrative or location continuity. For each sequence, provide a JSON object with fields: name (format SEQ_XXX), scenes (array of scene indices). Output as a JSON array.\n\n"
                << content;
+        return prompt.str();
     } else if (type == "acts") {
+        std::stringstream prompt;
         prompt << "Analyze the following scene list and group scenes into acts based on narrative structure (e.g., three-act structure). For each act, provide a JSON object with fields: name (format ACT_X), scenes (array of scene indices). Output as a JSON array.\n\n"
                << content;
+        return prompt.str();
     }
-    return prompt.str();
+
 }
 
 void ScriptBreakdown::populateUI() {
@@ -369,20 +456,69 @@ std::vector<Scene>& ScriptBreakdown::getScenes() {
     return scenes;
 }
 
+std::vector<Shot>& ScriptBreakdown::getShots() {
+    return shots;
+}
+
 std::vector<Sequence>& ScriptBreakdown::getSequences() {
     return sequences;
+}
+
+std::vector<CharacterDialog>& ScriptBreakdown::getCharacters(){
+    return characters;
 }
 
 void ScriptBreakdown::streamCallback(const char* msg, void* user_data) {
     CallbackData* data = static_cast<CallbackData*>(user_data);
     data->result += msg;
-    Log::info("Streamed response: %s\n", msg);
+    Log::info() << msg;
+    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
 }
 
 void ScriptBreakdown::finishedCallback(const char* msg, void* user_data) {
     CallbackData* data = static_cast<CallbackData*>(user_data);
     data->result = msg;
     Log::info("Completed response: %s\n", msg);
+    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+}
+
+void ScriptBreakdown::printScenes() const {
+    Log::info() << "== SCENES ==\n";
+    for (const auto& scene : scenes) {
+        Log::info() << "Scene: " << scene.name.c_str() << " with " << (int)scene.shots.size() << " shots\n";
+        for (const auto& shot : scene.shots) {
+            Log::info() << "  Shot: " << shot.name.c_str()
+                        << ", Type: " << shot.type.c_str()
+                        << ", Desc: " << shot.description.c_str()
+                        << ", FrameCount: " << shot.frameCount
+                        << "\n";
+        }
+    }
+}
+
+void ScriptBreakdown::printShots() const {
+    Log::info() << "== SHOTS (Flat List) ==\n";
+    for (const auto& shot : shots) {
+        Log::info() << "Shot: " << shot.name.c_str()
+                    << ", Type: " << shot.type.c_str()
+                    << ", Desc: " << shot.description.c_str()
+                    << ", FrameCount: " << shot.frameCount
+                    << "\n";
+    }
+}
+
+void ScriptBreakdown::printCharacters() const {
+    Log::info() << "== CHARACTERS IN EPISODE ==\n";
+
+    for (const auto& character : characters) {
+        Log::info() << "      Character: " << character.name.c_str()
+                    //<< ", Emotion: " << character.emotion.c_str()
+                    //<< ", Intent: " << character.intent.c_str()
+                    //<< ", OnScreen: " << (character.onScreen ? "true" : "false")
+                    << ", Dialogue #: " << character.dialogNumber
+                    //<< ", Parenthetical: " << character.dialogParenthetical.c_str()
+                    << ", Line: " << character.dialogue.c_str() << "\n";
+    }
 }
 
 }

@@ -13,6 +13,8 @@
 #include "ScriptBreakdown.h"
 #include "LlamaClient.h"
 
+class LlamaModel;
+
 namespace Ui {
 	class MainWindowBoarder;
 }
@@ -27,6 +29,10 @@ public:
 
 	MainWindow(QWidget *parent = 0);
 	virtual ~MainWindow();
+
+    void updateShots();
+    void updateScenes();
+    void updateCharacters();
 
 public slots:
 
@@ -52,7 +58,7 @@ protected:
 	//void dragLeaveEvent(QDragLeaveEvent *event) override;
 	void dropEvent(QDropEvent *event) override;
 
-    bool initializeLlamaClient(const QString& modelPath, const QString& backend);
+    bool initializeLlamaClient();
 
 protected:
 	Ui::MainWindowBoarder *ui;
@@ -63,6 +69,8 @@ protected:
 
     LlamaClient* llamaClient; // Externally managed LlamaClient
     GameFusion::ScriptBreakdown* scriptBreakdown; // Current script breakdown instance
+
+    LlamaModel *llamaModel;
 };
 
 

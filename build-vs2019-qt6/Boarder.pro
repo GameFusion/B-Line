@@ -182,8 +182,11 @@ FORMS += ../BoarderMainWindow.ui ../ShotPanelWidget.ui
 HEADERS += ../MainWindow.h ../ShotPanelWidget.h
 SOURCES += ../main.cpp ../MainWindow.cpp ../ShotPanelWidget.cpp
 
-SOURCES += ../ScriptBreakdown.cpp
-HEADERS += ../ScriptBreakdown.h
+SOURCES += ../ScriptBreakdown.cpp ../BreakdownWorker.cpp
+HEADERS += ../ScriptBreakdown.h ../BreakdownWorker.h
+
+SOURCES += ../LlamaModel.cpp
+HEADERS += ../LlamaModel.h
 
 SOURCES += $$GF/Applications/LlamaEngine/LlamaClient.cpp
 INCLUDEPATH += $$GF/Applications/LlamaEngine

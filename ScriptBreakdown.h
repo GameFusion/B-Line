@@ -6,16 +6,53 @@
 #include <vector>
 #include <string>
 
+#include <QJsonObject>
+
 namespace GameFusion {
+/*
+struct Dialog {
+    int dialogNumber;
+    std::string character;
+    std::string dialogue;
+};
+*/
+
+struct Camera {
+    std::string movement; // e.g., "PAN LEFT", "STATIC"
+    std::string framing;  // e.g., "OVER-THE-SHOULDER", "WIDE ANGLE"
+};
+
+struct Audio {
+    std::string ambient;         // e.g., "street noise"
+    std::vector<std::string> sfx; // e.g., ["barking", "gunshot"]
+};
+
+struct CharacterDialog {
+    std::string name;
+    std::string emotion;
+    std::string intent;
+    bool onScreen = true;
+    int dialogNumber = -1; // Optional: -1 if not present
+    std::string dialogParenthetical;
+    std::string dialogue;
+};
 
 struct Shot {
     std::string name; // e.g., SHOT_0010
     std::string type; // e.g., CLOSE, MEDIUM, WIDE
+    std::string transition;   // e.g., "CUT", "FADE IN"
+    Camera camera;            // Movement and framing
+    std::string lighting;     // e.g., "soft sunlight"
+    Audio audio;              // Ambient and SFX
     std::string description;
     int frameCount;
-    std::string dialogue;
+    std::string timeOfDay;
+    bool restore = false;
+    //std::string dialogue;
     std::string fx;
     std::string notes;
+    std::string intent;       // Narrative/emotional purpose
+    std::vector<CharacterDialog> characters;
 };
 
 struct Scene {
@@ -44,11 +81,16 @@ public:
     ScriptBreakdown(const Str& fileName, GameScript* dictionary = nullptr, GameScript* dictionaryCustom = nullptr, LlamaClient* client=nullptr);
     ~ScriptBreakdown();
 
-    bool breakdownScript(LlamaClient* client, const std::string& modelPath, const std::string& backend = "CPU",
-                         BreakdownMode mode = BreakdownMode::FullContext, bool enableSequences = false);
+    bool breakdownScript(BreakdownMode mode = BreakdownMode::FullContext, bool enableSequences = false);
     std::vector<Act>& getActs();
     std::vector<Scene>& getScenes();
     std::vector<Sequence>& getSequences();
+    std::vector<Shot>& getShots();
+    std::vector<CharacterDialog>& getCharacters();
+
+    void printScenes() const;
+    void printShots() const;
+    void printCharacters() const;
 
 private:
     bool initializeLlamaClient(LlamaClient* client, const std::string& modelPath, const std::string& backend);
@@ -59,9 +101,14 @@ private:
     std::string generatePrompt(const std::string& type, const std::string& content);
     void populateUI();
 
+    void addShotFromJson(const QJsonObject& obj, Scene& scene, int& shotCount);
+
     std::vector<Act> acts;
     std::vector<Scene> scenes;
+    std::vector<Shot> shots; // duplicate copy of all shots found in scenes
+    std::vector<CharacterDialog> characters; // duplicate copy of all dialogs
     std::vector<Sequence> sequences;
+
     static void streamCallback(const char* msg, void* user_data);
     static void finishedCallback(const char* msg, void* user_data);
 
