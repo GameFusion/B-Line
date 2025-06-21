@@ -104,11 +104,10 @@ QString cleanJsonMessage(const QString& commitMessage) {
     return finalMessage.join("\n");
 }
 
-void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene, int& shotCount) {
+void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
     Shot shot;
-    shot.name = Str().sprintf("SHOT_%04d", ++shotCount * 10).c_str();
 
-    // Core shot fields
+    shot.name = obj["name"].toString().toStdString();
     shot.type = obj["type"].toString().toStdString();
     shot.description = obj["description"].toString().toStdString();
     shot.frameCount = obj["frameCount"].toInt();
@@ -160,6 +159,8 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene, int&
     scene.shots.push_back(shot);
     shots.push_back(shot);
 
+    qDebug() << "Loaded scene:" << scene.sceneId << "with" << scene.shots.size() << "shots.";
+    Log().info() << "Loaded scene:" << scene.sceneId.c_str() << "with" << (int)scene.shots.size() << "shots.";
 
     printCharacters();
 }
@@ -219,7 +220,11 @@ bool ScriptBreakdown::processShots(Scene& scene, int sceneIndex, BreakdownMode m
                 QJsonArray shotsArray = doc.array();
                 for (const auto& shotJson : shotsArray) {
                     QJsonObject shotObj = shotJson.toObject();
-                    addShotFromJson(shotObj, scene, shotCount);
+                    if(!shotObj.contains("name")){
+                        QString shotName = Str().sprintf("SHOT_%04d", ++shotCount * 10).c_str();
+                        shotObj["name"] = shotName;
+                    }
+                    addShotFromJson(shotObj, scene);
                 }
             }
         }
@@ -316,7 +321,11 @@ bool ScriptBreakdown::processShots(Scene& scene, int sceneIndex, BreakdownMode m
     QJsonArray shotsArray = doc.array();
     for (const auto& shotJson : shotsArray) {
         QJsonObject shotObj = shotJson.toObject();
-        addShotFromJson(shotObj, scene, shotCount);
+        if(!shotObj.contains("name")){
+            QString shotName = Str().sprintf("SHOT_%04d", ++shotCount * 10).c_str();
+            shotObj["name"] = shotName;
+        }
+        addShotFromJson(shotObj, scene);
 
 
     }
@@ -626,68 +635,11 @@ void ScriptBreakdown::loadScene(const QString& sceneName, const QJsonObject &sce
             continue;
 
         QJsonObject shotObj = val.toObject();
-        Shot shot;
 
-
-        shot.name = shotObj["name"].toString().toStdString();
-        shot.type = shotObj["type"].toString().toStdString();
-        shot.transition = shotObj["transition"].toString().toStdString();
-        shot.description = shotObj["description"].toString().toStdString();
-        shot.frameCount = shotObj["frameCount"].toInt();
-        shot.timeOfDay = shotObj["timeOfDay"].toString().toStdString();
-        shot.restore = shotObj["restore"].toBool();
-        shot.lighting = shotObj["lighting"].toString().toStdString();
-        shot.fx = shotObj["fx"].toString().toStdString();
-        shot.intent = shotObj["intent"].toString().toStdString();
-        shot.notes = shotObj["notes"].toString().toStdString();
-
-        // Parse camera
-        if (shotObj.contains("camera") && shotObj["camera"].isObject()) {
-            QJsonObject camObj = shotObj["camera"].toObject();
-            shot.camera.movement = camObj["movement"].toString().toStdString();
-            shot.camera.framing = camObj["framing"].toString().toStdString();
-        }
-
-        // Parse audio
-        if (shotObj.contains("audio") && shotObj["audio"].isObject()) {
-            QJsonObject audioObj = shotObj["audio"].toObject();
-            shot.audio.ambient = audioObj["ambient"].toString().toStdString();
-
-            if (audioObj.contains("sfx") && audioObj["sfx"].isArray()) {
-                QJsonArray sfxArray = audioObj["sfx"].toArray();
-                for (const QJsonValue& sfxVal : sfxArray) {
-                    shot.audio.sfx.push_back(sfxVal.toString().toStdString());
-                }
-            }
-        }
-
-        // Parse characters
-        if (shotObj.contains("characters") && shotObj["characters"].isArray()) {
-            QJsonArray charArray = shotObj["characters"].toArray();
-            for (const QJsonValue& charVal : charArray) {
-                if (!charVal.isObject())
-                    continue;
-
-                QJsonObject charObj = charVal.toObject();
-                CharacterDialog character;
-                character.name = charObj["name"].toString().toStdString();
-                character.emotion = charObj["emotion"].toString().toStdString();
-                character.intent = charObj["intent"].toString().toStdString();
-                character.onScreen = charObj["onScreen"].toBool(true);
-                character.dialogNumber = charObj["dialogNumber"].toInt(-1);
-                character.dialogParenthetical = charObj["dialogParenthetical"].toString().toStdString();
-                character.dialogue = charObj["dialogue"].toString().toStdString();
-
-                shot.characters.push_back(character);
-            }
-        }
-
-        scene.shots.push_back(shot);
+        addShotFromJson(shotObj, scene);
     }
 
     scenes.push_back(scene);
-    qDebug() << "Loaded scene:" << scene.sceneId << "with" << scene.shots.size() << "shots.";
-    Log().info() << "Loaded scene:" << scene.sceneId.c_str() << "with" << (int)scene.shots.size() << "shots.";
 }
 
 }

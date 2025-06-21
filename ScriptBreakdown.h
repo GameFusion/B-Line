@@ -105,7 +105,7 @@ private:
     std::string generatePrompt(const std::string& type, const std::string& content);
     void populateUI();
 
-    void addShotFromJson(const QJsonObject& obj, Scene& scene, int& shotCount);
+    void addShotFromJson(const QJsonObject& obj, Scene& scene);
 
     std::vector<Act> acts;
     std::vector<Scene> scenes;
