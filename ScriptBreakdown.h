@@ -58,6 +58,8 @@ struct Shot {
 struct Scene {
     std::string name; // e.g., SCENE_001
     std::string heading;
+    std::string sceneId;
+    std::string description;
     std::vector<Shot> shots;
 };
 
@@ -91,6 +93,8 @@ public:
     void printScenes() const;
     void printShots() const;
     void printCharacters() const;
+
+    void loadScene(const QString& sceneName, const QJsonObject &sceneObj);
 
 private:
     bool initializeLlamaClient(LlamaClient* client, const std::string& modelPath, const std::string& backend);

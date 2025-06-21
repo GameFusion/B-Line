@@ -236,7 +236,7 @@ bool ScriptBreakdown::processShots(Scene& scene, int sceneIndex, BreakdownMode m
     QString filePath = QString("json/%1_%2.json").arg(shotCount, 4, 10, QChar('0')).arg(scene.name.c_str());
     QFile file(filePath);
     if (file.open(QIODevice::WriteOnly)) {
-        file.write(callbackData.result.c_str()); // Write the raw JSON string
+        file.write(cleanData.toUtf8()); // Write the raw JSON string
         file.close();
         Log::info("Saved JSON to %s\n", filePath.toStdString().c_str());
     } else {
@@ -602,6 +602,92 @@ void ScriptBreakdown::printCharacters() const {
                     //<< ", Parenthetical: " << character.dialogParenthetical.c_str()
                     << ", Line: " << character.dialogue.c_str() << "\n";
     }
+}
+
+void ScriptBreakdown::loadScene(const QString& sceneName, const QJsonObject &sceneObj) {
+    if (!sceneObj.contains("sceneId") || !sceneObj.contains("shots")) {
+        qWarning() << "Invalid scene JSON: missing sceneId or shots.";
+        Log().info() << "Invalid scene JSON: missing sceneId or shots.";
+        return;
+    }
+
+    Scene scene;
+    if(sceneObj.contains("sceneId") && !sceneObj["sceneId"].toString().isEmpty())
+        scene.sceneId = sceneObj["sceneId"].toString().toStdString();
+    if(sceneObj.contains("description") && !sceneObj["description"].toString().isEmpty())
+        scene.description = sceneObj["description"].toString().toStdString();
+    if(sceneObj.contains("heading") && !sceneObj["heading"].toString().isEmpty())
+        scene.heading = sceneObj["heading"].toString().toStdString();
+    if(!sceneName.isEmpty())
+        scene.name = sceneName.toStdString();
+    QJsonArray shotsArray = sceneObj["shots"].toArray();
+    for (const QJsonValue &val : shotsArray) {
+        if (!val.isObject())
+            continue;
+
+        QJsonObject shotObj = val.toObject();
+        Shot shot;
+
+
+        shot.name = shotObj["name"].toString().toStdString();
+        shot.type = shotObj["type"].toString().toStdString();
+        shot.transition = shotObj["transition"].toString().toStdString();
+        shot.description = shotObj["description"].toString().toStdString();
+        shot.frameCount = shotObj["frameCount"].toInt();
+        shot.timeOfDay = shotObj["timeOfDay"].toString().toStdString();
+        shot.restore = shotObj["restore"].toBool();
+        shot.lighting = shotObj["lighting"].toString().toStdString();
+        shot.fx = shotObj["fx"].toString().toStdString();
+        shot.intent = shotObj["intent"].toString().toStdString();
+        shot.notes = shotObj["notes"].toString().toStdString();
+
+        // Parse camera
+        if (shotObj.contains("camera") && shotObj["camera"].isObject()) {
+            QJsonObject camObj = shotObj["camera"].toObject();
+            shot.camera.movement = camObj["movement"].toString().toStdString();
+            shot.camera.framing = camObj["framing"].toString().toStdString();
+        }
+
+        // Parse audio
+        if (shotObj.contains("audio") && shotObj["audio"].isObject()) {
+            QJsonObject audioObj = shotObj["audio"].toObject();
+            shot.audio.ambient = audioObj["ambient"].toString().toStdString();
+
+            if (audioObj.contains("sfx") && audioObj["sfx"].isArray()) {
+                QJsonArray sfxArray = audioObj["sfx"].toArray();
+                for (const QJsonValue& sfxVal : sfxArray) {
+                    shot.audio.sfx.push_back(sfxVal.toString().toStdString());
+                }
+            }
+        }
+
+        // Parse characters
+        if (shotObj.contains("characters") && shotObj["characters"].isArray()) {
+            QJsonArray charArray = shotObj["characters"].toArray();
+            for (const QJsonValue& charVal : charArray) {
+                if (!charVal.isObject())
+                    continue;
+
+                QJsonObject charObj = charVal.toObject();
+                CharacterDialog character;
+                character.name = charObj["name"].toString().toStdString();
+                character.emotion = charObj["emotion"].toString().toStdString();
+                character.intent = charObj["intent"].toString().toStdString();
+                character.onScreen = charObj["onScreen"].toBool(true);
+                character.dialogNumber = charObj["dialogNumber"].toInt(-1);
+                character.dialogParenthetical = charObj["dialogParenthetical"].toString().toStdString();
+                character.dialogue = charObj["dialogue"].toString().toStdString();
+
+                shot.characters.push_back(character);
+            }
+        }
+
+        scene.shots.push_back(shot);
+    }
+
+    scenes.push_back(scene);
+    qDebug() << "Loaded scene:" << scene.sceneId << "with" << scene.shots.size() << "shots.";
+    Log().info() << "Loaded scene:" << scene.sceneId.c_str() << "with" << (int)scene.shots.size() << "shots.";
 }
 
 }

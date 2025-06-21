@@ -15,19 +15,27 @@
 #include <QFileDialog>
 #include <QThread>
 
+#include <QFile>
+#include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+
+
 #include "QtUtils.h"
 
 #include "ShotPanelWidget.h"
 #include "MainWindowPaint.h"
 #include "LlamaModel.h"
 #include "BreakdownWorker.h"
+#include "ErrorDialog.h"
 
 #include "Log.h"
 
 using namespace GameFusion;
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), ui(new Ui::MainWindowBoarder), llamaModel(nullptr)
+    : QMainWindow(parent), ui(new Ui::MainWindowBoarder), llamaModel(nullptr), scriptBreakdown(nullptr)
 {
 	ui->setupUi(this);
 
@@ -40,6 +48,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 	setAcceptDrops(true);
 
+    QObject::connect(ui->actionOpen, SIGNAL(triggered()), this, SLOT(loadProject()));
 	QObject::connect(ui->actionPost_issue, SIGNAL(triggered()), this, SLOT(postIssue()));
 	QObject::connect(ui->actionTeam_email, SIGNAL(triggered()), this, SLOT(teamEmail()));
 	QObject::connect(ui->actionLogin, SIGNAL(triggered()), this, SLOT(login()));
@@ -364,7 +373,8 @@ void MainWindow::importScript()
     }
 
     // Create or update ScriptBreakdown instance
-    delete scriptBreakdown; // Clean up previous instance
+    if(scriptBreakdown)
+        delete scriptBreakdown; // Clean up previous instance
 
     GameScript* dictionary = NULL;
     GameScript* dictionaryCustom = NULL;
@@ -586,4 +596,203 @@ bool MainWindow::consoleCommand(const QString &the_command_line)
     return true;
 }
 
+bool loadJsonWithDetails(const QString &filePath, QJsonDocument &docOut, QString &errorOut)
+{
+    QFile file(filePath);
+    if (!file.exists()) {
+        errorOut = QString("File does not exist: %1").arg(filePath);
+        return false;
+    }
+
+    if (!file.open(QIODevice::ReadOnly)) {
+        errorOut = QString("Could not open file for reading: %1").arg(filePath);
+        return false;
+    }
+
+    QByteArray jsonData = file.readAll();
+    file.close();
+
+    QJsonParseError parseError;
+    docOut = QJsonDocument::fromJson(jsonData, &parseError);
+
+    if (parseError.error != QJsonParseError::NoError) {
+        int offset = parseError.offset;
+        int line = 1;
+        int lineStart = 0;
+        int lineEnd = jsonData.size();
+
+        // Find line number
+        for (int i = 0; i < offset && i < jsonData.size(); ++i) {
+            if (jsonData[i] == '\n') {
+                ++line;
+                lineStart = i + 1;
+            }
+        }
+
+        // Find end of line
+        for (int i = offset; i < jsonData.size(); ++i) {
+            if (jsonData[i] == '\n') {
+                lineEnd = i;
+                break;
+            }
+        }
+
+        QByteArray lineContent = jsonData.mid(lineStart, lineEnd - lineStart).trimmed();
+
+        errorOut = QString(
+                       "JSON parse error in %1:\n"
+                       "→ %2\n"
+                       "At offset %3 (line %4):\n"
+                       "%5")
+                       .arg(filePath)
+                       .arg(parseError.errorString())
+                       .arg(offset)
+                       .arg(line)
+                       .arg(QString::fromUtf8(lineContent));
+        return false;
+    }
+
+    return true;
+}
+
+void MainWindow::loadProject() {
+    QString projectDir = QFileDialog::getExistingDirectory(this, "Select Project Folder");
+    if (projectDir.isEmpty())
+        return;
+
+    if(scriptBreakdown)
+        delete scriptBreakdown;
+    scriptBreakdown = new ScriptBreakdown("");
+
+    QString projectFilePath = QDir(projectDir).filePath("project.json");
+    QJsonDocument projectDoc;
+    QString errorMsg;
+    if (!loadJsonWithDetails(projectFilePath, projectDoc, errorMsg)) {
+        QMessageBox::critical(this, "Error", errorMsg);
+        Log().info() << errorMsg.toUtf8().constData();
+        return;
+    }
+
+    if (!projectDoc.isObject()) {
+        QString msg = "project.json does not contain a top-level JSON object.";
+        QMessageBox::critical(this, "Error", msg);
+        Log().info() << msg.toUtf8().constData() << "\n";
+        return;
+    }
+
+    // Validate required fields
+    QJsonObject projectObj = projectDoc.object();
+    QStringList requiredFields = { "name", "projectId", "fps" };
+    QStringList missingFields;
+
+    for (const QString &field : requiredFields) {
+        if (!projectObj.contains(field)) {
+            missingFields << field;
+        }
+    }
+
+    if (!missingFields.isEmpty()) {
+        QString msg = QString("Missing required field(s) in %1:\n→ %2")
+                          .arg(projectFilePath)
+                          .arg(missingFields.join(", "));
+        QMessageBox::critical(this, "Invalid Project", msg);
+        Log().info() << msg.toUtf8().constData();
+        return;
+    }
+
+    // (Optional) Store project metadata
+    this->currentProjectName = projectObj["projectName"].toString();
+    this->currentProjectPath = projectDir;
+
+    // Load scenes
+    QDir scenesDir(QDir(projectDir).filePath("scenes"));
+
+    qDebug() << "Scenes directory absolute path:" << scenesDir.absolutePath();
+    Log().info() << "Looking for scenes in: " << scenesDir.absolutePath().toUtf8().constData();
+
+    if (!scenesDir.exists()) {
+        QMessageBox::critical(this, "Missing Folder", "scenes/ folder not found in project.");
+        return;
+    }
+
+    qDebug() << "Scenes directory contains:" << scenesDir.entryList(QDir::AllEntries);
+    Log().info() << "Entries in scenes directory:"
+                 << scenesDir.entryList(QDir::AllEntries).join(", ").toUtf8().constData();
+
+
+    bool foundErrors = false;
+    QStringList errors;
+    QStringList sceneFiles = scenesDir.entryList(QDir::Files);
+    for (const QString &fileName : sceneFiles) {
+
+        if (!fileName.endsWith(".json", Qt::CaseInsensitive)){
+            Log().info() << "Skipping file "<< fileName.toUtf8().constData() << "\n";
+            continue;
+        }
+
+        Log().info() << "Processing file "<< fileName.toUtf8().constData() << "\n";
+
+        QString baseName = QFileInfo(fileName).completeBaseName(); // Strip .json
+        QStringList parts = baseName.split('_');
+
+        if (parts.size() < 2) {
+            qDebug() << "Skipping malformed scene file:" << fileName;
+            Log().info() << "Skipping malformed scene file:" << fileName.toUtf8().constData() << "\n";
+            foundErrors = true;
+            errors << "Skipping malformed scene file: " + fileName;
+            continue;
+        }
+
+        QString sceneId = parts[0];  // "0001"
+        QString sceneName = parts.mid(1).join('_'); // Rejoin the rest, e.g. "SCENE_002"
+
+
+        QJsonDocument sceneDoc;
+        QString errorMsg;
+        QString sceneFilePath = scenesDir.filePath(fileName);
+
+        if (!loadJsonWithDetails(sceneFilePath, sceneDoc, errorMsg)) {
+            Log().info() << errorMsg.toUtf8().constData();
+            foundErrors = true;
+            errors << errorMsg;
+            continue;
+        }
+
+        QJsonObject sceneObj;
+        if(sceneDoc.isArray()) {
+            sceneObj["shots"] = sceneDoc.array();
+            sceneObj["sceneId"] = sceneId;
+            sceneObj["name"] = sceneName;
+        }
+        else if (sceneDoc.isObject()) {
+            sceneObj = sceneDoc.object();
+            if(!sceneObj.contains("shots"))
+                sceneObj["shots"] = QJsonArray();
+            if(!sceneObj.contains("sceneId"))
+                sceneObj["sceneId"] = sceneId;
+            if(!sceneObj.contains("name"))
+                sceneObj["name"] = sceneName;
+        }
+        else{
+            qWarning() << "Invalid JSON format in" << fileName;
+            Log().info() << "Invalid JSON format in" << fileName.toUtf8().constData() << "\n";
+            errors << "Invalid JSON format in " + fileName;
+            foundErrors = true;
+            continue;
+        }
+
+        scriptBreakdown->loadScene(sceneName, sceneObj);  // Assuming you have this method
+    }
+
+    if(foundErrors){
+
+
+        ErrorDialog errorDialog("Errors occurred while loading project", errors, this);
+        errorDialog.exec();
+    }
+    else
+        QMessageBox::information(this, "Project Loaded", "Project loaded successfully.");
+
+    updateScenes();
+}
 

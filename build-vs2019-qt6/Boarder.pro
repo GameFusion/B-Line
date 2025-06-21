@@ -183,7 +183,7 @@ HEADERS += ../MainWindow.h ../ShotPanelWidget.h
 SOURCES += ../main.cpp ../MainWindow.cpp ../ShotPanelWidget.cpp
 
 SOURCES += ../ScriptBreakdown.cpp ../BreakdownWorker.cpp
-HEADERS += ../ScriptBreakdown.h ../BreakdownWorker.h
+HEADERS += ../ScriptBreakdown.h ../BreakdownWorker.h ../ErrorDialog.h
 
 SOURCES += ../LlamaModel.cpp
 HEADERS += ../LlamaModel.h

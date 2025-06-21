@@ -36,6 +36,7 @@ public:
 
 public slots:
 
+    void loadProject();
 	void update();
 	void postIssue();
 	void teamEmail();
@@ -71,6 +72,9 @@ protected:
     GameFusion::ScriptBreakdown* scriptBreakdown; // Current script breakdown instance
 
     LlamaModel *llamaModel;
+
+    QString currentProjectName;
+    QString currentProjectPath;
 };
 
 
