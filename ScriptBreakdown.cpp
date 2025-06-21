@@ -3,6 +3,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QApplication>
+#include <QDir>
 
 #include <sstream>
 
@@ -60,11 +61,12 @@ bool ScriptBreakdown::processScenes(BreakdownMode mode) {
             if(!p.text().isEmpty())
                 scene.heading = p.text().c_str();
             scenes.push_back(scene);
-            processShots(scenes.back(), i, mode);
+            if(!processShots(scenes.back(), i, mode))
+                return false;
         }
     }
 
-    return !scenes.empty();
+    return true;
 }
 
 
@@ -186,7 +188,7 @@ bool ScriptBreakdown::processShots(Scene& scene, int sceneIndex, BreakdownMode m
         }
 
         if(context.empty())
-            return false;
+            return true; // an empty scene will be ignored
 
         std::string prompt = generatePrompt("shots", context);
 
@@ -224,10 +226,91 @@ bool ScriptBreakdown::processShots(Scene& scene, int sceneIndex, BreakdownMode m
     }
 
     QString cleanData = cleanJsonMessage(callbackData.result.c_str());
-    QJsonDocument doc = QJsonDocument::fromJson(cleanData.toUtf8());
-    if (doc.isNull()) {
-        Log::error("Invalid JSON response for shots\n");
+
+    // Ensure the "json" folder exists
+    QDir dir;
+    if (!dir.exists("json")) {
+        dir.mkpath("json");
+    }
+
+    QString filePath = QString("json/%1_%2.json").arg(shotCount, 4, 10, QChar('0')).arg(scene.name.c_str());
+    QFile file(filePath);
+    if (file.open(QIODevice::WriteOnly)) {
+        file.write(callbackData.result.c_str()); // Write the raw JSON string
+        file.close();
+        Log::info("Saved JSON to %s\n", filePath.toStdString().c_str());
+    } else {
+        Log::error("Failed to save JSON to %s\n", filePath.toStdString().c_str());
         return false;
+    }
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(cleanData.toUtf8(), &parseError);
+    if (doc.isNull()) {
+
+
+
+
+
+        Log::error("Invalid JSON response for shots\n");
+        Log::info("Invalid JSON response for shots\n");
+
+        Log::info("Invalid JSON response for shots: %s (Error at offset %d)\n",
+                   parseError.errorString().toStdString().c_str(),
+                   parseError.offset);
+        Log::error("Invalid JSON response for shots: %s (Error at offset %d)\n",
+                   parseError.errorString().toStdString().c_str(),
+                   parseError.offset);
+
+        Log().info() << "\nFixing json...\n\n";
+        Log().print() << "\nFixing json...\n\n";
+
+        // TODO TODO
+        // Todo, use AI to try to fix issue with json
+        QString repairPrompt = QString(
+                                   "You returned an invalid JSON. The parser error was:\n"
+                                   "%1 (offset: %2).\n\n"
+                                   "Fix this JSON so that it is valid. If the error is caused by an extra '{', remove it. "
+                                   "Preserve the structure as an array of objects."
+                                   "\n\n"
+                                   "Broken JSON:\n```json\n%3\n```"
+                                   ).arg(parseError.errorString(), QString::number(parseError.offset), cleanData);
+
+        llamaClient->clearSession(1);
+        CallbackData callbackDataFix;
+        if (!llamaClient->generateResponse(1, repairPrompt.toStdString(), streamCallback, finishedCallback, &callbackDataFix)) {
+            Log::error("Failed to repair JSON for scene: %s\n", scene.name.c_str());
+            return false;
+        }
+
+        QString fixedData = cleanJsonMessage(callbackDataFix.result.c_str());
+        // create a prompt and
+        // save again with fix suffix
+
+        QString fixFilePath = filePath + ".fixed.json";
+        QFile fixFile(fixFilePath);
+        if (fixFile.open(QIODevice::WriteOnly)) {
+            fixFile.write(fixedData.toUtf8());
+            fixFile.close();
+            Log::info("Saved repaired JSON to %s\n", fixFilePath.toStdString().c_str());
+        }
+
+        QJsonParseError fixedParseError;
+        QJsonDocument fixedDoc = QJsonDocument::fromJson(fixedData.toUtf8(), &fixedParseError);
+
+        if (fixedDoc.isNull()) {
+            Log::error("Failed to repair JSON. Still invalid: %s (offset: %d)\n",
+                       fixedParseError.errorString().toStdString().c_str(),
+                       fixedParseError.offset);
+            return false;
+        }
+
+        doc = fixedDoc;
+
+        Log().info() << "Success Fix Json\n";
+        Log().print() << "Success Fix Json\n";
+
+        //return false;
     }
 
     QJsonArray shotsArray = doc.array();
@@ -478,8 +561,8 @@ void ScriptBreakdown::streamCallback(const char* msg, void* user_data) {
 void ScriptBreakdown::finishedCallback(const char* msg, void* user_data) {
     CallbackData* data = static_cast<CallbackData*>(user_data);
     data->result = msg;
-    Log::info("Completed response: %s\n", msg);
-    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+    //Log::info("Completed response: %s\n", msg);
+    //QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
 }
 
 void ScriptBreakdown::printScenes() const {

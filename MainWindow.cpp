@@ -235,6 +235,9 @@ void MainWindow::about()
 
 }
 
+#include <QPointer>
+static QPointer<MainWindow> g_mainWindowInstance = nullptr;
+
 bool MainWindow::initializeLlamaClient()
 {
     QString modelPath ="/Users/andreascarlen/Library/Application Support/StarGit/models/Qwen2.5-7B-Instruct-1M-Q4_K_M.gguf";
@@ -255,16 +258,31 @@ bool MainWindow::initializeLlamaClient()
 
     // Define parameter values
     float temperature = 0.7f;
-    int max_tokens = 512;
+    int max_tokens = 4096*4;
 
     // Initialize ModelParameter array
     ModelParameter params[] = {
         {"temperature", PARAM_FLOAT, &temperature},
+        {"context_size", PARAM_INT, &max_tokens},
         {"max_tokens", PARAM_INT, &max_tokens}
     };
 
+    // Set global GUI-safe pointer
+    g_mainWindowInstance = this;
+
     if (!llamaClient->loadModel(modelPath.toStdString(), params, 2, [](const char* msg) {
             qDebug() << "Model load:" << msg;
+
+            Log().info() << msg;
+            if(Str(msg).startsWith("[ERROR]")){
+                Log().error() << msg;
+
+                // Call GUI code from main thread
+                QString message = QString::fromUtf8(msg);
+                QMetaObject::invokeMethod(g_mainWindowInstance, [message]() {
+                    QMessageBox::critical(g_mainWindowInstance, QObject::tr("Llama Engine Error"), message);
+                }, Qt::QueuedConnection);
+            }
         })) {
         QMessageBox::critical(this, tr("Error"), tr("Failed to load Llama model: %1").arg(modelPath));
         delete llamaClient;
@@ -541,6 +559,13 @@ bool MainWindow::consoleCommand(const QString &the_command_line)
     }
 
     if(llamaModel){
+
+        if(the_command_line == "lmstat"){
+            QString info = llamaModel->getContextInfo();
+            Log().info() << info.toUtf8().constData() << "\n";
+            return true;
+        }
+
         QString prompt = the_command_line;
         QString response = llamaModel->generateResponse(
             prompt,

@@ -100,3 +100,12 @@ QString LlamaModel::generateResponse(int sessionId, const QString &input_prompt,
 
     return QString::fromStdString(resultString);
 }
+
+QString LlamaModel::getContextInfo(){
+    if(client)
+    {
+        std::string info = client->getContextInfo();
+        return QString::fromStdString(info);
+    }
+    return "Llama client is unloaded";
+}

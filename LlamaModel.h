@@ -31,6 +31,8 @@ public:
                              std::function<void(const QString &)> callback,
                              std::function<void(const QString &)> callbackFinished);
 
+    QString getContextInfo();
+
 signals:
     void responseGenerated(const QString &piece); // Signal to emit each piece of the response
 
