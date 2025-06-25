@@ -70,6 +70,7 @@ CONFIG(debug, debug|release) {
 	LIBS += -framework VideoDecodeAcceleration
 	LIBS += -lbz2
 	LIBS += -lz
+        LIBS += -lpng16
 
         #PRIVATE_FRAMEWORKS.files = data
         #PRIVATE_FRAMEWORKS.path = Contents/Resources
@@ -190,6 +191,57 @@ HEADERS += ../LlamaModel.h
 
 SOURCES += $$GF/Applications/LlamaEngine/LlamaClient.cpp
 INCLUDEPATH += $$GF/Applications/LlamaEngine
+
+
+
+
+
+# Input source files
+SOURCES +=  \
+           $$GF/Applications/TimeLineProject/TimeLineView.cpp \
+           $$GF/Applications/TimeLineProject/TrackItem.cpp \
+           $$GF/Applications/TimeLineProject/WaveformItem.cpp \
+           $$GF/Applications/TimeLineProject/HeaderItem.cpp \
+           $$GF/Applications/TimeLineProject/Track.cpp \
+           $$GF/Applications/TimeLineProject/Segment.cpp \
+           $$GF/Applications/TimeLineProject/MarkerItem.cpp \
+           $$GF/Applications/TimeLineProject/ShotSegment.cpp \
+           $$GF/Applications/TimeLineProject/PanelMarker.cpp \
+           $$GF/Applications/TimeLineProject/CustomGraphicsScene.cpp \
+           $$GF/Applications/TimeLineProject/CustomSlider.cpp \
+           $$GF/Applications/TimeLineProject/CustomScrollbar.cpp \
+           $$GF/Applications/TimeLineProject/ScrollbarView.cpp \
+           $$GF/Applications/TimeLineProject/ScrollbarHandleItem.cpp \
+           $$GF/Applications/TimeLineProject/CursorItem.cpp \
+           $$GF/Applications/TimeLineProject/TimeLineWidget.cpp \
+           $$GF/Applications/TimeLineProject/SpectrographHelper.cpp \
+                   $$GF/Applications/TimeLineProject/TimelineOptionsDialog.cpp
+
+# Include header files
+HEADERS += $$GF/Applications/TimeLineProject/TimeLineView.h \
+           $$GF/Applications/TimeLineProject/TrackItem.h \
+           $$GF/Applications/TimeLineProject/WaveformItem.h \
+           $$GF/Applications/TimeLineProject/HeaderItem.h \
+           $$GF/Applications/TimeLineProject/Track.h \
+           $$GF/Applications/TimeLineProject/Segment.h \
+           $$GF/Applications/TimeLineProject/MarkerItem.h \
+           $$GF/Applications/TimeLineProject/ShotSegment.h \
+           $$GF/Applications/TimeLineProject/PanelMarker.h \
+           $$GF/Applications/TimeLineProject/GraphicsItem.h \
+           $$GF/Applications/TimeLineProject/CustomGraphicsScene.h \
+           $$GF/Applications/TimeLineProject/CustomSlider.h \
+           $$GF/Applications/TimeLineProject/CustomScrollbar.h \
+           $$GF/Applications/TimeLineProject/ScrollbarView.h \
+           $$GF/Applications/TimeLineProject/ScrollbarHandleItem.h \
+           $$GF/Applications/TimeLineProject/CursorItem.h \
+           $$GF/Applications/TimeLineProject/TimeLineWidget.h \
+           $$GF/Applications/TimeLineProject/SpectrographHelper.h \
+                   $$GF/Applications/TimeLineProject/TimelineOptionsDialog.h
+
+
+
+
+
 #
 # plug and paint tools
 HEADERS       += $$GF/Applications/plugandpaint/app/interfaces.h \

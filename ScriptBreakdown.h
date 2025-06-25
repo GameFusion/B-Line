@@ -37,6 +37,28 @@ struct CharacterDialog {
     std::string dialogue;
 };
 
+struct Panel {
+    std::string name;            // Panel name or ID
+    std::string thumbnail;   // Image path for the panel
+    int startFrame = 0;          // Relative to shot start
+    int durationFrames = 0;      // Optional, if needed
+    std::string description;     // Optional panel-specific note or caption
+
+    Panel() = default;
+
+    Panel(const std::string& panelName,
+          const std::string& thumbPath,
+          int start,
+          int duration = 0,
+          const std::string& desc = "")
+        : name(panelName),
+        thumbnail(thumbPath),
+        startFrame(start),
+        durationFrames(duration),
+        description(desc)
+    {}
+};
+
 struct Shot {
     std::string name; // e.g., SHOT_0010
     std::string type; // e.g., CLOSE, MEDIUM, WIDE
@@ -48,11 +70,11 @@ struct Shot {
     int frameCount;
     std::string timeOfDay;
     bool restore = false;
-    //std::string dialogue;
     std::string fx;
     std::string notes;
     std::string intent;       // Narrative/emotional purpose
     std::vector<CharacterDialog> characters;
+    std::vector<Panel> panels;
 };
 
 struct Scene {

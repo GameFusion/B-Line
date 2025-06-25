@@ -85,8 +85,8 @@ int main(int argc, char *argv[])
 
 	w.show();
 
-	ShotPanelWidget sp;
-	sp.show();
+    //ShotPanelWidget sp;
+    //sp.show();
 
     Log().info() << "Welcome to B-Line - Ai Powered Storyboarder\n";
 

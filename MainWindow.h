@@ -14,11 +14,16 @@
 #include "LlamaClient.h"
 
 class LlamaModel;
+class TimeLineView;
 
 namespace Ui {
 	class MainWindowBoarder;
 }
 
+struct TimecodeDuration {
+    qint64 durationMs=0;
+    int frameCount=0;
+};
 
 class MainWindow : public QMainWindow
 {
@@ -60,6 +65,7 @@ protected:
 	void dropEvent(QDropEvent *event) override;
 
     bool initializeLlamaClient();
+    void updateTimeline();
 
 protected:
 	Ui::MainWindowBoarder *ui;
@@ -75,6 +81,9 @@ protected:
 
     QString currentProjectName;
     QString currentProjectPath;
+
+    TimeLineView* timeLineView;
+    TimecodeDuration episodeDuration;
 };
 
 

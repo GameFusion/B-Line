@@ -119,6 +119,36 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
     shot.lighting = obj["lighting"].toString().toStdString();
     shot.intent = obj["intent"].toString().toStdString();
 
+    // Panels (optional support from JSON)
+    if (obj.contains("panels")) {
+        QJsonArray panelsArray = obj["panels"].toArray();
+        for (const auto& panelValue : panelsArray) {
+            QJsonObject panelObj = panelValue.toObject();
+
+            Panel panel;
+            panel.name = panelObj["name"].toString().toStdString();
+            panel.thumbnail = panelObj["thumbnail"].toString().toStdString();
+            panel.startFrame = panelObj["startFrame"].toInt();
+            panel.durationFrames = panelObj.contains("durationFrames")
+                                       ? panelObj["durationFrames"].toInt()
+                                       : shot.frameCount;
+            panel.description = panelObj["description"].toString().toStdString();
+
+            shot.panels.push_back(panel);
+        }
+    }
+
+    // If no panels provided, add default one
+    if (shot.panels.empty()) {
+        Panel defaultPanel;
+        defaultPanel.name = shot.name + "_PANEL_001";
+        defaultPanel.thumbnail = obj["thumbnail"].toString().toStdString(); // fallback
+        defaultPanel.startFrame = 0;
+        defaultPanel.durationFrames = shot.frameCount;
+
+        shot.panels.push_back(defaultPanel);
+    }
+
     // Camera block
     if (obj.contains("camera")) {
         QJsonObject cameraObj = obj["camera"].toObject();

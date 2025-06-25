@@ -32,7 +32,279 @@
 
 #include "Log.h"
 
+// BEGIN TimeLine related includes
+#include <QCheckBox>
+#include <QScrollBar>
+#include "../TimeLineProject/TimeLineWidget.h"
+#include "../TimeLineProject/TimeLineView.h"
+#include "../TimeLineProject/CustomSlider.h"
+#include "../TimeLineProject/ScrollbarView.h"
+#include "../TimeLineProject/Track.h"
+#include "../TimeLineProject/Segment.h"
+#include "../TimeLineProject/MarkerItem.h"
+#include "../TimeLineProject/ShotSegment.h"
+#include "../TimeLineProject/PanelMarker.h"
+#include "../TimeLineProject/CursorItem.h"
+// END TimeLine related includes
+
 using namespace GameFusion;
+
+
+//#include "TimeLineWidget.h"
+
+
+TimeLineView* createTimeLine(QWidget &mainWindow)
+{
+    mainWindow.setWindowTitle("Timeline Viewer");
+
+    ///
+    int fontId = QFontDatabase::addApplicationFont(":/fa-regular-400.ttf");
+    printf("fond Id %d\n", fontId);
+
+    QString fontFamily = "Helvetica";
+    if (fontId == -1) {
+        qWarning("Failed to load FontAwesome font");
+    }
+    else
+        fontFamily = QFontDatabase::applicationFontFamilies(fontId).at(0);
+
+    QFont fontAwesome(fontFamily);
+
+    // Create buttons
+    QToolButton *shiftLeftButton = new QToolButton(&mainWindow);
+    shiftLeftButton->setText(QChar(0xf061));  // Shift left icon
+    shiftLeftButton->setFont(fontAwesome);
+
+    QToolButton *shiftRightButton = new QToolButton(&mainWindow);
+    shiftRightButton->setText(QChar(0xf060));  // Group selection icon
+    shiftRightButton->setFont(fontAwesome);
+
+    QToolButton *phonemeButton = new QToolButton(&mainWindow);
+    phonemeButton->setText(QChar(0xf044));  // Single selection icon
+    phonemeButton->setFont(fontAwesome);
+
+    QToolButton *editButton = new QToolButton(&mainWindow);
+    editButton->setText(QChar(0xf044));  // Area selection icon
+    editButton->setFont(fontAwesome);
+
+    ///
+
+    // Create and configure the TimeLineView
+    //CustomGraphicsScene *scene = new CustomGraphicsScene();
+    TimeLineView *timelineView = new TimeLineView(&mainWindow);
+
+    //timelineView->setScene(scene);
+    QGraphicsScene *scene = timelineView->scene();
+    timelineView->setMinimumSize(80, 60); // Set a minimum size for the timeline view
+    //timelineView->scale(0.5, 1);
+
+    // Create a QSpinBox for scale control
+    QSpinBox *scaleControl = new QSpinBox(&mainWindow);
+    scaleControl->setFixedWidth(100);
+    scaleControl->setRange(10, 200); // Set range from 1x to 10x
+    scaleControl->setValue(100); // Initial scale factor set to 1
+    scaleControl->setPrefix("Scale: ");
+    //scaleControl->setSuffix("x");
+
+    // Create a QSlider for scale control
+    //QSlider *scaleSlider = new QSlider(Qt::Horizontal, &mainWindow);
+    CustomSlider *scaleSlider = new CustomSlider(Qt::Horizontal, &mainWindow);
+    scaleSlider->setRange(10, 200); // Matching range with the spin box
+    scaleSlider->setValue(100); // Initial value matching the spin box
+    scaleSlider->setFixedWidth(400);
+
+    // Create a new QGraphicsView as a custom scrollbar
+    ScrollbarView *scrollbarView = new ScrollbarView(&mainWindow);
+    scrollbarView->setFixedHeight(28);  // Set the height of the scrollbar
+    scrollbarView->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+    // Connect the scale control to the view scaling functionality
+    QObject::connect(scaleControl, QOverload<int>::of(&QSpinBox::valueChanged),
+                     [timelineView, scaleSlider](int scaleValue) {
+                         // Adjust only the x-scale based on the spin box value
+                         //qreal currentYScale = timelineView->transform().m22(); // Get the current y-scale
+                         //timelineView->setTransform(QTransform::fromScale(100.f/scaleValue, currentYScale));
+                         // update the timeline
+                         timelineView->setUiScale(scaleValue/100.f);
+
+                         bool oldState = scaleSlider->blockSignals(true);
+                         scaleSlider->setValue(scaleValue);
+                         scaleSlider->blockSignals(oldState);
+                     });
+
+    //connect(scaleSlider, &CustomSlider::prepareForScaling, this, &YourClass::handlePrepareForScaling);
+
+    QObject::connect(scaleSlider, &CustomSlider::prepareForScaling, [timelineView]() {
+        // Capture the center point when the user starts to change the scale
+        printf("prepare For Sliding\n");
+        fflush(stdout);
+        QPointF focus = timelineView->getCenterPoint();
+        timelineView->setZoomFocus(focus);
+    });
+
+    QObject::connect(scaleSlider, &QSlider::valueChanged, [timelineView, scaleControl](int value) {
+        //qreal scaleY = timelineView->transform().m22(); // Maintain current Y scale
+        //timelineView->setTransform(QTransform::fromScale(value / 100.0, scaleY));
+        printf("valueChanged For Sliding\n");
+        fflush(stdout);
+
+        scaleControl->setValue(value); // Update spin box when slider changes
+        bool oldState = scaleControl->blockSignals(true);
+        scaleControl->setValue(value);
+        scaleControl->blockSignals(oldState);
+
+        // update the timeline
+        timelineView->setUiScale(value/100.f);
+    });
+
+    QObject::connect(timelineView, &TimeLineView::updateZoom,
+                     [scaleSlider](double newZoomLevel) {
+                         int sliderValue = static_cast<int>(newZoomLevel * 100);  // Convert zoom level to slider value
+                         scaleSlider->updateValue(sliderValue);
+                     });
+
+    QObject::connect(timelineView, &TimeLineView::updateZoom,
+                     [scaleControl](double newZoomLevel) {
+                         int spinBoxValue = static_cast<int>(newZoomLevel * 100);  // Convert zoom level to spin box value
+                         bool oldState = scaleControl->blockSignals(true);
+                         scaleControl->setValue(spinBoxValue);
+                         scaleControl->blockSignals(oldState);
+                     });
+
+
+    timelineView->scene()->setSceneRect(0, 0, 20000, 700);  // Adjust dimensions as needed
+    timelineView->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+
+
+    // Create tracks
+    Track *track1 = new Track("Track 1", 0, 500000); // Name, Start Time, Duration in seconds
+    Track *track2 = new Track("Track 2", 0, 150000); // Name, Start Time, Duration in seconds
+    Track *track3 = new Track("Track 3", 0, 170000); // Name, Start Time, Duration in seconds
+
+    // Add tracks to the timeline
+    TrackItem *t1 = timelineView->addTrack(track1);
+    TrackItem *t2 = timelineView->addTrack(track2);
+    //timelineView->addTrack(track3);
+
+    Segment* segment = new Segment(scene, 100, 400);
+    t1->addSegment(segment);
+    //t1->addSegment(5, 100);
+    // Layout setup (if necessary)
+
+    //scene->addItem(t1);
+
+    new MarkerItem(20, 30, 20, 220, segment, "Hello", "HH", "(OS)");
+    new MarkerItem(40, 30, 40, 220, segment, "", "EH", "");
+    new MarkerItem(70, 30, 70, 220, segment, "", "L", "");
+    new MarkerItem(90, 30, 90, 220, segment, "", "OW", "");
+    new MarkerItem(110, 30, 110, 220, segment, "", "*", "");
+
+    new MarkerItem(120, 30, 10, 220, segment, "World", "W", "");
+    new MarkerItem(140, 30, 140, 220, segment, "", "ER", "");
+    new MarkerItem(170, 30, 170, 220, segment, "", "L", "");
+    new MarkerItem(190, 30, 190, 220, segment, "", "D", "");
+    new MarkerItem(225, 30, 225, 220, segment, "<SIL>", "", "");
+    //layout->addStretch(1); // Adds a spacer to push the timeline to the left
+
+
+
+
+    Segment* segment2 = new Segment(scene, 200, 500);
+    t2->addSegment(segment2);
+    new PanelMarker(0, 30, 0, 220, segment2, "Panel 1", "HH", "(OS)");
+    new PanelMarker(140, 30, 140, 220, segment2, "Panel 2", "OW", "WIDE");
+
+
+
+
+
+    ShotSegment* segment3 = new ShotSegment(scene, 600, 500);
+    t2->addSegment(segment3);
+    //new MarkerItem(70, 30, 70, 220, segment3, "", "L", "");
+
+
+
+    // Layout setup
+    /*
+    QHBoxLayout *layout = new QHBoxLayout(&mainWindow); // Use QHBoxLayout for horizontal layout
+    layout->addWidget(timelineView);
+    layout->addStretch(1); // Adds a spacer to push the timeline to the left
+*/
+
+    // Create a QComboBox for visual style selection
+    QComboBox *styleComboBox = new QComboBox(&mainWindow);
+    styleComboBox->addItem("Grayscale");
+    styleComboBox->addItem("Inferno");
+    styleComboBox->addItem("Viridis");
+    styleComboBox->addItem("Cividis");
+    styleComboBox->addItem("Plasma");
+    styleComboBox->addItem("Turbo");
+    styleComboBox->addItem("Roseus");
+
+    styleComboBox->addItem("None");
+
+    // Create a checkbox for waveform display
+    QCheckBox *waveformCheckbox = new QCheckBox("Waveform", &mainWindow);
+    waveformCheckbox->setChecked(false);
+
+    QSpacerItem *spacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
+
+    QVBoxLayout *toplayout = new QVBoxLayout(&mainWindow);
+    QHBoxLayout *hlayout = new QHBoxLayout(&mainWindow);
+
+    QVBoxLayout *gfxlayout = new QVBoxLayout(&mainWindow);
+
+    gfxlayout->setSpacing(0);  // Remove spacing between the elements
+
+    hlayout->addWidget(scaleControl); // Add the scale control at the top
+    hlayout->addWidget(scaleSlider); // Add the scale control at the top
+    hlayout->addWidget(styleComboBox);  // Add the style combobox
+    hlayout->addWidget(waveformCheckbox);
+    hlayout->addWidget(shiftLeftButton);
+    hlayout->addWidget(shiftRightButton);
+    hlayout->addWidget(phonemeButton);
+    hlayout->addWidget(editButton);
+    //hlayout->addWidget(singleSelectionButton);
+    //hlayout->addWidget(areaSelectionButton);
+
+    hlayout->addSpacerItem(spacer);
+    gfxlayout->addWidget(timelineView);
+    gfxlayout->addWidget(scrollbarView);
+
+    toplayout->addLayout(hlayout);
+    toplayout->addLayout(gfxlayout);
+
+
+    mainWindow.setLayout(toplayout);
+
+    // Connect ScrollbarView to TimelineView's scrollbar
+    QObject::connect(scrollbarView, &ScrollbarView::valueChanged,
+                     timelineView->horizontalScrollBar(), &QScrollBar::setValue);
+    /*
+    // Connect TimelineView's scrollbar to ScrollbarView
+    QObject::connect(timelineView->horizontalScrollBar(), &QScrollBar::valueChanged,
+                     scrollbarView, &ScrollbarView::setValue);
+*/
+    // Setup connections
+    QObject::connect(timelineView, &TimeLineView::updateScroll,
+                     scrollbarView, &ScrollbarView::setValue);
+
+    // Connect the visual style combo box to the timeline view
+    QObject::connect(styleComboBox, &QComboBox::currentTextChanged,
+                     timelineView, &TimeLineView::setVisualStyle);
+
+    QObject::connect(waveformCheckbox, &QCheckBox::stateChanged, timelineView, &TimeLineView::toggleWaveformDisplay);
+
+    scrollbarView->setRange(0,20000);
+
+    // Show the main window
+    mainWindow.show();
+
+    t1->loadAudio("WarnerTest", "/users/andreascarlen/GameFusion/GameEngine/Applications/GameEditor/WarnerTest/TT.257.500.ACT.B.TEST44100.wav");
+    t2->loadAudio("WarnerTest", "/users/andreascarlen/GameFusion/GameEngine/Applications/GameEditor/WarnerTest/TT.257.500.ACT.B.TEST44100.wav");
+
+    return timelineView;
+}
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindowBoarder), llamaModel(nullptr), scriptBreakdown(nullptr)
@@ -59,10 +331,25 @@ MainWindow::MainWindow(QWidget *parent)
 	QObject::connect(ui->actionBlack, SIGNAL(triggered()), this, SLOT(setBlackTheme()));
 
 	connect(ui->actionAbout, SIGNAL(triggered()), this, SLOT(about()));
-
+/*
 	ShotPanelWidget *shotPanel = new ShotPanelWidget;
 	ui->splitter->insertWidget(0, shotPanel);
 	shotPanel->show();
+*/
+
+    ShotPanelWidget *shotPanel = new ShotPanelWidget;
+    shotPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred); // allow vertical growth
+
+    QScrollArea *scrollArea = new QScrollArea;
+    scrollArea->setWidget(shotPanel);
+    scrollArea->setWidgetResizable(true); // ensures resizing works correctly
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
+    ui->splitter->insertWidget(0, scrollArea);
+    scrollArea->show();
+
+    /***/
 
 	MainWindowPaint *paint = new MainWindowPaint;
 	ui->splitter->insertWidget(1, paint);
@@ -98,6 +385,8 @@ MainWindow::MainWindow(QWidget *parent)
 	
 	//
 	//// RETURN
+
+    timeLineView = createTimeLine(*ui->timeline);
 
 	return;
 	//
@@ -505,6 +794,73 @@ void MainWindow::updateScenes(){
     ui->shotsTreeWidget->expandAll();
 }
 
+void MainWindow::updateTimeline(){
+
+    const auto& scenes = scriptBreakdown->getScenes();
+
+    episodeDuration.durationMs = 0;
+    episodeDuration.frameCount = 0;
+
+
+
+    TrackItem * track = timeLineView->getTrack(0);
+    QGraphicsScene *gfxscene = timeLineView->scene();
+
+    //gfxscene->clear();
+
+    qreal fps = 25;
+    qreal mspf = 1000.f/fps;
+    long startTimeFrame = episodeDuration.frameCount;
+
+    for (const auto& scene : scenes) {
+
+        Log().info() << "Scene Start Frame: " << scene.name.c_str() << " " << startTimeFrame << "\n";
+
+        timeLineView->addSceneMarker(startTimeFrame * mspf, scene.name.c_str());
+
+        for (const auto& shot : scene.shots) {
+
+            long shotFrameStart = startTimeFrame;  // place shot at current frame
+            qreal shotTimeStart = shotFrameStart * mspf;
+            qreal shotDuration = shot.frameCount * mspf;
+
+            ShotSegment* segment = new ShotSegment(gfxscene, shotTimeStart, shotDuration);
+
+            Log().info() << "  Shot Start Frame: " << shot.name.c_str() << " " << shotFrameStart
+                         << " ms start: " << (float)shotTimeStart << "\n";
+
+            segment->marker()->setShotLabel(shot.name.c_str());
+            segment->marker()->setPanelName(shot.name.c_str());
+
+            int pannelIndex(0);
+
+            for (const auto& panel : shot.panels) {
+                long panelFrameStart = startTimeFrame + panel.startFrame;
+                qreal panelTimeStart = panelFrameStart * mspf;
+                qreal panelDuration = panel.durationFrames * mspf;
+                QString thumbnail = currentProjectPath + "/movies/" + panel.thumbnail.c_str();
+
+                // by default ShotSegment had one initial panel
+                PanelMarker *panelMarker = pannelIndex == 0 ? segment->marker() : new PanelMarker(140, 30, 140, 220, segment, panel.name.c_str(), "", "");
+
+                panelMarker->setPanelName(QString::fromStdString(panel.name));
+                panelMarker->loadThumbnail(thumbnail);
+
+                pannelIndex ++;
+            }
+
+            track->addSegment(segment);
+
+            // Advance frame cursor by shot's frame count
+            startTimeFrame += shot.frameCount;
+        }
+
+        // After each scene, update the global episode duration
+        episodeDuration.frameCount = startTimeFrame;
+        episodeDuration.durationMs = startTimeFrame * mspf;
+    }
+}
+
 void MainWindow::updateCharacters(){
     if(!scriptBreakdown) return;
 
@@ -793,6 +1149,8 @@ void MainWindow::loadProject() {
     else
         QMessageBox::information(this, "Project Loaded", "Project loaded successfully.");
 
+
     updateScenes();
+    updateTimeline();
 }
 
