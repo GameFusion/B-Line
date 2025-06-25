@@ -352,7 +352,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     /***/
 
-	MainWindowPaint *paint = new MainWindowPaint;
+    paint = new MainWindowPaint;
 	ui->splitter->insertWidget(1, paint);
 	paint->show();
 
@@ -1216,4 +1216,6 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     // Load and display the image, e.g. in a QLabel
     //QPixmap pixmap(QString::fromStdString(panel->image));
     //imageLabel->setPixmap(pixmap.scaled(imageLabel->size(), Qt::KeepAspectRatio));
+    QString imagePath = currentProjectPath + "/movies/" + panel->image.c_str();
+    paint->openImage(imagePath);
 }

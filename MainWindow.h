@@ -15,6 +15,7 @@
 
 class LlamaModel;
 class TimeLineView;
+class MainWindowPaint;
 
 namespace Ui {
 	class MainWindowBoarder;
@@ -87,6 +88,8 @@ protected:
 
     TimeLineView* timeLineView;
     TimecodeDuration episodeDuration;
+
+    MainWindowPaint *paint;
 };
 
 
