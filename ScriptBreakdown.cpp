@@ -128,6 +128,7 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
             Panel panel;
             panel.name = panelObj["name"].toString().toStdString();
             panel.thumbnail = panelObj["thumbnail"].toString().toStdString();
+            panel.image = panelObj["image"].toString().toStdString();
             panel.startFrame = panelObj["startFrame"].toInt();
             panel.durationFrames = panelObj.contains("durationFrames")
                                        ? panelObj["durationFrames"].toInt()

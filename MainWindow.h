@@ -58,6 +58,8 @@ public slots:
     void consoleCommandActivated(int index);
     bool consoleCommand(const QString &);
 
+    void onTreeItemClicked(QTreeWidgetItem* item, int column);
+
 protected:
 	void dragEnterEvent(QDragEnterEvent *event) override;
 	//void dragMoveEvent(QDragMoveEvent *event) override;
@@ -66,6 +68,7 @@ protected:
 
     bool initializeLlamaClient();
     void updateTimeline();
+    GameFusion::Panel* findPanelByUuid(const std::string& uuid);
 
 protected:
 	Ui::MainWindowBoarder *ui;

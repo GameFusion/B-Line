@@ -7,6 +7,7 @@
 #include <string>
 
 #include <QJsonObject>
+#include <QUuid>
 
 namespace GameFusion {
 /*
@@ -38,13 +39,17 @@ struct CharacterDialog {
 };
 
 struct Panel {
+    std::string uuid;
     std::string name;            // Panel name or ID
-    std::string thumbnail;   // Image path for the panel
+    std::string thumbnail;   // Thumbnail path for the panel
+    std::string image;   // Image path for the panel
     int startFrame = 0;          // Relative to shot start
     int durationFrames = 0;      // Optional, if needed
     std::string description;     // Optional panel-specific note or caption
 
-    Panel() = default;
+    Panel() {
+        uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    }
 
     Panel(const std::string& panelName,
           const std::string& thumbPath,
@@ -56,7 +61,9 @@ struct Panel {
         startFrame(start),
         durationFrames(duration),
         description(desc)
-    {}
+    {
+        uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    }
 };
 
 struct Shot {

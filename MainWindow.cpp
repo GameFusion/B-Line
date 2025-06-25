@@ -295,6 +295,7 @@ TimeLineView* createTimeLine(QWidget &mainWindow)
 
     QObject::connect(waveformCheckbox, &QCheckBox::stateChanged, timelineView, &TimeLineView::toggleWaveformDisplay);
 
+
     scrollbarView->setRange(0,20000);
 
     // Show the main window
@@ -387,6 +388,10 @@ MainWindow::MainWindow(QWidget *parent)
 	//// RETURN
 
     timeLineView = createTimeLine(*ui->timeline);
+
+    // Add Callback for Tree Item Selection
+    connect(ui->shotsTreeWidget, &QTreeWidget::itemClicked, this, &MainWindow::onTreeItemClicked);
+
 
 	return;
 	//
@@ -605,6 +610,7 @@ void addShot(QTreeWidgetItem* shotItem, const GameFusion::Shot &shot) {
         }
     }
 
+    /*
     QString characterDialogSummary;
     for (const auto& c : shot.characters) {
         QString line = QString::fromStdString(c.name);
@@ -617,6 +623,7 @@ void addShot(QTreeWidgetItem* shotItem, const GameFusion::Shot &shot) {
         characterDialogSummary += line + "\n";
     }
     characterDialogSummary = characterDialogSummary.trimmed();
+    */
 
     shotItem->setText(0, QString::fromStdString(shot.name));
     shotItem->setText(1, QString::fromStdString(shot.type));
@@ -631,7 +638,7 @@ void addShot(QTreeWidgetItem* shotItem, const GameFusion::Shot &shot) {
     shotItem->setText(10, QString::fromStdString(shot.fx));
     shotItem->setText(11, QString::fromStdString(shot.notes));
     shotItem->setText(12, QString::fromStdString(shot.intent));
-    shotItem->setText(13, characterDialogSummary);
+    //shotItem->setText(13, characterDialogSummary);
 
     if(!shot.characters.empty()){
         for (const auto& c : shot.characters) {
@@ -643,6 +650,20 @@ void addShot(QTreeWidgetItem* shotItem, const GameFusion::Shot &shot) {
             charItem->setText(4, c.onScreen ? "on screen" : "off screen");
             charItem->setText(5, QString::fromStdString(c.dialogParenthetical));
             charItem->setText(6, QString::fromStdString(c.dialogue));
+        }
+    }
+
+    if (!shot.panels.empty()) {
+        for (const auto& panel : shot.panels) {
+            QTreeWidgetItem* panelItem = new QTreeWidgetItem(shotItem);
+            panelItem->setText(0, QString::fromStdString(panel.name));
+            panelItem->setText(1, QString::fromStdString(panel.description));
+            panelItem->setText(2, QString::number(panel.startFrame));
+            panelItem->setText(3, QString::number(panel.durationFrames));
+            panelItem->setText(4, QString::fromStdString(panel.uuid));
+
+            // Store UUID or full Panel pointer (if lifetime is stable)
+            panelItem->setData(0, Qt::UserRole, QString::fromStdString(panel.uuid));
         }
     }
 }
@@ -1154,3 +1175,45 @@ void MainWindow::loadProject() {
     updateTimeline();
 }
 
+GameFusion::Panel* MainWindow::findPanelByUuid(const std::string& uuid) {
+
+    auto& scenes = scriptBreakdown->getScenes();
+    for (auto& scene : scenes) {
+        for (auto& shot : scene.shots) {
+            for(auto &panel : shot.panels){
+                if (panel.uuid == uuid)
+                    return &panel;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
+    QVariant uuidData = item->data(0, Qt::UserRole);
+    if (!uuidData.isValid())
+        return;
+
+    QString uuid = uuidData.toString();
+
+    // Use UUID to look up the panel in your project data
+    const Panel* panel = findPanelByUuid(uuid.toStdString());
+    if (!panel){
+        Log().info() << "Panel " << uuid.toUtf8().constData() << " not found\n";
+        return;
+    }
+
+    // TODO print panel selected info ...with Log().info() <<
+    Log().info() << "Panel selected:\n"
+                 << "  Name: " << panel->name.c_str() << "\n"
+                 << "  Description: " << panel->description.c_str() << "\n"
+                 << "  Start Frame: " << panel->startFrame << "\n"
+                 << "  Duration: " << panel->durationFrames << "\n"
+                 << "  Image: " << panel->image.c_str() << "\n"
+                 << "  UUID: " << panel->uuid.c_str() << "\n";
+
+    // Load and display the image, e.g. in a QLabel
+    //QPixmap pixmap(QString::fromStdString(panel->image));
+    //imageLabel->setPixmap(pixmap.scaled(imageLabel->size(), Qt::KeepAspectRatio));
+}
