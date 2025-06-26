@@ -39,9 +39,11 @@ public:
     void updateShots();
     void updateScenes();
     void updateCharacters();
+    void loadProject(QString projectDir);
 
 public slots:
 
+    void newProject();
     void loadProject();
 	void update();
 	void postIssue();

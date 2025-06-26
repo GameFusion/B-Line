@@ -179,9 +179,10 @@ QT += widgets
 CONFIG += qt thread release
 
 # Input
-FORMS += ../BoarderMainWindow.ui ../ShotPanelWidget.ui
-HEADERS += ../MainWindow.h ../ShotPanelWidget.h
-SOURCES += ../main.cpp ../MainWindow.cpp ../ShotPanelWidget.cpp
+FORMS += ../BoarderMainWindow.ui ../ShotPanelWidget.ui \
+    ../NewProjectDialog.ui
+HEADERS += ../MainWindow.h ../ShotPanelWidget.h ../NewProjectDialog.h
+SOURCES += ../main.cpp ../MainWindow.cpp ../ShotPanelWidget.cpp ../NewProjectDialog.cpp
 
 SOURCES += ../ScriptBreakdown.cpp ../BreakdownWorker.cpp
 HEADERS += ../ScriptBreakdown.h ../BreakdownWorker.h ../ErrorDialog.h

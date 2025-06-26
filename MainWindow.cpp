@@ -322,6 +322,7 @@ MainWindow::MainWindow(QWidget *parent)
 	setAcceptDrops(true);
 
     QObject::connect(ui->actionOpen, SIGNAL(triggered()), this, SLOT(loadProject()));
+    QObject::connect(ui->actionNew, SIGNAL(triggered()), this, SLOT(newProject()));
 	QObject::connect(ui->actionPost_issue, SIGNAL(triggered()), this, SLOT(postIssue()));
 	QObject::connect(ui->actionTeam_email, SIGNAL(triggered()), this, SLOT(teamEmail()));
 	QObject::connect(ui->actionLogin, SIGNAL(triggered()), this, SLOT(login()));
@@ -1037,9 +1038,15 @@ void MainWindow::loadProject() {
     if (projectDir.isEmpty())
         return;
 
+    loadProject(projectDir);
+}
+
+void MainWindow::loadProject(QString projectDir){
     if(scriptBreakdown)
         delete scriptBreakdown;
     scriptBreakdown = new ScriptBreakdown("");
+
+    timeLineView->clear();
 
     QString projectFilePath = QDir(projectDir).filePath("project.json");
     QJsonDocument projectDoc;
@@ -1059,7 +1066,7 @@ void MainWindow::loadProject() {
 
     // Validate required fields
     QJsonObject projectObj = projectDoc.object();
-    QStringList requiredFields = { "name", "projectId", "fps" };
+    QStringList requiredFields = { "projectName", "fps" };
     QStringList missingFields;
 
     for (const QString &field : requiredFields) {
@@ -1218,4 +1225,97 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     //imageLabel->setPixmap(pixmap.scaled(imageLabel->size(), Qt::KeepAspectRatio));
     QString imagePath = currentProjectPath + "/movies/" + panel->image.c_str();
     paint->openImage(imagePath);
+}
+
+#include "NewProjectDialog.h"
+
+
+void MainWindow::newProject()
+{
+    NewProjectDialog dialog(this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    QString name = dialog.projectName();
+    QString location = dialog.location();
+    QString fullPath = location + "/" + name;
+
+    // Create project folder
+    QDir dir;
+    if (!dir.mkpath(fullPath)) {
+        QMessageBox::critical(this, tr("Error"), tr("Failed to create project folder."));
+        return;
+    }
+
+    // Define project directory structure
+    const QStringList subDirs = {
+        "assets",
+        "assets/LoRA",
+        "assets/audio",
+        "assets/controlnet",
+        "movies",
+        "panels",
+        "references",
+        "references/characters",
+        "references/environments",
+        "references/props",
+        "scenes",
+        "scripts"
+    };
+
+    // Create all subdirectories
+    for (const QString& subDir : subDirs) {
+        if (!dir.mkpath(fullPath + "/" + subDir)) {
+            QMessageBox::warning(this, tr("Error"),
+                                 tr("Failed to create folder: %1").arg(subDir));
+            return;
+        }
+    }
+
+    // Parse resolution as array
+    QString resString = dialog.resolution(); // e.g. "1920x1080"
+    QStringList resParts = resString.split('x');
+    int resWidth = resParts.value(0).toInt();
+    int resHeight = resParts.value(1).toInt();
+
+
+    // Generate project UUID
+    QString projectUUID = QUuid::createUuid().toString(QUuid::WithoutBraces);
+
+    // Generate ISO timestamp
+    QString createdTime = QDateTime::currentDateTimeUtc().toString(Qt::ISODate) + "Z";
+
+
+    // Write project metadata
+    QJsonObject projectJson;
+    projectJson["aspectRatio"] = dialog.aspectRatio();
+    projectJson["director"] = dialog.director();
+    projectJson["estimatedDuration"] = dialog.estimatedDuration();
+    projectJson["fps"] = dialog.fps();
+    projectJson["notes"] = dialog.notes();
+    projectJson["projectCode"] = dialog.projectCode();
+    projectJson["projectName"] = name;
+    projectJson["resolution"] = QJsonArray{ resWidth, resHeight };
+    projectJson["safeFrame"] = dialog.safeFrame();
+    projectJson["created"] = createdTime;
+    projectJson["version"] = 1;
+    projectJson["saveFormat"] = "compact";
+    projectJson["scenesPath"] = "scenes";
+    projectJson["projectId"] = name;
+
+    QFile metadataFile(fullPath + "/project.json");
+    if (!metadataFile.open(QIODevice::WriteOnly)) {
+        QMessageBox::warning(this, tr("Error"), tr("Failed to save project metadata."));
+        return;
+    }
+
+    QJsonDocument doc(projectJson);
+    metadataFile.write(doc.toJson());
+    metadataFile.close();
+
+    QMessageBox::information(this, tr("Success"), tr("New project created successfully."));
+
+
+    // Optional: load project into workspace
+    loadProject(fullPath);
 }
