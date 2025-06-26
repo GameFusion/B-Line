@@ -82,6 +82,8 @@ struct Shot {
     std::string intent;       // Narrative/emotional purpose
     std::vector<CharacterDialog> characters;
     std::vector<Panel> panels;
+    int startTime=-1;
+    int endTime=-1;
 };
 
 struct Scene {

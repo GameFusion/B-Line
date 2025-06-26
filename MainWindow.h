@@ -62,6 +62,7 @@ public slots:
     bool consoleCommand(const QString &);
 
     void onTreeItemClicked(QTreeWidgetItem* item, int column);
+    void onTimeCursorMoved(double time);
 
 protected:
 	void dragEnterEvent(QDragEnterEvent *event) override;
@@ -92,6 +93,10 @@ protected:
     TimecodeDuration episodeDuration;
 
     MainWindowPaint *paint;
+
+    GameFusion::Panel *currentPanel = nullptr;
+
+    QJsonObject projectJson;
 };
 
 

@@ -390,6 +390,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     timeLineView = createTimeLine(*ui->timeline);
 
+    connect(timeLineView, &TimeLineView::timeCursorMoved,
+            this, &MainWindow::onTimeCursorMoved);
+
     // Add Callback for Tree Item Selection
     connect(ui->shotsTreeWidget, &QTreeWidget::itemClicked, this, &MainWindow::onTreeItemClicked);
 
@@ -1048,6 +1051,10 @@ void MainWindow::loadProject(QString projectDir){
 
     timeLineView->clear();
 
+    currentPanel = nullptr;
+
+    paint->newImage();
+
     QString projectFilePath = QDir(projectDir).filePath("project.json");
     QJsonDocument projectDoc;
     QString errorMsg;
@@ -1065,12 +1072,13 @@ void MainWindow::loadProject(QString projectDir){
     }
 
     // Validate required fields
-    QJsonObject projectObj = projectDoc.object();
+    //QJsonObject projectObj = projectDoc.object();
+    projectJson = projectDoc.object();
     QStringList requiredFields = { "projectName", "fps" };
     QStringList missingFields;
 
     for (const QString &field : requiredFields) {
-        if (!projectObj.contains(field)) {
+        if (!projectJson.contains(field)) {
             missingFields << field;
         }
     }
@@ -1085,7 +1093,7 @@ void MainWindow::loadProject(QString projectDir){
     }
 
     // (Optional) Store project metadata
-    this->currentProjectName = projectObj["projectName"].toString();
+    this->currentProjectName = projectJson["projectName"].toString();
     this->currentProjectPath = projectDir;
 
     // Load scenes
@@ -1278,16 +1286,17 @@ void MainWindow::newProject()
     int resWidth = resParts.value(0).toInt();
     int resHeight = resParts.value(1).toInt();
 
-
     // Generate project UUID
     QString projectUUID = QUuid::createUuid().toString(QUuid::WithoutBraces);
 
     // Generate ISO timestamp
     QString createdTime = QDateTime::currentDateTimeUtc().toString(Qt::ISODate) + "Z";
 
-
     // Write project metadata
-    QJsonObject projectJson;
+    //QJsonObject projectJson;
+
+    projectJson = QJsonObject();
+
     projectJson["aspectRatio"] = dialog.aspectRatio();
     projectJson["director"] = dialog.director();
     projectJson["estimatedDuration"] = dialog.estimatedDuration();
@@ -1315,7 +1324,89 @@ void MainWindow::newProject()
 
     QMessageBox::information(this, tr("Success"), tr("New project created successfully."));
 
-
     // Optional: load project into workspace
     loadProject(fullPath);
+}
+
+void MainWindow::onTimeCursorMoved(double time)
+{
+    // Respond to timeline cursor change
+    //qDebug() << "Timeline cursor moved to time:" << time;
+    Log().debug() << "Timeline cursor moved to time:" << (float)time << "\n";
+    // Update other UI parts if needed
+
+
+    // Find the current Scene → Shot → Panel at given time
+    /*
+     * Find the current Scene → Shot → Panel at given time
+     *
+     *
+     *
+     * Project
+     * └─ Scenes (each has Shots)
+     *      └─ Shots (each has Panels)
+     *           └─ Panels (each has startTime, endTime, imagePath or image)
+     */
+
+    Panel* newPanel = nullptr;
+
+    long timeCounter = 0;
+
+    float fps = projectJson["fps"].toDouble();
+    if(fps <= 0)
+    {
+        Log().info() << "Invalid project fps " << fps << "\n";
+        return;
+    }
+    float mspf = 1000 / fps;
+
+    auto& scenes = scriptBreakdown->getScenes();
+    for (auto& scene : scenes) {
+        for (auto& shot : scene.shots) {
+
+            if(shot.startTime == -1) {
+                shot.startTime = timeCounter;
+                shot.endTime = shot.startTime + shot.frameCount*mspf;
+            }
+
+            timeCounter = shot.endTime;
+
+            if(time < shot.startTime || time > shot.endTime)
+                continue;
+
+            for(auto &panel : shot.panels){
+                if (time >= (shot.startTime + panel.startFrame * mspf) &&
+                    time < (shot).startTime + (panel.startFrame + panel.durationFrames) * mspf) {
+                    newPanel = &panel;
+                    break;
+                }
+            }
+        }
+    }
+
+
+
+    // If no panel found, show white image
+    if (!newPanel) {
+        Log().debug() << "No panel at time: " << (float)time << ", showing blank image.";
+        paint->newImage();
+        currentPanel = nullptr;
+        return;
+    }
+
+    if(newPanel == currentPanel)
+        return; // no panel change
+
+    currentPanel = newPanel;
+
+    QString imagePath = currentProjectPath + "/movies/" + currentPanel->image.c_str();
+    // Display the panel image, or a white image if not available
+    if (!currentPanel->image.empty() && QFile::exists(imagePath)) {
+        paint->openImage(imagePath);
+        Log().debug() << "Loaded image: " << imagePath.toUtf8().constData() << "\n";
+    } else {
+        Log().debug() << "Panel image not found, showing white frame.";
+
+        paint->newImage();
+    }
 }
