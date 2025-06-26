@@ -602,7 +602,7 @@ bool MainWindow::initializeLlamaClient()
     return llamaClient->createSession(1);
 }
 
-void addShot(QTreeWidgetItem* shotItem, const GameFusion::Shot &shot) {
+void addShot(QTreeWidgetItem* shotItem, const GameFusion::Shot &shot, float fps) {
 
     QString cameraText = QString::fromStdString(shot.camera.movement + " / " + shot.camera.framing);
     QString audioText = QString::fromStdString(shot.audio.ambient);
@@ -657,13 +657,15 @@ void addShot(QTreeWidgetItem* shotItem, const GameFusion::Shot &shot) {
         }
     }
 
+    float mspf = fps > 0 ? 1000./fps : 1;
+
     if (!shot.panels.empty()) {
         for (const auto& panel : shot.panels) {
             QTreeWidgetItem* panelItem = new QTreeWidgetItem(shotItem);
             panelItem->setText(0, QString::fromStdString(panel.name));
             panelItem->setText(1, QString::fromStdString(panel.description));
-            panelItem->setText(2, QString::number(panel.startFrame));
-            panelItem->setText(3, QString::number(panel.durationFrames));
+            panelItem->setText(2, QString::number(panel.startTime/mspf));
+            panelItem->setText(3, QString::number(panel.durationTime/mspf));
             panelItem->setText(4, QString::fromStdString(panel.uuid));
 
             // Store UUID or full Panel pointer (if lifetime is stable)
@@ -693,7 +695,9 @@ void MainWindow::importScript()
     GameScript* dictionary = NULL;
     GameScript* dictionaryCustom = NULL;
 
-    scriptBreakdown = new ScriptBreakdown(fileName.toStdString().c_str(), dictionary, dictionaryCustom, llamaClient);
+    float fps = projectJson["fps"].toDouble();
+
+    scriptBreakdown = new ScriptBreakdown(fileName.toStdString().c_str(), fps, dictionary, dictionaryCustom, llamaClient);
 
 
     // Threaded breakdown using QThread
@@ -737,7 +741,7 @@ void MainWindow::importScript()
                     sceneItem->setIcon(1, QIcon("scene_icon.png"));
                     for (const auto& shot : scene.shots) {
                         QTreeWidgetItem* shotItem = new QTreeWidgetItem(sceneItem);
-                        addShot(shotItem, shot);
+                        addShot(shotItem, shot, fps);
 
                     }
                 }
@@ -750,7 +754,7 @@ void MainWindow::importScript()
                 sceneItem->setIcon(1, QIcon("scene_icon.png"));
                 for (const auto& shot : scene.shots) {
                     QTreeWidgetItem* shotItem = new QTreeWidgetItem(sceneItem);
-                    addShot(shotItem, shot);
+                    addShot(shotItem, shot, fps);
                 }
             }
         }
@@ -791,10 +795,12 @@ void MainWindow::updateShots(){
 
     ui->shotsTreeWidget->clear();
 
+    float fps = projectJson["fps"].toDouble();
+
     const auto& shots = scriptBreakdown->getShots();
     for (const auto& shot : shots) {
         QTreeWidgetItem* shotItem = new QTreeWidgetItem(ui->shotsTreeWidget);
-        addShot(shotItem, shot);
+        addShot(shotItem, shot, fps);
     }
 
     ui->shotsTreeWidget->expandAll();
@@ -805,6 +811,8 @@ void MainWindow::updateScenes(){
 
     ui->shotsTreeWidget->clear();
 
+    float fps = projectJson["fps"].toDouble();
+
     const auto& scenes = scriptBreakdown->getScenes();
     for (const auto& scene : scenes) {
         QTreeWidgetItem* sceneItem = new QTreeWidgetItem(ui->shotsTreeWidget);
@@ -812,7 +820,7 @@ void MainWindow::updateScenes(){
         sceneItem->setIcon(1, QIcon("scene_icon.png"));
         for (const auto& shot : scene.shots) {
             QTreeWidgetItem* shotItem = new QTreeWidgetItem(sceneItem);
-            addShot(shotItem, shot);
+            addShot(shotItem, shot, fps);
         }
     }
 
@@ -821,7 +829,7 @@ void MainWindow::updateScenes(){
 
 void MainWindow::updateTimeline(){
 
-    const auto& scenes = scriptBreakdown->getScenes();
+    auto& scenes = scriptBreakdown->getScenes();
 
     episodeDuration.durationMs = 0;
     episodeDuration.frameCount = 0;
@@ -835,23 +843,44 @@ void MainWindow::updateTimeline(){
 
     qreal fps = 25;
     qreal mspf = 1000.f/fps;
-    long startTimeFrame = episodeDuration.frameCount;
+    //long startTimeFrame = episodeDuration.frameCount;
+    long startTime = 0;
+    for (auto& scene : scenes) {
 
-    for (const auto& scene : scenes) {
+        Log().info() << "Scene Start Frame: " << scene.name.c_str() << " " << startTime << "\n";
 
-        Log().info() << "Scene Start Frame: " << scene.name.c_str() << " " << startTimeFrame << "\n";
+        timeLineView->addSceneMarker(startTime, scene.name.c_str());
 
-        timeLineView->addSceneMarker(startTimeFrame * mspf, scene.name.c_str());
+        for (auto& shot : scene.shots) {
 
-        for (const auto& shot : scene.shots) {
-
-            long shotFrameStart = startTimeFrame;  // place shot at current frame
-            qreal shotTimeStart = shotFrameStart * mspf;
+            //long shotFrameStart = startTimeFrame;  // place shot at current frame
+            qreal shotTimeStart = startTime;
             qreal shotDuration = shot.frameCount * mspf;
 
             ShotSegment* segment = new ShotSegment(gfxscene, shotTimeStart, shotDuration);
 
-            Log().info() << "  Shot Start Frame: " << shot.name.c_str() << " " << shotFrameStart
+            //float fps = projectJson["fps"].toDouble();
+            //double mspf = fps > 0 ? 1000./fps : 1;
+
+            segment->setMarkerUpdateCallback([this](const QString& uuid, float newStartTime, float newDuration) {
+                GameFusion::Panel* panel = findPanelByUuid(uuid.toStdString());
+                if (panel) {
+
+                    panel->startTime = newStartTime;
+                    panel->durationTime = newDuration;
+                    Log().info() << "Updated panel with UUID: " << uuid.toUtf8().constData()
+                                 << ", new start time: " << panel->startTime
+                                << ", new duration: " << panel->durationTime <<
+                        "\n";
+                } else {
+                    Log().info() << "Panel not found for UUID: " << uuid.toUtf8().constData() << "\n";
+                }
+            });
+
+            shot.startTime = shotTimeStart;
+            shot.endTime = shotTimeStart + shotDuration;
+
+            Log().info() << "  Shot Start Frame: " << shot.name.c_str() << " " << (int)(startTime/mspf)
                          << " ms start: " << (float)shotTimeStart << "\n";
 
             segment->marker()->setShotLabel(shot.name.c_str());
@@ -860,29 +889,32 @@ void MainWindow::updateTimeline(){
             int pannelIndex(0);
 
             for (const auto& panel : shot.panels) {
-                long panelFrameStart = startTimeFrame + panel.startFrame;
-                qreal panelTimeStart = panelFrameStart * mspf;
-                qreal panelDuration = panel.durationFrames * mspf;
+                qreal panelTimeStart = startTime + panel.startTime;
+                //qreal panelTimeStart = panelFrameStart * mspf;
+                //qreal panelDuration = panel.durationFrames * mspf;
                 QString thumbnail = currentProjectPath + "/movies/" + panel.thumbnail.c_str();
 
                 // by default ShotSegment had one initial panel
-                PanelMarker *panelMarker = pannelIndex == 0 ? segment->marker() : new PanelMarker(140, 30, 140, 220, segment, panel.name.c_str(), "", "");
+                PanelMarker *panelMarker = pannelIndex == 0 ? segment->marker() : new PanelMarker(0, 30, 0, 220, segment, panel.name.c_str(), "", "");
 
                 panelMarker->setPanelName(QString::fromStdString(panel.name));
                 panelMarker->loadThumbnail(thumbnail);
+                panelMarker->setUuid(panel.uuid.c_str());
 
                 pannelIndex ++;
             }
 
+            segment->updateMarkersEndTime();
+
             track->addSegment(segment);
 
             // Advance frame cursor by shot's frame count
-            startTimeFrame += shot.frameCount;
+            startTime = shot.endTime;
         }
 
         // After each scene, update the global episode duration
-        episodeDuration.frameCount = startTimeFrame;
-        episodeDuration.durationMs = startTimeFrame * mspf;
+        episodeDuration.frameCount = startTime / mspf;
+        episodeDuration.durationMs = startTime;
     }
 }
 
@@ -1047,7 +1079,6 @@ void MainWindow::loadProject() {
 void MainWindow::loadProject(QString projectDir){
     if(scriptBreakdown)
         delete scriptBreakdown;
-    scriptBreakdown = new ScriptBreakdown("");
 
     timeLineView->clear();
 
@@ -1096,6 +1127,9 @@ void MainWindow::loadProject(QString projectDir){
     this->currentProjectName = projectJson["projectName"].toString();
     this->currentProjectPath = projectDir;
 
+    float fps = projectJson["fps"].toDouble();
+    scriptBreakdown = new ScriptBreakdown("", fps);
+
     // Load scenes
     QDir scenesDir(QDir(projectDir).filePath("scenes"));
 
@@ -1137,7 +1171,6 @@ void MainWindow::loadProject(QString projectDir){
 
         QString sceneId = parts[0];  // "0001"
         QString sceneName = parts.mid(1).join('_'); // Rejoin the rest, e.g. "SCENE_002"
-
 
         QJsonDocument sceneDoc;
         QString errorMsg;
@@ -1223,8 +1256,8 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     Log().info() << "Panel selected:\n"
                  << "  Name: " << panel->name.c_str() << "\n"
                  << "  Description: " << panel->description.c_str() << "\n"
-                 << "  Start Frame: " << panel->startFrame << "\n"
-                 << "  Duration: " << panel->durationFrames << "\n"
+                 << "  Start Time: " << panel->startTime << "\n"
+                 << "  Duration: " << panel->durationTime << "\n"
                  << "  Image: " << panel->image.c_str() << "\n"
                  << "  UUID: " << panel->uuid.c_str() << "\n";
 
@@ -1361,6 +1394,7 @@ void MainWindow::onTimeCursorMoved(double time)
     float mspf = 1000 / fps;
 
     auto& scenes = scriptBreakdown->getScenes();
+
     for (auto& scene : scenes) {
         for (auto& shot : scene.shots) {
 
@@ -1375,13 +1409,19 @@ void MainWindow::onTimeCursorMoved(double time)
                 continue;
 
             for(auto &panel : shot.panels){
-                if (time >= (shot.startTime + panel.startFrame * mspf) &&
-                    time < (shot).startTime + (panel.startFrame + panel.durationFrames) * mspf) {
+                if (time >= (shot.startTime + panel.startTime) &&
+                    time < (shot).startTime + (panel.startTime + panel.durationTime)) {
                     newPanel = &panel;
+
                     break;
                 }
             }
+
+            if(newPanel)
+                break;
         }
+        if(newPanel)
+            break;
     }
 
 

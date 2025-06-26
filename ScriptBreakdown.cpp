@@ -16,8 +16,8 @@ struct CallbackData {
     std::string result;
 };
 
-ScriptBreakdown::ScriptBreakdown(const Str& fileName, GameScript* dictionary, GameScript* dictionaryCustom, LlamaClient* llamaClient)
-    : Script(fileName, dictionary, dictionaryCustom), llamaClient(llamaClient) {}
+ScriptBreakdown::ScriptBreakdown(const Str& fileName, const float fps, GameScript* dictionary, GameScript* dictionaryCustom, LlamaClient* llamaClient)
+    : Script(fileName, dictionary, dictionaryCustom), fps(fps), llamaClient(llamaClient) {}
 
 ScriptBreakdown::~ScriptBreakdown() {}
 
@@ -119,6 +119,8 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
     shot.lighting = obj["lighting"].toString().toStdString();
     shot.intent = obj["intent"].toString().toStdString();
 
+    float mspf = fps > 0 ? 1000./fps : 1;
+
     // Panels (optional support from JSON)
     if (obj.contains("panels")) {
         QJsonArray panelsArray = obj["panels"].toArray();
@@ -129,10 +131,11 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
             panel.name = panelObj["name"].toString().toStdString();
             panel.thumbnail = panelObj["thumbnail"].toString().toStdString();
             panel.image = panelObj["image"].toString().toStdString();
-            panel.startFrame = panelObj["startFrame"].toInt();
-            panel.durationFrames = panelObj.contains("durationFrames")
-                                       ? panelObj["durationFrames"].toInt()
-                                       : shot.frameCount;
+            panel.startTime = panelObj["startTime"].toInt();
+            panel.durationTime = panelObj.contains("durationTime")
+                                       ? panelObj["durationTime"].toInt()
+                                       : shot.frameCount*mspf;
+
             panel.description = panelObj["description"].toString().toStdString();
 
             shot.panels.push_back(panel);
@@ -144,8 +147,8 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
         Panel defaultPanel;
         defaultPanel.name = shot.name + "_PANEL_001";
         defaultPanel.thumbnail = obj["thumbnail"].toString().toStdString(); // fallback
-        defaultPanel.startFrame = 0;
-        defaultPanel.durationFrames = shot.frameCount;
+        defaultPanel.startTime = 0;
+        defaultPanel.durationTime = shot.frameCount*mspf;
 
         shot.panels.push_back(defaultPanel);
     }

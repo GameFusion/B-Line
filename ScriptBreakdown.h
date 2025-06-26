@@ -43,8 +43,9 @@ struct Panel {
     std::string name;            // Panel name or ID
     std::string thumbnail;   // Thumbnail path for the panel
     std::string image;   // Image path for the panel
-    int startFrame = 0;          // Relative to shot start
-    int durationFrames = 0;      // Optional, if needed
+    int startTime = 0;          // Relative to shot start
+    int durationTime = 0;
+    //int durationFrames = 0;      // Optional, if needed
     std::string description;     // Optional panel-specific note or caption
 
     Panel() {
@@ -58,8 +59,8 @@ struct Panel {
           const std::string& desc = "")
         : name(panelName),
         thumbnail(thumbPath),
-        startFrame(start),
-        durationFrames(duration),
+        startTime(start),
+        durationTime(duration),
         description(desc)
     {
         uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
@@ -111,7 +112,7 @@ public:
         ChunkedContext // Break context into smaller prompts
     };
 
-    ScriptBreakdown(const Str& fileName, GameScript* dictionary = nullptr, GameScript* dictionaryCustom = nullptr, LlamaClient* client=nullptr);
+    ScriptBreakdown(const Str& fileName, const float fps, GameScript* dictionary = nullptr, GameScript* dictionaryCustom = nullptr, LlamaClient* client=nullptr);
     ~ScriptBreakdown();
 
     bool breakdownScript(BreakdownMode mode = BreakdownMode::FullContext, bool enableSequences = false);
@@ -148,6 +149,8 @@ private:
     static void finishedCallback(const char* msg, void* user_data);
 
     LlamaClient* llamaClient;
+
+    float fps;
 };
 
 }
