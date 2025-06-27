@@ -83,8 +83,14 @@ struct Shot {
     std::string intent;       // Narrative/emotional purpose
     std::vector<CharacterDialog> characters;
     std::vector<Panel> panels;
+    std::string uuid;
     int startTime=-1;
     int endTime=-1;
+
+    Shot() {
+        uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    }
+
 };
 
 struct Scene {

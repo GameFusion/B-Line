@@ -834,8 +834,6 @@ void MainWindow::updateTimeline(){
     episodeDuration.durationMs = 0;
     episodeDuration.frameCount = 0;
 
-
-
     TrackItem * track = timeLineView->getTrack(0);
     QGraphicsScene *gfxscene = timeLineView->scene();
 
@@ -858,9 +856,27 @@ void MainWindow::updateTimeline(){
             qreal shotDuration = shot.frameCount * mspf;
 
             ShotSegment* segment = new ShotSegment(gfxscene, shotTimeStart, shotDuration);
+            segment->setUuid(shot.uuid.c_str());
 
             //float fps = projectJson["fps"].toDouble();
             //double mspf = fps > 0 ? 1000./fps : 1;
+
+            segment->setSegmentUpdateCallback([this, mspf](const QString& uuid, float newStartTime, float newDuration) {
+                GameFusion::Shot* shot = findShotByUuid(uuid.toStdString());
+                if (shot) {
+
+                    shot->startTime = newStartTime;
+                    shot->endTime = newStartTime + newDuration;
+                    shot->frameCount = newDuration * mspf;
+
+                    Log().info() << "Updated shot with UUID: " << uuid.toUtf8().constData()
+                                 << ", new start time: " << shot->startTime
+                                << ", new end time: " << shot->endTime <<
+                        "\n";
+                } else {
+                    Log().info() << "Shot not found for UUID: " << uuid.toUtf8().constData() << "\n";
+                }
+            });
 
             segment->setMarkerUpdateCallback([this](const QString& uuid, float newStartTime, float newDuration) {
                 GameFusion::Panel* panel = findPanelByUuid(uuid.toStdString());
@@ -870,7 +886,7 @@ void MainWindow::updateTimeline(){
                     panel->durationTime = newDuration;
                     Log().info() << "Updated panel with UUID: " << uuid.toUtf8().constData()
                                  << ", new start time: " << panel->startTime
-                                << ", new duration: " << panel->durationTime <<
+                                 << ", new duration: " << panel->durationTime <<
                         "\n";
                 } else {
                     Log().info() << "Panel not found for UUID: " << uuid.toUtf8().constData() << "\n";
@@ -1221,6 +1237,19 @@ void MainWindow::loadProject(QString projectDir){
 
     updateScenes();
     updateTimeline();
+}
+
+GameFusion::Shot* MainWindow::findShotByUuid(const std::string& uuid) {
+
+    auto& scenes = scriptBreakdown->getScenes();
+    for (auto& scene : scenes) {
+        for (auto& shot : scene.shots) {
+            if (shot.uuid == uuid)
+                    return &shot;
+        }
+    }
+
+    return nullptr;
 }
 
 GameFusion::Panel* MainWindow::findPanelByUuid(const std::string& uuid) {

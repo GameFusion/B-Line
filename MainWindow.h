@@ -72,6 +72,7 @@ protected:
 
     bool initializeLlamaClient();
     void updateTimeline();
+    GameFusion::Shot* findShotByUuid(const std::string& uuid);
     GameFusion::Panel* findPanelByUuid(const std::string& uuid);
 
 protected:
