@@ -14,6 +14,7 @@
 #include <QMessageBox>
 #include <QFileDialog>
 #include <QThread>
+#include <QButtonGroup>
 
 #include <QFile>
 #include <QDir>
@@ -53,9 +54,64 @@ using namespace GameFusion;
 //#include "TimeLineWidget.h"
 
 
+class FontAwesomeViewer : public QWidget
+{
+public:
+    FontAwesomeViewer(QWidget *parent = nullptr) : QWidget(parent)
+    {
+        // Load Font Awesome font
+        int fontId = QFontDatabase::addApplicationFont(":/fa-solid-900.ttf");
+        //int fontId = QFontDatabase::addApplicationFont(":/fa-brands-400.ttf");
+        if (fontId == -1) {
+            qWarning() << "Failed to load Font Awesome font.";
+            return;
+        }
+
+        QStringList fontFamilies = QFontDatabase::applicationFontFamilies(fontId);
+        if (fontFamilies.isEmpty()) {
+            qWarning() << "No font families found.";
+            return;
+        }
+
+        QFont fontAwesome(fontFamilies.at(0));
+        fontAwesome.setPointSize(24);
+
+        QWidget *containerWidget = new QWidget(this);  // Container widget for the scroll area
+        QVBoxLayout *layout = new QVBoxLayout(containerWidget);
+
+        // Iterate through a range of Unicode values
+        for (int codePoint = 0xf000; codePoint <= 0xf3ff; ++codePoint) {
+            QString iconText = QString(QChar(codePoint));
+            QLabel *iconLabel = new QLabel(this);
+            iconLabel->setFont(fontAwesome);
+            iconLabel->setText(iconText + " " + QString::number(codePoint, 16).toUpper());
+            layout->addWidget(iconLabel);
+        }
+
+        containerWidget->setLayout(layout);
+
+        QScrollArea *scrollArea = new QScrollArea(this);
+        scrollArea->setWidget(containerWidget);
+        scrollArea->setWidgetResizable(true);
+
+        QVBoxLayout *mainLayout = new QVBoxLayout(this);
+        mainLayout->addWidget(scrollArea);
+        setLayout(mainLayout);
+
+        setWindowTitle("Font Awesome Icons Viewer");
+        resize(400, 600);
+    }
+};
+
+
 TimeLineView* createTimeLine(QWidget &mainWindow)
 {
+
+    FontAwesomeViewer *viewer = new FontAwesomeViewer;
+    viewer->show();
+
     mainWindow.setWindowTitle("Timeline Viewer");
+    mainWindow.setStyleSheet("background-color: black;");
 
     ///
     int fontId = QFontDatabase::addApplicationFont(":/fa-regular-400.ttf");
@@ -71,22 +127,76 @@ TimeLineView* createTimeLine(QWidget &mainWindow)
     QFont fontAwesome(fontFamily);
 
     // Create buttons
+    QToolButton *addPanelButton = new QToolButton(&mainWindow);
+    addPanelButton->setText(QChar(0xf0fe));  // Shift left icon
+    addPanelButton->setFont(fontAwesome);
+
+    QToolButton *deletePanelButton = new QToolButton(&mainWindow);
+    deletePanelButton->setText(QChar(0xf146));  // Shift left icon
+    deletePanelButton->setFont(fontAwesome);
+/*
+    QToolButton *addSegmentButton = new QToolButton(&mainWindow);
+    addSegmentButton->setText(QChar(0xf126));  // Shift left icon
+    addSegmentButton->setFont(fontAwesome);
+
+    QToolButton *deleteSegmentButton = new QToolButton(&mainWindow);
+    deleteSegmentButton->setText(QChar(0xf1f8));  // Shift left icon
+    deleteSegmentButton->setFont(fontAwesome);
+*/
+
     QToolButton *shiftLeftButton = new QToolButton(&mainWindow);
-    shiftLeftButton->setText(QChar(0xf061));  // Shift left icon
+    shiftLeftButton->setText(QChar(0xf2f6));  // Shift left icon
     shiftLeftButton->setFont(fontAwesome);
 
     QToolButton *shiftRightButton = new QToolButton(&mainWindow);
-    shiftRightButton->setText(QChar(0xf060));  // Group selection icon
+    shiftRightButton->setText(QChar(0xf337));  // Group selection icon
     shiftRightButton->setFont(fontAwesome);
-
+/*
     QToolButton *phonemeButton = new QToolButton(&mainWindow);
-    phonemeButton->setText(QChar(0xf044));  // Single selection icon
+    phonemeButton->setText(QChar(0xf1dd));  // Single selection icon
     phonemeButton->setFont(fontAwesome);
-
+*/
     QToolButton *editButton = new QToolButton(&mainWindow);
     editButton->setText(QChar(0xf044));  // Area selection icon
     editButton->setFont(fontAwesome);
 
+    QToolButton *trashButton = new QToolButton(&mainWindow);
+    trashButton->setText(QChar(0xf1f8));  // Area selection icon
+    trashButton->setFont(fontAwesome);
+/*
+    QToolButton *anotateButton = new QToolButton(&mainWindow);
+    anotateButton->setText(QChar(0xf3c5));  // Area selection icon
+    // or pin with F3C5
+    anotateButton->setFont(fontAwesome);
+    */
+
+    QToolButton *backwardFastButton = new QToolButton(&mainWindow);
+    backwardFastButton->setText(QChar(0xf049));  // Area selection icon
+    backwardFastButton->setFont(fontAwesome);
+
+    QToolButton *backwardStepButton = new QToolButton(&mainWindow);
+    backwardStepButton->setText(QChar(0xf048));  // Area selection icon
+    backwardStepButton->setFont(fontAwesome);
+
+    QToolButton *playButton = new QToolButton(&mainWindow);
+    playButton->setText(QChar(0xf04b));  // Area selection icon
+    playButton->setFont(fontAwesome);
+
+    QToolButton *pauseButton = new QToolButton(&mainWindow);
+    pauseButton->setText(QChar(0xf04c));  // Area selection icon
+    pauseButton->setFont(fontAwesome);
+
+    QToolButton *forwardStepButton = new QToolButton(&mainWindow);
+    forwardStepButton->setText(QChar(0xf051));  // Area selection icon
+    forwardStepButton->setFont(fontAwesome);
+
+    QToolButton *forwardFastButton = new QToolButton(&mainWindow);
+    forwardFastButton->setText(QChar(0xf050));  // Area selection icon
+    forwardFastButton->setFont(fontAwesome);
+
+    QToolButton *settingsButton = new QToolButton(&mainWindow);
+    settingsButton->setText(QChar(0xf1de));  // Single selection icon
+    settingsButton->setFont(fontAwesome);
     ///
 
     // Create and configure the TimeLineView
@@ -256,14 +366,71 @@ TimeLineView* createTimeLine(QWidget &mainWindow)
 
     gfxlayout->setSpacing(0);  // Remove spacing between the elements
 
+    // Grouping for toggle buttons (play/pause)
+    QButtonGroup *toggleGroup = new QButtonGroup(&mainWindow);
+    toggleGroup->setExclusive(true);
+    toggleGroup->addButton(playButton);
+    toggleGroup->addButton(pauseButton);
+
+    // Setup for play/pause toggle buttons without borders
+    // Play Button
+    playButton->setCheckable(true);
+    playButton->setStyleSheet(
+        "QToolButton { "
+        "    border: 2px solid black; "  // Black border when not selected
+        "    color: #32CD32; "           // LimeGreen text color
+        "    background: black; "  // Transparent background
+        "    border-radius: 5px; "       // Rounded corners with 5-pixel radius
+        "} "
+        "QToolButton:checked { "
+        "    background-color: #32CD32; "  // LimeGreen background when selected
+        "    border: 2px solid #32CD32; "  // LimeGreen border when selected
+        "    color: white; "               // Optionally change the text color to white when selected
+        "    border-radius: 5px; "
+        "} "
+        );
+
+    // Pause Button
+    pauseButton->setCheckable(true);
+    pauseButton->setStyleSheet(
+        "QToolButton { "
+        "    border: 2px solid black; "  // Black border when not selected
+        "    color: #FF4500; "           // OrangeRed text color
+        "    background: black; "  // Transparent background
+        "    border-radius: 5px; "       // Rounded corners with 5-pixel radius
+        "} "
+        "QToolButton:checked { "
+        "    background-color: #FF4500; "  // OrangeRed background when selected
+        "    border: 2px solid #FF4500; "  // OrangeRed border when selected
+        "    color: white; "               // Optionally change the text color to white when selected
+        "    border-radius: 5px; "
+        "} "
+        );
+
     hlayout->addWidget(scaleControl); // Add the scale control at the top
     hlayout->addWidget(scaleSlider); // Add the scale control at the top
     hlayout->addWidget(styleComboBox);  // Add the style combobox
     hlayout->addWidget(waveformCheckbox);
+
+    hlayout->addWidget(addPanelButton);
+    hlayout->addWidget(deletePanelButton);
+    //hlayout->addWidget(addSegmentButton);
+    //hlayout->addWidget(deleteSegmentButton);
+
+
     hlayout->addWidget(shiftLeftButton);
     hlayout->addWidget(shiftRightButton);
-    hlayout->addWidget(phonemeButton);
+    //hlayout->addWidget(phonemeButton);
     hlayout->addWidget(editButton);
+    hlayout->addWidget(trashButton);
+    //hlayout->addWidget(anotateButton);
+    hlayout->addWidget(backwardFastButton);
+    hlayout->addWidget(backwardStepButton);
+    hlayout->addWidget(playButton);
+    hlayout->addWidget(pauseButton);
+    hlayout->addWidget(forwardStepButton);
+    hlayout->addWidget(forwardFastButton);
+    hlayout->addWidget(settingsButton);
     //hlayout->addWidget(singleSelectionButton);
     //hlayout->addWidget(areaSelectionButton);
 
@@ -276,6 +443,14 @@ TimeLineView* createTimeLine(QWidget &mainWindow)
 
 
     mainWindow.setLayout(toplayout);
+
+    QObject::connect(addPanelButton, &QToolButton::clicked, [timelineView]() {
+        //addPanel(timelineView);
+    });
+
+    QObject::connect(trashButton, &QToolButton::clicked, [timelineView]() {
+        //deletePanel(timelineView);
+    });
 
     // Connect ScrollbarView to TimelineView's scrollbar
     QObject::connect(scrollbarView, &ScrollbarView::valueChanged,

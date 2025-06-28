@@ -39,6 +39,7 @@ INCLUDEPATH += $$GF/Projects/PhoneDEC/dec_phone_corr/
 INCLUDEPATH += $$GF/GameEngine/Demos/Draw
 
 RESOURCES += $$GF/Applications/CommonQt/qdarkstyle/style.qrc
+RESOURCES += ../Boarder.qrc
 
 macx {
         QMAKE_CXXFLAGS += -std=c++20
@@ -86,6 +87,9 @@ CONFIG(debug, debug|release) {
         QMAKE_CXXFLAGS += -std=c++20 -DUSE_NATIVE_MENU -Wregister -Wimplicit-function-declaration
 
         LIBS += ../../../../plugandpaint/plugins/build/plugins/libpnp_basictools_debug.a
+
+    PRIVATE_FRAMEWORKS.path = Contents/Resources
+    QMAKE_BUNDLE_DATA += PRIVATE_FRAMEWORKS
 }
 
 

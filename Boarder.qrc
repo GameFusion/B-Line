@@ -1,0 +1,7 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/">
+<file alias="fa-regular-400.ttf">resources/fonts/fa-regular-400.ttf</file>
+        <file alias="fa-brands-400.ttf">resources/fonts/fa-brands-400.ttf</file>
+        <file alias="fa-solid-900.ttf">resources/fonts/fa-solid-900.ttf</file>
+</qresource>
+</RCC>
