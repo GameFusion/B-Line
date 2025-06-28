@@ -26,6 +26,25 @@ struct TimecodeDuration {
     int frameCount=0;
 };
 
+struct PanelContext {
+    GameFusion::Scene* scene = nullptr;
+    GameFusion::Shot* shot = nullptr;
+    GameFusion::Panel* panel = nullptr;
+
+    bool isValid() const {
+        return scene && shot && panel;
+    }
+};
+
+struct ShotContext {
+    GameFusion::Scene* scene = nullptr;
+    GameFusion::Shot* shot = nullptr;
+
+    bool isValid() const {
+        return scene && shot;
+    }
+};
+
 class MainWindow : public QMainWindow
 {
 	Q_OBJECT
@@ -45,6 +64,7 @@ public slots:
 
     void newProject();
     void loadProject();
+    void saveProject();
 	void update();
 	void postIssue();
 	void teamEmail();
@@ -72,8 +92,8 @@ protected:
 
     bool initializeLlamaClient();
     void updateTimeline();
-    GameFusion::Shot* findShotByUuid(const std::string& uuid);
-    GameFusion::Panel* findPanelByUuid(const std::string& uuid);
+    ShotContext findShotByUuid(const std::string& uuid);
+    PanelContext findPanelByUuid(const std::string& uuid);
 
 protected:
 	Ui::MainWindowBoarder *ui;

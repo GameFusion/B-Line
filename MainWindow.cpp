@@ -323,6 +323,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     QObject::connect(ui->actionOpen, SIGNAL(triggered()), this, SLOT(loadProject()));
     QObject::connect(ui->actionNew, SIGNAL(triggered()), this, SLOT(newProject()));
+    QObject::connect(ui->actionSave, SIGNAL(triggered()), this, SLOT(saveProject()));
 	QObject::connect(ui->actionPost_issue, SIGNAL(triggered()), this, SLOT(postIssue()));
 	QObject::connect(ui->actionTeam_email, SIGNAL(triggered()), this, SLOT(teamEmail()));
 	QObject::connect(ui->actionLogin, SIGNAL(triggered()), this, SLOT(login()));
@@ -852,8 +853,9 @@ void MainWindow::updateTimeline(){
         for (auto& shot : scene.shots) {
 
             //long shotFrameStart = startTimeFrame;  // place shot at current frame
-            qreal shotTimeStart = startTime;
-            qreal shotDuration = shot.frameCount * mspf;
+            qreal shotTimeStart = shot.startTime == -1 ? startTime : shot.startTime;
+            qreal shotTimeEnd = shot.endTime == -1 ? shotTimeStart + shot.frameCount * mspf : shot.endTime;
+            qreal shotDuration = shotTimeEnd - shotTimeStart;
 
             ShotSegment* segment = new ShotSegment(gfxscene, shotTimeStart, shotDuration);
             segment->setUuid(shot.uuid.c_str());
@@ -862,12 +864,13 @@ void MainWindow::updateTimeline(){
             //double mspf = fps > 0 ? 1000./fps : 1;
 
             segment->setSegmentUpdateCallback([this, mspf](const QString& uuid, float newStartTime, float newDuration) {
-                GameFusion::Shot* shot = findShotByUuid(uuid.toStdString());
-                if (shot) {
-
+                ShotContext shotContext = findShotByUuid(uuid.toStdString());
+                if (shotContext.isValid()) {
+                    shotContext.scene->dirty = true;
+                    Shot *shot = shotContext.shot;
                     shot->startTime = newStartTime;
                     shot->endTime = newStartTime + newDuration;
-                    shot->frameCount = newDuration * mspf;
+                    shot->frameCount = newDuration / mspf;
 
                     Log().info() << "Updated shot with UUID: " << uuid.toUtf8().constData()
                                  << ", new start time: " << shot->startTime
@@ -879,9 +882,12 @@ void MainWindow::updateTimeline(){
             });
 
             segment->setMarkerUpdateCallback([this](const QString& uuid, float newStartTime, float newDuration) {
-                GameFusion::Panel* panel = findPanelByUuid(uuid.toStdString());
-                if (panel) {
+                PanelContext panelContext = findPanelByUuid(uuid.toStdString());
+                if (panelContext.isValid()) {
 
+                    panelContext.scene->dirty = true;
+
+                    Panel *panel = panelContext.panel;
                     panel->startTime = newStartTime;
                     panel->durationTime = newDuration;
                     Log().info() << "Updated panel with UUID: " << uuid.toUtf8().constData()
@@ -893,8 +899,11 @@ void MainWindow::updateTimeline(){
                 }
             });
 
-            shot.startTime = shotTimeStart;
-            shot.endTime = shotTimeStart + shotDuration;
+            if(shot.startTime ==-1){
+                shot.startTime = shotTimeStart;
+                shot.endTime = shotTimeStart + shotDuration;
+
+            }
 
             Log().info() << "  Shot Start Frame: " << shot.name.c_str() << " " << (int)(startTime/mspf)
                          << " ms start: " << (float)shotTimeStart << "\n";
@@ -917,6 +926,7 @@ void MainWindow::updateTimeline(){
                 panelMarker->loadThumbnail(thumbnail);
                 panelMarker->setUuid(panel.uuid.c_str());
 
+                panelMarker->setStartTimePos(panel.startTime);
                 pannelIndex ++;
             }
 
@@ -1222,7 +1232,7 @@ void MainWindow::loadProject(QString projectDir){
             continue;
         }
 
-        scriptBreakdown->loadScene(sceneName, sceneObj);  // Assuming you have this method
+        scriptBreakdown->loadScene(sceneName, sceneObj, QFileInfo(fileName).fileName());  // Assuming you have this method
     }
 
     if(foundErrors){
@@ -1239,32 +1249,32 @@ void MainWindow::loadProject(QString projectDir){
     updateTimeline();
 }
 
-GameFusion::Shot* MainWindow::findShotByUuid(const std::string& uuid) {
+ShotContext MainWindow::findShotByUuid(const std::string& uuid) {
 
     auto& scenes = scriptBreakdown->getScenes();
     for (auto& scene : scenes) {
         for (auto& shot : scene.shots) {
             if (shot.uuid == uuid)
-                    return &shot;
+                    return { &scene, &shot };
         }
     }
 
-    return nullptr;
+    return {};
 }
 
-GameFusion::Panel* MainWindow::findPanelByUuid(const std::string& uuid) {
+PanelContext MainWindow::findPanelByUuid(const std::string& uuid) {
 
     auto& scenes = scriptBreakdown->getScenes();
     for (auto& scene : scenes) {
         for (auto& shot : scene.shots) {
             for(auto &panel : shot.panels){
                 if (panel.uuid == uuid)
-                    return &panel;
+                    return { &scene, &shot, &panel };
             }
         }
     }
 
-    return nullptr;
+    return {};
 }
 
 void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
@@ -1275,7 +1285,10 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     QString uuid = uuidData.toString();
 
     // Use UUID to look up the panel in your project data
-    const Panel* panel = findPanelByUuid(uuid.toStdString());
+    PanelContext panelContext = findPanelByUuid(uuid.toStdString());
+
+    Panel *panel = panelContext.panel;
+
     if (!panel){
         Log().info() << "Panel " << uuid.toUtf8().constData() << " not found\n";
         return;
@@ -1478,4 +1491,12 @@ void MainWindow::onTimeCursorMoved(double time)
 
         paint->newImage();
     }
+}
+
+void MainWindow::saveProject(){
+
+    if(scriptBreakdown){
+        scriptBreakdown->saveModifiedScenes(currentProjectPath);
+    }
+
 }

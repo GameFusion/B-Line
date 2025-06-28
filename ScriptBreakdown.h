@@ -99,6 +99,9 @@ struct Scene {
     std::string sceneId;
     std::string description;
     std::vector<Shot> shots;
+
+    std::string filename; // File this scene was loaded from or will be saved to
+    bool dirty = false;   // Set to true when scene is edited and needs saving
 };
 
 struct Sequence {
@@ -132,8 +135,9 @@ public:
     void printShots() const;
     void printCharacters() const;
 
-    void loadScene(const QString& sceneName, const QJsonObject &sceneObj);
+    void loadScene(const QString& sceneName, const QJsonObject &sceneObj, const QString filename);
 
+    void saveModifiedScenes(QString projectPath);
 private:
     bool initializeLlamaClient(LlamaClient* client, const std::string& modelPath, const std::string& backend);
     bool processScenes(BreakdownMode mode);

@@ -119,6 +119,13 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
     shot.lighting = obj["lighting"].toString().toStdString();
     shot.intent = obj["intent"].toString().toStdString();
 
+    if(obj.contains("uuid"))
+        shot.uuid = obj["uuid"].toString().toStdString();
+    if(obj.contains("startTime"))
+        shot.startTime = obj["startTime"].toInt();
+    if(obj.contains("endTime"))
+        shot.endTime = obj["endTime"].toInt();
+
     float mspf = fps > 0 ? 1000./fps : 1;
 
     // Panels (optional support from JSON)
@@ -131,12 +138,15 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
             panel.name = panelObj["name"].toString().toStdString();
             panel.thumbnail = panelObj["thumbnail"].toString().toStdString();
             panel.image = panelObj["image"].toString().toStdString();
-            panel.startTime = panelObj["startTime"].toInt();
             panel.durationTime = panelObj.contains("durationTime")
                                        ? panelObj["durationTime"].toInt()
                                        : shot.frameCount*mspf;
 
             panel.description = panelObj["description"].toString().toStdString();
+            if(panelObj.contains("uuid"))
+                panel.uuid = panelObj["uuid"].toString().toStdString();
+            if(panelObj.contains("startTime"))
+                panel.startTime = panelObj["startTime"].toInt();
 
             shot.panels.push_back(panel);
         }
@@ -196,7 +206,7 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
     qDebug() << "Loaded scene:" << scene.sceneId << "with" << scene.shots.size() << "shots.";
     Log().info() << "Loaded scene:" << scene.sceneId.c_str() << "with" << (int)scene.shots.size() << "shots.";
 
-    printCharacters();
+    //printCharacters();
 }
 
 bool ScriptBreakdown::processShots(Scene& scene, int sceneIndex, BreakdownMode mode) {
@@ -647,7 +657,7 @@ void ScriptBreakdown::printCharacters() const {
     }
 }
 
-void ScriptBreakdown::loadScene(const QString& sceneName, const QJsonObject &sceneObj) {
+void ScriptBreakdown::loadScene(const QString& sceneName, const QJsonObject &sceneObj, const QString filename) {
     if (!sceneObj.contains("sceneId") || !sceneObj.contains("shots")) {
         qWarning() << "Invalid scene JSON: missing sceneId or shots.";
         Log().info() << "Invalid scene JSON: missing sceneId or shots.";
@@ -655,6 +665,8 @@ void ScriptBreakdown::loadScene(const QString& sceneName, const QJsonObject &sce
     }
 
     Scene scene;
+    scene.filename = filename.toUtf8().constData();
+    scene.dirty = false;
     if(sceneObj.contains("sceneId") && !sceneObj["sceneId"].toString().isEmpty())
         scene.sceneId = sceneObj["sceneId"].toString().toStdString();
     if(sceneObj.contains("description") && !sceneObj["description"].toString().isEmpty())
@@ -674,6 +686,92 @@ void ScriptBreakdown::loadScene(const QString& sceneName, const QJsonObject &sce
     }
 
     scenes.push_back(scene);
+}
+
+void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
+    for (Scene& scene : scenes) {
+        if (scene.dirty && !scene.filename.empty()) {
+            QJsonArray shotsArray;
+
+            for (const Shot& shot : scene.shots) {
+                QJsonObject shotObj;
+                shotObj["name"] = QString::fromStdString(shot.name);
+                shotObj["type"] = QString::fromStdString(shot.type);
+                shotObj["description"] = QString::fromStdString(shot.description);
+                shotObj["fx"] = QString::fromStdString(shot.fx);
+                shotObj["frameCount"] = shot.frameCount;
+                shotObj["timeOfDay"] = QString::fromStdString(shot.timeOfDay);
+                shotObj["restore"] = shot.restore;
+                shotObj["transition"] = QString::fromStdString(shot.transition);
+                shotObj["lighting"] = QString::fromStdString(shot.lighting);
+                shotObj["intent"] = QString::fromStdString(shot.intent);
+                shotObj["notes"] = QString::fromStdString(shot.notes);
+                shotObj["uuid"] = QString::fromStdString(shot.uuid);
+                shotObj["startTime"] = shot.startTime;
+                shotObj["endTime"] = shot.endTime;
+
+
+                QJsonObject cameraObj;
+                cameraObj["movement"] = QString::fromStdString(shot.camera.movement);
+                cameraObj["framing"] = QString::fromStdString(shot.camera.framing);
+                shotObj["camera"] = cameraObj;
+
+                QJsonObject audioObj;
+                audioObj["ambient"] = QString::fromStdString(shot.audio.ambient);
+                QJsonArray sfxArray;
+                for (const auto& sfx : shot.audio.sfx)
+                    sfxArray.append(QString::fromStdString(sfx));
+                audioObj["sfx"] = sfxArray;
+                shotObj["audio"] = audioObj;
+
+                QJsonArray characterArray;
+                for (const auto& character : shot.characters) {
+                    QJsonObject charObj;
+                    charObj["name"] = QString::fromStdString(character.name);
+                    charObj["emotion"] = QString::fromStdString(character.emotion);
+                    charObj["intent"] = QString::fromStdString(character.intent);
+                    charObj["onScreen"] = character.onScreen;
+                    charObj["dialogNumber"] = character.dialogNumber;
+                    charObj["dialogParenthetical"] = QString::fromStdString(character.dialogParenthetical);
+                    charObj["dialogue"] = QString::fromStdString(character.dialogue);
+                    characterArray.append(charObj);
+                }
+                shotObj["characters"] = characterArray;
+
+                QJsonArray panelArray;
+                for (const auto& panel : shot.panels) {
+                    QJsonObject panelObj;
+                    panelObj["name"] = QString::fromStdString(panel.name);
+
+                    panelObj["description"] = QString::fromStdString(panel.description);
+                    panelObj["thumbnail"] = QString::fromStdString(panel.thumbnail);
+                    panelObj["image"] = QString::fromStdString(panel.image);
+                    panelObj["uuid"] = QString::fromStdString(panel.uuid);
+                    panelObj["startTime"] = panel.startTime;
+                    panelObj["durationTime"] = panel.durationTime;
+
+                    panelArray.append(panelObj);
+                }
+                shotObj["panels"] = panelArray;
+
+                shotsArray.append(shotObj);
+            }
+
+            QJsonDocument doc(shotsArray);
+            QString filename = projectPath + "/scenes/" + scene.filename.c_str();
+            QFile file(filename);
+            if (file.open(QIODevice::WriteOnly)) {
+                file.write(doc.toJson(QJsonDocument::Indented));
+                file.close();
+                scene.dirty = false;
+                qDebug() << "Saved scene to" << QString::fromStdString(scene.filename);
+                Log().info() << "Saved scene to" << scene.filename.c_str() << "\n";
+            } else {
+                qWarning() << "Failed to write scene to" << filename;
+                Log().info() << "Failed to write scene to" << filename.toUtf8().constData() << "\n";
+            }
+        }
+    }
 }
 
 }
