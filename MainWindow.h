@@ -94,6 +94,13 @@ protected:
     void updateTimeline();
     ShotContext findShotByUuid(const std::string& uuid);
     PanelContext findPanelByUuid(const std::string& uuid);
+    PanelContext findPanelForTime(double currentTime, double threshold = 0.05);
+    ShotContext findShotForTime(double time/*, double buffer*/);
+
+    QString generateUniqueShotName(GameFusion::Scene* scene);
+
+    void addPanel(double t);
+    void deletePanel(double t);
 
 protected:
 	Ui::MainWindowBoarder *ui;

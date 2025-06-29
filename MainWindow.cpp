@@ -446,10 +446,12 @@ TimeLineView* createTimeLine(QWidget &mainWindow)
 
     QObject::connect(addPanelButton, &QToolButton::clicked, [timelineView]() {
         //addPanel(timelineView);
+        timelineView->onAddPanel();
     });
 
-    QObject::connect(trashButton, &QToolButton::clicked, [timelineView]() {
+    QObject::connect(deletePanelButton, &QToolButton::clicked, [timelineView]() {
         //deletePanel(timelineView);
+        timelineView->onDeletePanel();
     });
 
     // Connect ScrollbarView to TimelineView's scrollbar
@@ -568,6 +570,10 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(timeLineView, &TimeLineView::timeCursorMoved,
             this, &MainWindow::onTimeCursorMoved);
+    connect(timeLineView, &TimeLineView::addPanel,
+            this, &MainWindow::addPanel);
+    connect(timeLineView, &TimeLineView::deletePanel,
+            this, &MainWindow::deletePanel);
 
     // Add Callback for Tree Item Selection
     connect(ui->shotsTreeWidget, &QTreeWidget::itemClicked, this, &MainWindow::onTreeItemClicked);
@@ -1452,6 +1458,69 @@ PanelContext MainWindow::findPanelByUuid(const std::string& uuid) {
     return {};
 }
 
+PanelContext MainWindow::findPanelForTime(double time, double threshold) {
+
+    if(!scriptBreakdown){
+        Log().info() << "Script Breakdown is empty\n";
+        return {};
+    }
+    auto& scenes = scriptBreakdown->getScenes();
+    for (auto& scene : scenes) {
+        for (auto& shot : scene.shots) {
+            if(time < shot.startTime || time > shot.endTime)
+                continue;
+            for(auto &panel : shot.panels){
+                if (time >= (shot.startTime + panel.startTime) &&
+                    time < (shot).startTime + (panel.startTime + panel.durationTime)) {
+
+                    return { &scene, &shot, &panel };;
+                }
+            }
+        }
+    }
+
+    return {};
+}
+
+ShotContext MainWindow::findShotForTime(double time/*, double buffer*/) {
+    if (!scriptBreakdown) {
+        Log().info() << "Script Breakdown is null\n";
+        return {};
+    }
+
+    auto& scenes = scriptBreakdown->getScenes();
+    for (auto& scene : scenes) {
+        for (size_t i = 0; i < scene.shots.size(); ++i) {
+            auto& shot = scene.shots[i];
+
+            // 1. Direct match inside this shot
+            if (time >= shot.startTime && time < shot.endTime) {
+                return { &scene, &shot };
+            }
+
+            // 2. Between this shot and the next
+            if (i + 1 < scene.shots.size()) {
+                auto& nextShot = scene.shots[i + 1];
+                if (time >= shot.endTime && time < nextShot.startTime) {
+                    // Optional: insert logic could go here
+                    Log().info() << "Time is between Shot " << shot.name.c_str()
+                                 << " and Shot " << nextShot.name.c_str() << "\n";
+                    return { &scene, nullptr }; // indicates an insert opportunity
+                }
+            }
+        }
+
+        // 3. After the last shot in the scene
+        if (!scene.shots.empty() && time >= scene.shots.back().endTime) {
+            Log().info() << "Time is after last shot in Scene " << scene.name.c_str() << "\n";
+            return { &scene, nullptr }; // new shot can be appended
+        }
+    }
+
+    Log().info() << "No suitable scene found for time " << (float)time << "\n";
+    return {};
+}
+
 void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     QVariant uuidData = item->data(0, Qt::UserRole);
     if (!uuidData.isValid())
@@ -1674,4 +1743,160 @@ void MainWindow::saveProject(){
         scriptBreakdown->saveModifiedScenes(currentProjectPath);
     }
 
+}
+
+QString generateUniquePanelName(GameFusion::Shot* shot) {
+    if (!shot)
+        return "Panel1";
+
+    int index = 1;
+    QString baseName = "Panel";
+    QString candidateName;
+    bool nameExists = false;
+
+    do {
+        candidateName = baseName + QString::number(index++);
+        nameExists = std::any_of(shot->panels.begin(), shot->panels.end(), [&](const Panel& panel) {
+            return QString::fromStdString(panel.name) == candidateName;
+        });
+    } while (nameExists);
+
+    return candidateName;
+}
+
+void MainWindow::addPanel(double t) {
+    Log().info() << "Add Panel @ "<<(float)t<<"\n";
+
+
+
+    PanelContext panelContext = findPanelForTime(t);
+    if(panelContext.isValid()){
+        Log().info() << "Found panel in shot: Scene " << panelContext.scene->name.c_str()
+                     << ", Shot " << panelContext.shot->name.c_str()
+                     << ", uuid " << panelContext.panel->name.c_str() << ", uuid << " <<panelContext.panel->uuid.c_str() <<"\n";
+
+        qreal panelTimeStart = t - panelContext.shot->startTime;
+
+        bool shiftPressed = QApplication::keyboardModifiers() & Qt::ShiftModifier;
+
+        Panel newPanel;
+        if (shiftPressed) {
+            Log().info() << "Shift pressed: creating brand new panel (not a duplicate)";
+            newPanel = Panel(); // default constructor, empty panel
+            newPanel.startTime = panelTimeStart;
+            //newPanel.durationTime = 1.0; // or any default duration
+            newPanel.name = generateUniquePanelName(panelContext.shot).toUtf8().constData(); // you need to define this
+            newPanel.thumbnail = ""; // or generate default thumbnail
+            //newPanel.uuid = generateUuid(); // ensure uniqueness
+        } else {
+            newPanel = panelContext.panel->duplicatePanel(panelTimeStart);
+        }
+
+        // Optional: Insert a new panel *after* the found one
+        //Panel newPanel = panelContext.panel->duplicatePanel(panelTimeStart); // If you're duplicating
+
+        //insertPanelAfter(panelContext, newPanel);
+
+
+        // add panel to time line
+        // get ShotSegment for panelContext.shot.uuid
+        TrackItem * track = timeLineView->getTrack(0);
+        if(!track)
+            return;
+
+        Segment *segment = track->getSegmentByUuid(panelContext.shot->uuid.c_str());
+        if(segment){
+
+            QString thumbnail = currentProjectPath + "/movies/" + newPanel.thumbnail.c_str();
+
+            PanelMarker *panelMarker = new PanelMarker(0, 30, 0, 220, segment, newPanel.name.c_str(), "", "");
+
+            panelMarker->setPanelName(QString::fromStdString(newPanel.name));
+            if(!newPanel.thumbnail.empty())
+                panelMarker->loadThumbnail(thumbnail);
+            panelMarker->setUuid(newPanel.uuid.c_str());
+
+            panelMarker->setStartTimePos(panelTimeStart);
+
+            segment->updateMarkersEndTime();
+            int h = segment->getHeight();
+            panelMarker->updateHeight(h);
+
+            newPanel.durationTime = panelMarker->duration();
+            panelContext.shot->panels.push_back(newPanel);
+
+        }
+
+        // Sync the duration for all panels in Shot
+        for(auto &panel : panelContext.shot->panels){
+            MarkerItem *panelMarker = segment->getMarkerItemByUuid(panel.uuid.c_str());
+            panel.durationTime = panelMarker->duration();
+        }
+
+    }
+    else {
+        Log().info() << "No panel found at time " << (float)t << ". Creating new panel...\n";
+
+        /*
+        ShotContext shotContext = findShotForTime(t);
+
+        if (!shotContext.shot) {
+
+
+            // Insert a new shot here
+            QString newShotName = generateUniqueShotName(shotContext.scene);
+            Shot newShot;
+            newShot.name = newShotName.toStdString();
+            newShot.startTime = t;
+            newShot.endTime = t + 1.0; // 1 second duration
+
+            Panel defaultPanel;
+            defaultPanel.startTime = 0.0;
+            defaultPanel.durationTime = 1.0;
+
+            newShot.panels.push_back(defaultPanel);
+            shotContext.scene->shots.push_back(newShot); // Or insert into correct position
+
+            Log().info() << "Created new shot " << newShot.name.c_str() << " with one default panel\n";
+        }
+        else
+        {
+            Log().info() << "Create new Panel in empty Shot\n";
+        }
+*/
+    }
+}
+
+void MainWindow::deletePanel(double t) {
+    Log().info() << "Delete Panel @ "<<(float)t<<"\n";
+
+    PanelContext panelContext = findPanelForTime(t);
+
+    if(panelContext.isValid()){
+        TrackItem * track = timeLineView->getTrack(0);
+        Segment *segment = track->getSegmentByUuid(panelContext.shot->uuid.c_str());
+        if(segment){
+            bool removedMarker = segment->removeMarkerItemByUuid(panelContext.panel->uuid.c_str());
+            if (removedMarker) {
+                Log().info() << "Marker deleted on timeline.\n";
+
+                bool removedPanel = panelContext.shot->removePanelByUuid(panelContext.panel->uuid);
+                if(removedPanel)
+                    Log().info() << "Panel deleted.\n";
+            }
+        }
+    }
+}
+
+QString MainWindow::generateUniqueShotName(Scene* scene) {
+    int index = 1;
+    QString base = "SHOT";
+    while (true) {
+        QString candidate = QString("%1_%2").arg(base).arg(index, 3, 10, QChar('0'));
+        auto it = std::find_if(scene->shots.begin(), scene->shots.end(),
+                               [&](const Shot& s) { return s.name.c_str() == candidate; });
+        if (it == scene->shots.end())
+            return candidate;
+        ++index;
+    }
 }

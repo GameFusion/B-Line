@@ -65,6 +65,22 @@ struct Panel {
     {
         uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
     }
+
+    Panel duplicatePanel(int newStartTime = -1) {
+        Panel copy;
+
+        copy.name = this->name + "_copy";
+        copy.thumbnail = this->thumbnail;
+        copy.image = this->image;
+        copy.startTime = (newStartTime >= 0) ? newStartTime :  this->startTime +  this->durationTime;
+        copy.durationTime =  this->durationTime;
+        copy.description =  this->description;
+
+        // New UUID is automatically generated in constructor
+        return copy;
+    }
+
+
 };
 
 struct Shot {
@@ -89,6 +105,19 @@ struct Shot {
 
     Shot() {
         uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    }
+
+    bool removePanelByUuid(const std::string& panelUuid) {
+        auto it = std::remove_if(panels.begin(), panels.end(), [&](const Panel& panel) {
+            return panel.uuid == panelUuid;
+        });
+
+        if (it != panels.end()) {
+            panels.erase(it, panels.end());
+            return true;
+        }
+
+        return false;
     }
 
 };
