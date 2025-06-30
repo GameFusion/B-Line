@@ -16,6 +16,7 @@
 class LlamaModel;
 class TimeLineView;
 class MainWindowPaint;
+class Segment;
 
 namespace Ui {
 	class MainWindowBoarder;
@@ -59,6 +60,7 @@ public:
     void updateScenes();
     void updateCharacters();
     void loadProject(QString projectDir);
+    void syncPanelDurations(Segment* segment, GameFusion::Shot* shot);
 
 public slots:
 

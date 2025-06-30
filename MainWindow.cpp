@@ -1818,19 +1818,14 @@ void MainWindow::addPanel(double t) {
 
             panelMarker->setStartTimePos(panelTimeStart);
 
-            segment->updateMarkersEndTime();
+            //segment->updateMarkersEndTime();
             int h = segment->getHeight();
             panelMarker->updateHeight(h);
 
-            newPanel.durationTime = panelMarker->duration();
+            //newPanel.durationTime = panelMarker->duration();
             panelContext.shot->panels.push_back(newPanel);
 
-        }
-
-        // Sync the duration for all panels in Shot
-        for(auto &panel : panelContext.shot->panels){
-            MarkerItem *panelMarker = segment->getMarkerItemByUuid(panel.uuid.c_str());
-            panel.durationTime = panelMarker->duration();
+            syncPanelDurations(segment, panelContext.shot);
         }
 
     }
@@ -1884,6 +1879,8 @@ void MainWindow::deletePanel(double t) {
                 if(removedPanel)
                     Log().info() << "Panel deleted.\n";
             }
+
+            syncPanelDurations(segment, panelContext.shot);
         }
     }
 }
@@ -1898,5 +1895,19 @@ QString MainWindow::generateUniqueShotName(Scene* scene) {
         if (it == scene->shots.end())
             return candidate;
         ++index;
+    }
+}
+
+void MainWindow::syncPanelDurations(Segment* segment, Shot* shot)
+{
+    if (!segment || !shot)
+        return;
+
+    segment->updateMarkersEndTime();
+
+    for (auto& panel : shot->panels) {
+        MarkerItem* panelMarker = segment->getMarkerItemByUuid(panel.uuid.c_str());
+        if (panelMarker)
+            panel.durationTime = panelMarker->duration();
     }
 }
