@@ -287,9 +287,9 @@ TimeLineView* createTimeLine(QWidget &mainWindow)
 
 
     // Create tracks
-    Track *track1 = new Track("Track 1", 0, 500000); // Name, Start Time, Duration in seconds
-    Track *track2 = new Track("Track 2", 0, 150000); // Name, Start Time, Duration in seconds
-    Track *track3 = new Track("Track 3", 0, 170000); // Name, Start Time, Duration in seconds
+    Track *track1 = new Track("Track 1", 0, 500000, TrackType::Storyboard); // Name, Start Time, Duration in seconds
+    Track *track2 = new Track("Track 2", 0, 150000, TrackType::NonLinearMedia); // Name, Start Time, Duration in seconds
+    Track *track3 = new Track("Track 3", 0, 170000, TrackType::NonLinearMedia); // Name, Start Time, Duration in seconds
 
     // Add tracks to the timeline
     TrackItem *t1 = timelineView->addTrack(track1);
@@ -1422,9 +1422,10 @@ void MainWindow::loadProject(QString projectDir){
         ErrorDialog errorDialog("Errors occurred while loading project", errors, this);
         errorDialog.exec();
     }
-    else
-        QMessageBox::information(this, "Project Loaded", "Project loaded successfully.");
-
+    else {
+        //QMessageBox::information(this, "Project Loaded", "Project loaded successfully.");
+        Log().info() << "Project loaded successfully.\n";
+    }
 
     updateScenes();
     updateTimeline();
