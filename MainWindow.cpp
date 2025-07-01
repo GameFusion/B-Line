@@ -1053,7 +1053,7 @@ void MainWindow::updateTimeline(){
                     shot->endTime = newStartTime + newDuration;
                     shot->frameCount = newDuration / mspf;
 
-                    Log().info() << "Updated shot with UUID: " << uuid.toUtf8().constData()
+                    Log().info() << "Updated shot "<< shot->name.c_str() <<"with UUID: " << uuid.toUtf8().constData()
                                  << ", new start time: " << shot->startTime
                                 << ", new end time: " << shot->endTime <<
                         "\n";
