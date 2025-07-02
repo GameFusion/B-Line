@@ -46,6 +46,8 @@
 #include "../TimeLineProject/ShotSegment.h"
 #include "../TimeLineProject/PanelMarker.h"
 #include "../TimeLineProject/CursorItem.h"
+#include "../TimeLineProject/TimelineOptionsDialog.h"
+
 // END TimeLine related includes
 
 using namespace GameFusion;
@@ -445,13 +447,15 @@ TimeLineView* createTimeLine(QWidget &mainWindow)
     mainWindow.setLayout(toplayout);
 
     QObject::connect(addPanelButton, &QToolButton::clicked, [timelineView]() {
-        //addPanel(timelineView);
         timelineView->onAddPanel();
     });
 
     QObject::connect(deletePanelButton, &QToolButton::clicked, [timelineView]() {
-        //deletePanel(timelineView);
         timelineView->onDeletePanel();
+    });
+
+    QObject::connect(settingsButton, &QToolButton::clicked, [timelineView]() {
+        timelineView->onOptionsDialog();
     });
 
     // Connect ScrollbarView to TimelineView's scrollbar
@@ -574,6 +578,8 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::addPanel);
     connect(timeLineView, &TimeLineView::deletePanel,
             this, &MainWindow::deletePanel);
+    connect(timeLineView, &TimeLineView::optionsDialog,
+            this, &MainWindow::timelineOptions);
 
     // Add Callback for Tree Item Selection
     connect(ui->shotsTreeWidget, &QTreeWidget::itemClicked, this, &MainWindow::onTreeItemClicked);
@@ -1029,7 +1035,8 @@ void MainWindow::updateTimeline(){
 
         Log().info() << "Scene Start Frame: " << scene.name.c_str() << " " << startTime << "\n";
 
-        timeLineView->addSceneMarker(startTime, scene.name.c_str());
+        CursorItem *sceneMarker = timeLineView->addSceneMarker(startTime, scene.name.c_str());
+        sceneMarker->setUuid(scene.uuid.c_str());
 
         for (auto& shot : scene.shots) {
 
@@ -1041,26 +1048,56 @@ void MainWindow::updateTimeline(){
             ShotSegment* segment = new ShotSegment(gfxscene, shotTimeStart, shotDuration);
             segment->setUuid(shot.uuid.c_str());
 
-            //float fps = projectJson["fps"].toDouble();
-            //double mspf = fps > 0 ? 1000./fps : 1;
+            if(sceneMarker) {
+                // here we are at the
+                segment->setSceneMarker(sceneMarker);
+                //
 
-            segment->setSegmentUpdateCallback([this, mspf](const QString& uuid, float newStartTime, float newDuration) {
-                ShotContext shotContext = findShotByUuid(uuid.toStdString());
+                // TODO create a function to set (link) the sceneMarker (or uuid) to ShotSegment
+                // we want this link for the start of a scene !
+
+            /*
+             * TODO, add sceneMarker uuid to ShotSegment !!!!
+             *
+             *
+             *
+             */
+                sceneMarker = null;
+            }
+
+            segment->setSegmentUpdateCallback([this, mspf](Segment *segment) {
+                ShotContext shotContext = findShotByUuid(segment->getUuid().toUtf8().constData());
                 if (shotContext.isValid()) {
                     shotContext.scene->dirty = true;
                     Shot *shot = shotContext.shot;
-                    shot->startTime = newStartTime;
-                    shot->endTime = newStartTime + newDuration;
-                    shot->frameCount = newDuration / mspf;
 
-                    Log().info() << "Updated shot "<< shot->name.c_str() <<"with UUID: " << uuid.toUtf8().constData()
+                    //shot->startTime = newStartTime;
+                    //shot->endTime = newStartTime + newDuration;
+
+
+                    shot->startTime = segment->timePosition();
+                    shot->endTime = segment->timePosition() + segment->getDuration();
+
+                    shot->frameCount = segment->getDuration() / mspf;
+
+                    Log().info() << "Updated shot "<< shot->name.c_str() <<"with UUID: " << shot->uuid.c_str()
                                  << ", new start time: " << shot->startTime
                                 << ", new end time: " << shot->endTime <<
                         "\n";
+
+                    ShotSegment *shotSegment = dynamic_cast<ShotSegment*>(segment);
+                    if (shotSegment) {
+                        CursorItem *sceneMarker = shotSegment->getSceneMarkerPointer();
+                        if (sceneMarker)
+                            sceneMarker->setTimePosition(segment->timePosition());
+                    }
+
                 } else {
-                    Log().info() << "Shot not found for UUID: " << uuid.toUtf8().constData() << "\n";
+                    Log().info() << "Shot not found for UUID: " << segment->getUuid().toUtf8().constData() << "\n";
                 }
             });
+
+
 
             segment->setMarkerUpdateCallback([this](const QString& uuid, float newStartTime, float newDuration) {
                 PanelContext panelContext = findPanelByUuid(uuid.toStdString());
@@ -1910,5 +1947,33 @@ void MainWindow::syncPanelDurations(Segment* segment, Shot* shot)
         MarkerItem* panelMarker = segment->getMarkerItemByUuid(panel.uuid.c_str());
         if (panelMarker)
             panel.durationTime = panelMarker->duration();
+    }
+}
+
+void MainWindow::timelineOptions(){
+    TimelineOptionsDialog optionsDialog(this);
+
+    optionsDialog.setOptionsFromTimeline(timeLineView); // <- prefill dialog with timeline state
+
+    if (optionsDialog.exec() == QDialog::Accepted) {
+        QString unitsHeader = optionsDialog.getDisplayUnitsHeader();
+        QString unitsCursor = optionsDialog.getDisplayUnitsCursor();
+        bool snapToFrame = optionsDialog.getSnapToFrame();
+        int startTime = optionsDialog.getStartTime();
+        int endTime = optionsDialog.getEndTime();
+        double playbackSpeed = optionsDialog.getPlaybackSpeed();
+        double frameRate = optionsDialog.getFrameRate();
+
+        // Handle the options
+        qDebug() << "Header Units:" << unitsHeader;
+        qDebug() << "Cursor Units:" << unitsCursor;
+        qDebug() << "Snap to Frame:" << snapToFrame;
+        qDebug() << "Start Time:" << startTime;
+        qDebug() << "End Time:" << endTime;
+        qDebug() << "Playback Speed:" << playbackSpeed;
+        qDebug() << "Frame Rate:" << frameRate;
+
+        // Apply these options to the timeline
+        optionsDialog.applyToTimeline(timeLineView);     // <- apply changes
     }
 }

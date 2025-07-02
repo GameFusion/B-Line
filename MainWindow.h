@@ -103,6 +103,7 @@ protected:
 
     void addPanel(double t);
     void deletePanel(double t);
+    void timelineOptions();
 
 protected:
 	Ui::MainWindowBoarder *ui;

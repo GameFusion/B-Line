@@ -128,9 +128,14 @@ struct Scene {
     std::string sceneId;
     std::string description;
     std::vector<Shot> shots;
+    std::string uuid;
 
     std::string filename; // File this scene was loaded from or will be saved to
     bool dirty = false;   // Set to true when scene is edited and needs saving
+
+    Scene() {
+        uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    }
 };
 
 struct Sequence {
