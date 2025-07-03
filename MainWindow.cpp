@@ -1585,6 +1585,8 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     // Use UUID to look up the panel in your project data
     PanelContext panelContext = findPanelByUuid(uuid.toStdString());
 
+
+
     Scene *scene = panelContext.scene;
     Shot *shot = panelContext.shot;
     Panel *panel = panelContext.panel;
@@ -1592,6 +1594,15 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     if (!panel){
         Log().info() << "Panel " << uuid.toUtf8().constData() << " not found\n";
         return;
+    }
+
+    timeLineView->getTrack(0)->clearCurrentPanelMarkers();
+    Segment* seg = timeLineView->getTrack(0)->getSegmentByUuid(shot->uuid.c_str());
+    if(seg){
+        PanelMarker *panelMarker = (PanelMarker*)seg->getMarkerItemByUuid(panel->uuid.c_str());
+        if(panelMarker) {
+            panelMarker->setIsCurrent(!panelMarker->getIsCurrent());
+        }
     }
 
     // TODO print panel selected info ...with Log().info() <<
