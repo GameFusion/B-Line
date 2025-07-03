@@ -521,7 +521,7 @@ MainWindow::MainWindow(QWidget *parent)
 	shotPanel->show();
 */
 
-    ShotPanelWidget *shotPanel = new ShotPanelWidget;
+    shotPanel = new ShotPanelWidget;
     shotPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred); // allow vertical growth
 
     QScrollArea *scrollArea = new QScrollArea;
@@ -1569,6 +1569,7 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     // Use UUID to look up the panel in your project data
     PanelContext panelContext = findPanelByUuid(uuid.toStdString());
 
+    Scene *scene = panelContext.scene;
     Shot *shot = panelContext.shot;
     Panel *panel = panelContext.panel;
 
@@ -1587,12 +1588,15 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
                  << "  UUID: " << panel->uuid.c_str() << "\n";
 
     // Load and display the image, e.g. in a QLabel
-
     //QString imagePath = currentProjectPath + "/movies/" + panel->image.c_str();
     //paint->openImage(imagePath);
 
-    // TODO set time cursor to panel start time
+    // set time cursor to panel start time
     timeLineView->setTimeCursor(shot->startTime + panel->startTime);
+
+    // Update the panel UI
+    float fps = projectJson["fps"].toDouble();
+    shotPanel->setPanelInfo(scene, shot, panel, fps);
 }
 
 #include "NewProjectDialog.h"

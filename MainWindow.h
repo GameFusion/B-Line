@@ -17,6 +17,7 @@ class LlamaModel;
 class TimeLineView;
 class MainWindowPaint;
 class Segment;
+class ShotPanelWidget;
 
 namespace Ui {
 	class MainWindowBoarder;
@@ -128,6 +129,8 @@ protected:
     GameFusion::Panel *currentPanel = nullptr;
 
     QJsonObject projectJson;
+
+    ShotPanelWidget *shotPanel = nullptr;
 };
 
 

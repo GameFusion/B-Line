@@ -95,6 +95,7 @@ struct Shot {
     std::string timeOfDay;
     bool restore = false;
     std::string fx;
+    std::string action; // TODO Use this
     std::string notes;
     std::string intent;       // Narrative/emotional purpose
     std::vector<CharacterDialog> characters;
