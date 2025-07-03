@@ -1569,6 +1569,7 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     // Use UUID to look up the panel in your project data
     PanelContext panelContext = findPanelByUuid(uuid.toStdString());
 
+    Shot *shot = panelContext.shot;
     Panel *panel = panelContext.panel;
 
     if (!panel){
@@ -1586,10 +1587,12 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
                  << "  UUID: " << panel->uuid.c_str() << "\n";
 
     // Load and display the image, e.g. in a QLabel
-    //QPixmap pixmap(QString::fromStdString(panel->image));
-    //imageLabel->setPixmap(pixmap.scaled(imageLabel->size(), Qt::KeepAspectRatio));
-    QString imagePath = currentProjectPath + "/movies/" + panel->image.c_str();
-    paint->openImage(imagePath);
+
+    //QString imagePath = currentProjectPath + "/movies/" + panel->image.c_str();
+    //paint->openImage(imagePath);
+
+    // TODO set time cursor to panel start time
+    timeLineView->setTimeCursor(shot->startTime + panel->startTime);
 }
 
 #include "NewProjectDialog.h"
