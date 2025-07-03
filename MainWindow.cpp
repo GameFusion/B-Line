@@ -2039,21 +2039,25 @@ void MainWindow::stop() {
 void MainWindow::nextShot() {
     qDebug() << "Next Shot pressed";
     // TODO: Implement forward functionality
+    timeLineView->gotoNextSegment();
 }
 
 void MainWindow::prevShot() {
     qDebug() << "Prev Shot pressed";
     // TODO: Implement backward functionality
+    timeLineView->gotoPrevSegment();
 }
 
 void MainWindow::nextScene() {
     qDebug() << "Next Scene pressed";
     // TODO: Implement forward functionality
+    timeLineView->gotoNextScene();
 }
 
 void MainWindow::prevScene() {
     qDebug() << "Prev Scene pressed";
     // TODO: Implement backward functionality
+    timeLineView->gotoPrevScene();
 }
 
 void MainWindow::onPlaybackTick(){
