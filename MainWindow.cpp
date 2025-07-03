@@ -106,14 +106,14 @@ public:
 };
 
 
-TimeLineView* createTimeLine(QWidget &mainWindow)
+TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
 {
 
     FontAwesomeViewer *viewer = new FontAwesomeViewer;
     viewer->show();
 
-    mainWindow.setWindowTitle("Timeline Viewer");
-    mainWindow.setStyleSheet("background-color: black;");
+    parent.setWindowTitle("Timeline Viewer");
+    parent.setStyleSheet("background-color: black;");
 
     ///
     int fontId = QFontDatabase::addApplicationFont(":/fa-regular-400.ttf");
@@ -129,81 +129,87 @@ TimeLineView* createTimeLine(QWidget &mainWindow)
     QFont fontAwesome(fontFamily);
 
     // Create buttons
-    QToolButton *addPanelButton = new QToolButton(&mainWindow);
+    QToolButton *addPanelButton = new QToolButton(&parent);
     addPanelButton->setText(QChar(0xf0fe));  // Shift left icon
     addPanelButton->setFont(fontAwesome);
 
-    QToolButton *deletePanelButton = new QToolButton(&mainWindow);
+    QToolButton *deletePanelButton = new QToolButton(&parent);
     deletePanelButton->setText(QChar(0xf146));  // Shift left icon
     deletePanelButton->setFont(fontAwesome);
 /*
-    QToolButton *addSegmentButton = new QToolButton(&mainWindow);
+    QToolButton *addSegmentButton = new QToolButton(&parent);
     addSegmentButton->setText(QChar(0xf126));  // Shift left icon
     addSegmentButton->setFont(fontAwesome);
 
-    QToolButton *deleteSegmentButton = new QToolButton(&mainWindow);
+    QToolButton *deleteSegmentButton = new QToolButton(&parent);
     deleteSegmentButton->setText(QChar(0xf1f8));  // Shift left icon
     deleteSegmentButton->setFont(fontAwesome);
 */
 
-    QToolButton *shiftLeftButton = new QToolButton(&mainWindow);
+    QToolButton *shiftLeftButton = new QToolButton(&parent);
     shiftLeftButton->setText(QChar(0xf2f6));  // Shift left icon
     shiftLeftButton->setFont(fontAwesome);
 
-    QToolButton *shiftRightButton = new QToolButton(&mainWindow);
+    QToolButton *shiftRightButton = new QToolButton(&parent);
     shiftRightButton->setText(QChar(0xf337));  // Group selection icon
     shiftRightButton->setFont(fontAwesome);
 /*
-    QToolButton *phonemeButton = new QToolButton(&mainWindow);
+    QToolButton *phonemeButton = new QToolButton(&parent);
     phonemeButton->setText(QChar(0xf1dd));  // Single selection icon
     phonemeButton->setFont(fontAwesome);
 */
-    QToolButton *editButton = new QToolButton(&mainWindow);
+    QToolButton *editButton = new QToolButton(&parent);
     editButton->setText(QChar(0xf044));  // Area selection icon
     editButton->setFont(fontAwesome);
 
-    QToolButton *trashButton = new QToolButton(&mainWindow);
+    QToolButton *trashButton = new QToolButton(&parent);
     trashButton->setText(QChar(0xf1f8));  // Area selection icon
     trashButton->setFont(fontAwesome);
 /*
-    QToolButton *anotateButton = new QToolButton(&mainWindow);
+    QToolButton *anotateButton = new QToolButton(&parent);
     anotateButton->setText(QChar(0xf3c5));  // Area selection icon
     // or pin with F3C5
     anotateButton->setFont(fontAwesome);
     */
 
-    QToolButton *backwardFastButton = new QToolButton(&mainWindow);
+    QToolButton *backwardFastButton = new QToolButton(&parent);
     backwardFastButton->setText(QChar(0xf049));  // Area selection icon
     backwardFastButton->setFont(fontAwesome);
+    // todo add connection to go to prior scene
 
-    QToolButton *backwardStepButton = new QToolButton(&mainWindow);
+    QToolButton *backwardStepButton = new QToolButton(&parent);
     backwardStepButton->setText(QChar(0xf048));  // Area selection icon
     backwardStepButton->setFont(fontAwesome);
+    // todo add connection to go to prior shot
 
-    QToolButton *playButton = new QToolButton(&mainWindow);
+    QToolButton *playButton = new QToolButton(&parent);
     playButton->setText(QChar(0xf04b));  // Area selection icon
     playButton->setFont(fontAwesome);
+    // todo add connection to play
 
-    QToolButton *pauseButton = new QToolButton(&mainWindow);
+    QToolButton *pauseButton = new QToolButton(&parent);
     pauseButton->setText(QChar(0xf04c));  // Area selection icon
     pauseButton->setFont(fontAwesome);
+    // todo add connection to go pause
 
-    QToolButton *forwardStepButton = new QToolButton(&mainWindow);
+    QToolButton *forwardStepButton = new QToolButton(&parent);
     forwardStepButton->setText(QChar(0xf051));  // Area selection icon
     forwardStepButton->setFont(fontAwesome);
+    // todo add connection to go to next shot
 
-    QToolButton *forwardFastButton = new QToolButton(&mainWindow);
+    QToolButton *forwardFastButton = new QToolButton(&parent);
     forwardFastButton->setText(QChar(0xf050));  // Area selection icon
     forwardFastButton->setFont(fontAwesome);
+    // todo add connection to go to next scene
 
-    QToolButton *settingsButton = new QToolButton(&mainWindow);
+    QToolButton *settingsButton = new QToolButton(&parent);
     settingsButton->setText(QChar(0xf1de));  // Single selection icon
     settingsButton->setFont(fontAwesome);
     ///
 
     // Create and configure the TimeLineView
     //CustomGraphicsScene *scene = new CustomGraphicsScene();
-    TimeLineView *timelineView = new TimeLineView(&mainWindow);
+    TimeLineView *timelineView = new TimeLineView(&parent);
 
     //timelineView->setScene(scene);
     QGraphicsScene *scene = timelineView->scene();
@@ -211,7 +217,7 @@ TimeLineView* createTimeLine(QWidget &mainWindow)
     //timelineView->scale(0.5, 1);
 
     // Create a QSpinBox for scale control
-    QSpinBox *scaleControl = new QSpinBox(&mainWindow);
+    QSpinBox *scaleControl = new QSpinBox(&parent);
     scaleControl->setFixedWidth(100);
     scaleControl->setRange(10, 200); // Set range from 1x to 10x
     scaleControl->setValue(100); // Initial scale factor set to 1
@@ -219,14 +225,14 @@ TimeLineView* createTimeLine(QWidget &mainWindow)
     //scaleControl->setSuffix("x");
 
     // Create a QSlider for scale control
-    //QSlider *scaleSlider = new QSlider(Qt::Horizontal, &mainWindow);
-    CustomSlider *scaleSlider = new CustomSlider(Qt::Horizontal, &mainWindow);
+    //QSlider *scaleSlider = new QSlider(Qt::Horizontal, &parent);
+    CustomSlider *scaleSlider = new CustomSlider(Qt::Horizontal, &parent);
     scaleSlider->setRange(10, 200); // Matching range with the spin box
     scaleSlider->setValue(100); // Initial value matching the spin box
     scaleSlider->setFixedWidth(400);
 
     // Create a new QGraphicsView as a custom scrollbar
-    ScrollbarView *scrollbarView = new ScrollbarView(&mainWindow);
+    ScrollbarView *scrollbarView = new ScrollbarView(&parent);
     scrollbarView->setFixedHeight(28);  // Set the height of the scrollbar
     scrollbarView->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
@@ -344,7 +350,7 @@ TimeLineView* createTimeLine(QWidget &mainWindow)
 */
 
     // Create a QComboBox for visual style selection
-    QComboBox *styleComboBox = new QComboBox(&mainWindow);
+    QComboBox *styleComboBox = new QComboBox(&parent);
     styleComboBox->addItem("Grayscale");
     styleComboBox->addItem("Inferno");
     styleComboBox->addItem("Viridis");
@@ -356,20 +362,20 @@ TimeLineView* createTimeLine(QWidget &mainWindow)
     styleComboBox->addItem("None");
 
     // Create a checkbox for waveform display
-    QCheckBox *waveformCheckbox = new QCheckBox("Waveform", &mainWindow);
+    QCheckBox *waveformCheckbox = new QCheckBox("Waveform", &parent);
     waveformCheckbox->setChecked(false);
 
     QSpacerItem *spacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
 
-    QVBoxLayout *toplayout = new QVBoxLayout(&mainWindow);
-    QHBoxLayout *hlayout = new QHBoxLayout(&mainWindow);
+    QVBoxLayout *toplayout = new QVBoxLayout(&parent);
+    QHBoxLayout *hlayout = new QHBoxLayout(&parent);
 
-    QVBoxLayout *gfxlayout = new QVBoxLayout(&mainWindow);
+    QVBoxLayout *gfxlayout = new QVBoxLayout(&parent);
 
     gfxlayout->setSpacing(0);  // Remove spacing between the elements
 
     // Grouping for toggle buttons (play/pause)
-    QButtonGroup *toggleGroup = new QButtonGroup(&mainWindow);
+    QButtonGroup *toggleGroup = new QButtonGroup(&parent);
     toggleGroup->setExclusive(true);
     toggleGroup->addButton(playButton);
     toggleGroup->addButton(pauseButton);
@@ -444,7 +450,7 @@ TimeLineView* createTimeLine(QWidget &mainWindow)
     toplayout->addLayout(gfxlayout);
 
 
-    mainWindow.setLayout(toplayout);
+    parent.setLayout(toplayout);
 
     QObject::connect(addPanelButton, &QToolButton::clicked, [timelineView]() {
         timelineView->onAddPanel();
@@ -453,6 +459,13 @@ TimeLineView* createTimeLine(QWidget &mainWindow)
     QObject::connect(deletePanelButton, &QToolButton::clicked, [timelineView]() {
         timelineView->onDeletePanel();
     });
+
+    QObject::connect(playButton, &QToolButton::clicked, myMainWindow, &MainWindow::play);
+    QObject::connect(pauseButton, &QToolButton::clicked, myMainWindow, &MainWindow::pause);
+    QObject::connect(forwardStepButton, &QToolButton::clicked, myMainWindow, &MainWindow::nextShot);
+    QObject::connect(forwardFastButton, &QToolButton::clicked, myMainWindow, &MainWindow::nextScene);
+    QObject::connect(backwardStepButton, &QToolButton::clicked, myMainWindow, &MainWindow::prevShot);
+    QObject::connect(backwardFastButton, &QToolButton::clicked, myMainWindow, &MainWindow::prevScene);
 
     QObject::connect(settingsButton, &QToolButton::clicked, [timelineView]() {
         timelineView->onOptionsDialog();
@@ -480,7 +493,7 @@ TimeLineView* createTimeLine(QWidget &mainWindow)
     scrollbarView->setRange(0,20000);
 
     // Show the main window
-    mainWindow.show();
+    parent.show();
 
     t1->loadAudio("WarnerTest", "/users/andreascarlen/GameFusion/GameEngine/Applications/GameEditor/WarnerTest/TT.257.500.ACT.B.TEST44100.wav");
     t2->loadAudio("WarnerTest", "/users/andreascarlen/GameFusion/GameEngine/Applications/GameEditor/WarnerTest/TT.257.500.ACT.B.TEST44100.wav");
@@ -499,6 +512,9 @@ MainWindow::MainWindow(QWidget *parent)
 	QTimer *timer = new QTimer(this);
 	connect(timer, SIGNAL(timeout()), this, SLOT(update()));
 	timer->start(1000);
+
+    playbackTimer = new QTimer(this);
+    connect(playbackTimer, &QTimer::timeout, this, &MainWindow::onPlaybackTick);
 
 	setAcceptDrops(true);
 
@@ -570,7 +586,7 @@ MainWindow::MainWindow(QWidget *parent)
 	//
 	//// RETURN
 
-    timeLineView = createTimeLine(*ui->timeline);
+    timeLineView = createTimeLine(*ui->timeline, this);
 
     connect(timeLineView, &TimeLineView::timeCursorMoved,
             this, &MainWindow::onTimeCursorMoved);
@@ -1983,4 +1999,75 @@ void MainWindow::timelineOptions(){
         // Apply these options to the timeline
         optionsDialog.applyToTimeline(timeLineView);     // <- apply changes
     }
+}
+
+void MainWindow::play() {
+    qDebug() << "Play pressed";
+
+    if (isPlaying) return;
+
+    isPlaying = true;
+
+    // If range not set, default to full timeline length
+    if (playbackEnd <= playbackStart)
+        playbackEnd = 10000 * 1000; // e.g., 10 milliseconds
+
+    currentPlayTime = playbackStart;
+    timeLineView->setTimeCursor(currentPlayTime);
+
+    playbackTimer->start(playbackIntervalMs);
+}
+
+void MainWindow::pause() {
+    qDebug() << "Pause pressed";
+
+    if (!isPlaying) return;
+
+    playbackTimer->stop();
+    isPlaying = false;
+}
+
+void MainWindow::stop() {
+    if (!isPlaying) return;
+
+    playbackTimer->stop();
+    isPlaying = false;
+    currentPlayTime = playbackStart;
+    timeLineView->setTimeCursor(currentPlayTime);
+}
+
+void MainWindow::nextShot() {
+    qDebug() << "Next Shot pressed";
+    // TODO: Implement forward functionality
+}
+
+void MainWindow::prevShot() {
+    qDebug() << "Prev Shot pressed";
+    // TODO: Implement backward functionality
+}
+
+void MainWindow::nextScene() {
+    qDebug() << "Next Scene pressed";
+    // TODO: Implement forward functionality
+}
+
+void MainWindow::prevScene() {
+    qDebug() << "Prev Scene pressed";
+    // TODO: Implement backward functionality
+}
+
+void MainWindow::onPlaybackTick(){
+    currentPlayTime += playbackIntervalMs;
+
+    if (currentPlayTime > playbackEnd) {
+        if (loopEnabled) {
+            currentPlayTime = playbackStart;
+        } else {
+            stop(); // calls pause + reset
+            return;
+        }
+    }
+
+    // timelineView->setFrameCursorPosition(currentPlayTime);
+    timeLineView->setTimeCursor(currentPlayTime);
 }

@@ -87,6 +87,15 @@ public slots:
     void onTreeItemClicked(QTreeWidgetItem* item, int column);
     void onTimeCursorMoved(double time);
 
+    void play();
+    void pause();
+    void stop();
+    void nextShot();
+    void nextScene();
+    void prevShot();
+    void prevScene();
+    void onPlaybackTick();
+
 protected:
 	void dragEnterEvent(QDragEnterEvent *event) override;
 	//void dragMoveEvent(QDragMoveEvent *event) override;
@@ -131,6 +140,15 @@ protected:
     QJsonObject projectJson;
 
     ShotPanelWidget *shotPanel = nullptr;
+
+    // Playback variables
+    QTimer* playbackTimer = nullptr;
+    bool isPlaying = false;
+    bool loopEnabled = false;
+    long playbackStart = 0;
+    long playbackEnd = 0;
+    long currentPlayTime = 0;
+    int playbackIntervalMs = 33; // ~30 FPS
 };
 
 
