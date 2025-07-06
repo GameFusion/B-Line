@@ -31,6 +31,8 @@
 #include "BreakdownWorker.h"
 #include "ErrorDialog.h"
 
+#include "GameCore.h" // for GameContext->gameTime()
+#include "SoundServer.h"
 #include "Log.h"
 
 // BEGIN TimeLine related includes
@@ -509,6 +511,9 @@ MainWindow::MainWindow(QWidget *parent)
     QAction *importScriptAction = ui->menuFile->addAction(tr("&Import Script"));
     connect(importScriptAction, &QAction::triggered, this, &MainWindow::importScript);
 
+    QAction *importAudioTrackAction = ui->menuFile->addAction(tr("&Import Audio Track"));
+    connect(importAudioTrackAction, &QAction::triggered, this, &MainWindow::importAudioTrack);
+
 	QTimer *timer = new QTimer(this);
 	connect(timer, SIGNAL(timeout()), this, SLOT(update()));
 	timer->start(1000);
@@ -876,6 +881,19 @@ void addShot(QTreeWidgetItem* shotItem, const GameFusion::Shot &shot, float fps)
             panelItem->setData(0, Qt::UserRole, QString::fromStdString(panel.uuid));
         }
     }
+}
+
+void MainWindow::importAudioTrack(){
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Import Audio File Track"), "", tr("Audio Files (*.wav; *.aiff)"));;
+
+    if (fileName.isEmpty()) {
+        return; // User canceled
+    }
+
+    Track *track = new Track("Track 3", 0, 150000, TrackType::NonLinearMedia);
+
+    TrackItem *trx = timeLineView->addTrack(track);
+    trx->loadAudio("WarnerTest", fileName.toUtf8().constData());
 }
 
 void MainWindow::importScript()
@@ -2026,20 +2044,30 @@ void MainWindow::play() {
     currentPlayTime = playbackStart;
     timeLineView->setTimeCursor(currentPlayTime);
 
+    GameFusion::SoundServer::context()->seek(currentPlayTime);
+    GameFusion::SoundServer::context()->play();
+
     playbackTimer->start(playbackIntervalMs);
 }
 
 void MainWindow::pause() {
     qDebug() << "Pause pressed";
 
+    GameFusion::SoundServer::context()->stop();
+
     if (!isPlaying) return;
+
 
     playbackTimer->stop();
     isPlaying = false;
 }
 
 void MainWindow::stop() {
+
+    GameFusion::SoundServer::context()->stop();
+
     if (!isPlaying) return;
+
 
     playbackTimer->stop();
     isPlaying = false;
@@ -2072,7 +2100,15 @@ void MainWindow::prevScene() {
 }
 
 void MainWindow::onPlaybackTick(){
-    currentPlayTime += playbackIntervalMs;
+
+    // TODO implement a system to collect the
+
+
+    //currentPlayTime += playbackIntervalMs;
+    //long currentPlayTime = *GameFusion::GameContext->gameTime();
+    //currentPlayTime += playbackIntervalMs;
+
+    long currentPlayTime = GameFusion::SoundDevice::Context()->currentTime();
 
     if (currentPlayTime > playbackEnd) {
         if (loopEnabled) {
@@ -2086,3 +2122,5 @@ void MainWindow::onPlaybackTick(){
     // timelineView->setFrameCursorPosition(currentPlayTime);
     timeLineView->setTimeCursor(currentPlayTime);
 }
+
+

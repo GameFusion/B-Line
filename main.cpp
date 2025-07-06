@@ -10,6 +10,8 @@
 #include "Console.h"
 #include "QtUtils.h"
 #include "GameTime.h"
+#include "SoundServer.h"
+#include "GameCore.h"
 
 #include "ShotPanelWidget.h"
 
@@ -57,7 +59,6 @@ int main(int argc, char *argv[])
 		}
 	}
 
-
 	QString appFilePath = QCoreApplication::applicationFilePath();
 	QString appDirPath = QCoreApplication::applicationDirPath();
 	QString appVersion = QCoreApplication::applicationVersion();
@@ -73,10 +74,7 @@ int main(int argc, char *argv[])
 
 	GameFusion::GameTime::usleep(1000);
 
-
-
-
-	MainWindow w;
+    MainWindow w;
 
     ConsoleDialog *console = new ConsoleDialog(&w);
     console->enableCommandPrompt(true);
@@ -89,6 +87,10 @@ int main(int argc, char *argv[])
     //sp.show();
 
     Log().info() << "Welcome to B-Line - Ai Powered Storyboarder\n";
+
+    GameFusion::GameCore *core = new GameFusion::GameCore();
+    core->initialize();
+//    GameFusion::SoundServer::Initialize();
 
 	return app.exec();
 }

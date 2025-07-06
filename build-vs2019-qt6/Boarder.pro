@@ -52,7 +52,7 @@ CONFIG(debug, debug|release) {
 
 }else {
         message("release mode")
-        LIBS += -L$$GF/GameEngine/Libs/macOS/Debug -l"GameFusion Static Library Debug OSX"
+        LIBS += -L$$GF/GameEngine/Libs/macOS/Release -l"GameFusion Static Library Debug OSX"
         LIBS += -L$$GF/english2phoneme/Build/Products/Debug -lword2phone
 
 }

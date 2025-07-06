@@ -80,6 +80,7 @@ public slots:
 	void setBlackTheme();
 
     void importScript();
+    void importAudioTrack();
 
     void consoleCommandActivated(int index);
     bool consoleCommand(const QString &);
