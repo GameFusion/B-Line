@@ -46,6 +46,7 @@
 #include "../TimeLineProject/Segment.h"
 #include "../TimeLineProject/MarkerItem.h"
 #include "../TimeLineProject/ShotSegment.h"
+#include "../TimeLineProject/AudioSegment.h"
 #include "../TimeLineProject/PanelMarker.h"
 #include "../TimeLineProject/CursorItem.h"
 #include "../TimeLineProject/TimelineOptionsDialog.h"
@@ -511,8 +512,26 @@ MainWindow::MainWindow(QWidget *parent)
     QAction *importScriptAction = ui->menuFile->addAction(tr("&Import Script"));
     connect(importScriptAction, &QAction::triggered, this, &MainWindow::importScript);
 
-    QAction *importAudioTrackAction = ui->menuFile->addAction(tr("&Import Audio Track"));
+    QAction *importAudioSegmentAction = ui->menuFile->addAction(tr("&Import Audio Segment..."));
+    connect(importAudioSegmentAction, &QAction::triggered, this, &MainWindow::importAudioSegment);
+
+    QAction *importAudioTrackAction = ui->menuFile->addAction(tr("&Import Audio Track..."));
     connect(importAudioTrackAction, &QAction::triggered, this, &MainWindow::importAudioTrack);
+
+    QMenu* trackMenu = menuBar()->addMenu(tr("&Track"));
+
+    QAction* addAudioTrackAction = new QAction(tr("Add Audio Track"), this);
+    QAction* addVideoTrackAction = new QAction(tr("Add Video Track"), this);
+    QAction* addAnimationTrackAction = new QAction(tr("Add Animation Track"), this);
+    QAction* addSubtitleTrackAction = new QAction(tr("Add Subtitle Track"), this);
+    trackMenu->addAction(addAudioTrackAction);
+    trackMenu->addAction(addVideoTrackAction);
+    trackMenu->addAction(addAnimationTrackAction);
+    trackMenu->addAction(addSubtitleTrackAction);
+
+    // Connect the action to a slot
+    connect(addAudioTrackAction, &QAction::triggered, this, &MainWindow::addAudioTrack);
+
 
 	QTimer *timer = new QTimer(this);
 	connect(timer, SIGNAL(timeout()), this, SLOT(update()));
@@ -894,6 +913,21 @@ void MainWindow::importAudioTrack(){
 
     TrackItem *trx = timeLineView->addTrack(track);
     trx->loadAudio("WarnerTest", fileName.toUtf8().constData());
+}
+
+void MainWindow::importAudioSegment() {
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Import Audio File Track"), "", tr("Audio Files (*.wav; *.aiff)"));;
+
+    if (fileName.isEmpty()) {
+        return; // User canceled
+    }
+
+    QGraphicsScene *gfxscene = timeLineView->scene();
+    TrackItem *track = timeLineView->getTrack(1);
+
+    AudioSegment *segment = new AudioSegment(gfxscene, 600, 500);
+    segment->loadAudio("Audio Test", fileName.toUtf8().constData());
+    track->addSegment(segment);
 }
 
 void MainWindow::importScript()
@@ -2123,4 +2157,15 @@ void MainWindow::onPlaybackTick(){
     timeLineView->setTimeCursor(currentPlayTime);
 }
 
+void MainWindow::addAudioTrack() {
+    // Example: assuming you have a pointer to your TimeLineView
+    if (!timeLineView)
+        return;
+
+    // Create a new empty Track and add it
+    Track* newTrack = new Track("Track 3", 0, 170000, TrackType::Audio);
+    TrackItem *t1 = timeLineView->addTrack(newTrack);
+    //newTrack->setType(Track::Audio); // If you have a type enum or similar
+    //timelineView->addTrack(newTrack);
+}
 

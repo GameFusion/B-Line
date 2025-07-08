@@ -75,12 +75,15 @@ public slots:
 	void quit();
 	void about();
 
+    void addAudioTrack();
+
 	void setWhiteTheme();
 	void setDarkTheme();
 	void setBlackTheme();
 
     void importScript();
     void importAudioTrack();
+    void importAudioSegment();
 
     void consoleCommandActivated(int index);
     bool consoleCommand(const QString &);

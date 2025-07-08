@@ -211,6 +211,7 @@ SOURCES +=  \
            $$GF/Applications/TimeLineProject/Segment.cpp \
            $$GF/Applications/TimeLineProject/MarkerItem.cpp \
            $$GF/Applications/TimeLineProject/ShotSegment.cpp \
+           $$GF/Applications/TimeLineProject/AudioSegment.cpp \
            $$GF/Applications/TimeLineProject/PanelMarker.cpp \
            $$GF/Applications/TimeLineProject/CustomGraphicsScene.cpp \
            $$GF/Applications/TimeLineProject/CustomSlider.cpp \
@@ -232,6 +233,7 @@ HEADERS += $$GF/Applications/TimeLineProject/TimeLineView.h \
            $$GF/Applications/TimeLineProject/Segment.h \
            $$GF/Applications/TimeLineProject/MarkerItem.h \
            $$GF/Applications/TimeLineProject/ShotSegment.h \
+           $$GF/Applications/TimeLineProject/AudioSegment.h \
            $$GF/Applications/TimeLineProject/PanelMarker.h \
            $$GF/Applications/TimeLineProject/GraphicsItem.h \
            $$GF/Applications/TimeLineProject/CustomGraphicsScene.h \
