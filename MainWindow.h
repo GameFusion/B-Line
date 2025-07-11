@@ -100,6 +100,11 @@ public slots:
     void prevScene();
     void onPlaybackTick();
 
+    void onAddCamera();
+    void onDuplicateCamera();
+    void onDeleteCamera();
+    void onRenameCamera();
+
 protected:
 	void dragEnterEvent(QDragEnterEvent *event) override;
 	//void dragMoveEvent(QDragMoveEvent *event) override;

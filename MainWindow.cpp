@@ -532,6 +532,37 @@ MainWindow::MainWindow(QWidget *parent)
     // Connect the action to a slot
     connect(addAudioTrackAction, &QAction::triggered, this, &MainWindow::addAudioTrack);
 
+    //
+    // Storyboard
+    //
+    QMenu* storyboardMenu = menuBar()->addMenu(tr("&Storyboard"));
+
+    // Add Camera
+    QAction* actionAddCamera = new QAction(tr("Add Camera"), this);
+    actionAddCamera->setShortcut(QKeySequence("Ctrl+Shift+C"));
+    connect(actionAddCamera, &QAction::triggered, this, &MainWindow::onAddCamera);
+    storyboardMenu->addAction(actionAddCamera);
+
+    // Duplicate Camera
+    QAction* actionDuplicateCamera = new QAction(tr("Duplicate Camera"), this);
+    connect(actionDuplicateCamera, &QAction::triggered, this, &MainWindow::onDuplicateCamera);
+    storyboardMenu->addAction(actionDuplicateCamera);
+
+    // Delete Camera
+    QAction* actionDeleteCamera = new QAction(tr("Delete Camera"), this);
+    connect(actionDeleteCamera, &QAction::triggered, this, &MainWindow::onDeleteCamera);
+    storyboardMenu->addAction(actionDeleteCamera);
+
+    // Rename Camera
+    QAction* actionRenameCamera = new QAction(tr("Rename Camera"), this);
+    connect(actionRenameCamera, &QAction::triggered, this, &MainWindow::onRenameCamera);
+    storyboardMenu->addAction(actionRenameCamera);
+
+    actionAddCamera->setShortcut(QKeySequence("Ctrl+Shift+C"));
+
+    //
+    //
+    //
 
 	QTimer *timer = new QTimer(this);
 	connect(timer, SIGNAL(timeout()), this, SLOT(update()));
@@ -2341,3 +2372,20 @@ void MainWindow::loadAudioTracks() {
 
     qDebug() << "Audio tracks loaded successfully.";
 }
+
+void MainWindow::onAddCamera() {
+    paint->addNewCamera(); // or whatever function you use
+}
+
+void MainWindow::onDuplicateCamera() {
+    paint->duplicateActiveCamera();
+}
+
+void MainWindow::onDeleteCamera() {
+    paint->deleteActiveCamera();
+}
+
+void MainWindow::onRenameCamera() {
+    paint->renameActiveCamera();
+}
+
