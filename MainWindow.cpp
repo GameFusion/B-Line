@@ -299,8 +299,8 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
 
     // Create tracks
     Track *track1 = new Track("Track 1", 0, 500000, TrackType::Storyboard); // Name, Start Time, Duration in seconds
-    Track *track2 = new Track("Track 2", 0, 150000, TrackType::NonLinearMedia); // Name, Start Time, Duration in seconds
-    Track *track3 = new Track("Track 3", 0, 170000, TrackType::NonLinearMedia); // Name, Start Time, Duration in seconds
+    Track *track2 = new Track("Track 2", 0, 150000, TrackType::Audio); // Name, Start Time, Duration in seconds
+    //Track *track3 = new Track("Track 3", 0, 170000, TrackType::NonLinearMedia); // Name, Start Time, Duration in seconds
 
     // Add tracks to the timeline
     TrackItem *t1 = timelineView->addTrack(track1);
@@ -1534,6 +1534,8 @@ void MainWindow::loadProject(QString projectDir){
 
     updateScenes();
     updateTimeline();
+
+    loadAudioTracks();
 }
 
 ShotContext MainWindow::findShotByUuid(const std::string& uuid) {
@@ -1711,7 +1713,8 @@ void MainWindow::newProject()
         "references/environments",
         "references/props",
         "scenes",
-        "scripts"
+        "scripts",
+        "audio/tracks"
     };
 
     // Create all subdirectories
@@ -1867,6 +1870,7 @@ void MainWindow::saveProject(){
         scriptBreakdown->saveModifiedScenes(currentProjectPath);
     }
 
+    saveAudioTracks();
 }
 
 QString generateUniquePanelName(GameFusion::Shot* shot) {
@@ -2167,5 +2171,173 @@ void MainWindow::addAudioTrack() {
     TrackItem *t1 = timeLineView->addTrack(newTrack);
     //newTrack->setType(Track::Audio); // If you have a type enum or similar
     //timelineView->addTrack(newTrack);
+
+    saveAudioTracks();
 }
 
+QString sanitizeTrackName(const QString& name) {
+    QString result;
+    result.reserve(name.length());
+
+    for (QChar c : name) {
+        if (c.isLetterOrNumber()) {
+            result.append(c.toLower());
+        } else if (!result.endsWith('_')) {
+            result.append('_'); // replace spaces/punctuation with underscores
+        }
+    }
+
+    // Trim trailing underscores
+    while (result.endsWith('_'))
+        result.chop(1);
+
+    return result;
+}
+
+void MainWindow::saveAudioTracks() {
+    QString projectDir = currentProjectPath;  // get root dir (e.g., ".../my_project/")
+    QDir trackDir(projectDir + "/audio/tracks");
+    if (!trackDir.exists()) {
+        trackDir.mkpath(".");
+    }
+
+    int trackIndex = 0;
+    for (TrackItem *trackItem : timeLineView->trackItems()) {
+        if (!trackItem || trackItem->track()->getType() != TrackType::Audio)
+            continue;
+
+        trackIndex ++;
+
+        Track *track = trackItem->track();
+        if(track->getUuid().isEmpty())
+            track->setUuid( QUuid::createUuid().toString(QUuid::WithoutBraces));
+
+        QJsonObject trackObj;
+        trackObj["uuid"] = track->getUuid();
+        trackObj["name"] = track->getName();
+        trackObj["type"] = "audio";
+        //trackObj["user"] = currentUser();  // optional
+        trackObj["created"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        trackObj["index"] = trackIndex;
+        trackObj["tag"] = track->getTag();
+        trackObj["description"] = track->getDescription();
+        QJsonArray segmentsArray;
+
+        for (Segment *segment : trackItem->segments()) {
+            AudioSegment *audio = dynamic_cast<AudioSegment *>(segment);
+            if (!audio) continue;
+
+            QJsonObject segObj;
+            segObj["uuid"] = audio->getUuid();
+            segObj["file"] = audio->filePath();
+            segObj["startTime"] = audio->timePosition();         // timeline start (ms)
+            segObj["inOffset"] = audio->inOffset();           // crop in (ms)
+            segObj["outOffset"] = audio->outOffset();         // crop out (ms)
+            segObj["duration"] = audio->getDuration();           // final duration (ms)
+            segObj["volume"] = audio->volume();
+            segObj["pan"] = audio->pan();
+
+            segmentsArray.append(segObj);
+        }
+
+        trackObj["segments"] = segmentsArray;
+
+        // Write to file
+        QString trackNameSanitized = sanitizeTrackName(track->getName());
+        QString filename = QString("track_%1_%2.json")
+                               .arg(trackIndex, 2, 10, QChar('0'))  // index padded with zeros
+                               .arg(trackNameSanitized);
+        QString filePath = trackDir.filePath(filename);
+
+        //QString filePath = trackDir.filePath("track_" + track->getUuid() + ".json");
+        QFile file(filePath);
+        if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            file.write(QJsonDocument(trackObj).toJson(QJsonDocument::Indented));
+            file.close();
+        } else {
+            qWarning() << "Failed to write track file:" << filePath;
+        }
+
+
+    }
+
+    qDebug() << "Audio tracks saved successfully.";
+}
+
+void MainWindow::loadAudioTracks() {
+    QString trackDirPath = currentProjectPath + "/audio/tracks";
+    QDir trackDir(trackDirPath);
+    if (!trackDir.exists()) {
+        qWarning() << "Track directory does not exist:" << trackDirPath;
+        return;
+    }
+
+    QStringList trackFiles = trackDir.entryList(QStringList() << "track_*.json", QDir::Files);
+    trackFiles.sort();  // ensure order by filename (track index)
+
+    int trackIndex = 0;
+    for (const QString &filename : trackFiles) {
+        QFile file(trackDir.filePath(filename));
+        if (!file.open(QIODevice::ReadOnly)) {
+            qWarning() << "Failed to open track file:" << filename;
+            continue;
+        }
+
+        QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+        if (!doc.isObject()) {
+            qWarning() << "Invalid JSON format in" << filename;
+            continue;
+        }
+
+        QJsonObject obj = doc.object();
+        QString name = obj["name"].toString("Unnamed");
+        QString uuid = obj["uuid"].toString();
+        QString tag = obj["tag"].toString();
+        QString description = obj["description"].toString();
+
+        trackIndex ++;
+
+        TrackItem *trackItem = timeLineView->getTrack(trackIndex);
+        Track *track = trackItem ? trackItem->track() : nullptr;
+        if(track && track->getType() == TrackType::Audio){
+            track->setName(name);
+        }
+        else{
+            // Create and add track
+            track = new Track(name, 0, 170000, TrackType::Audio);
+            TrackItem *trackItem = timeLineView->addTrack(track);
+        }
+
+        track->setUuid(uuid);
+        track->setTag(tag);
+        track->setDescription(description);
+
+        //TrackItem *trackItem = timeLineView->addTrack(track);
+        //if (!trackItem) continue;
+
+        // Add segments
+        QJsonArray segments = obj["segments"].toArray();
+        for (const QJsonValue &segVal : segments) {
+            QJsonObject segObj = segVal.toObject();
+
+            QString file = segObj["file"].toString();
+            qint64 startTime = segObj["startTime"].toVariant().toLongLong();
+            qint64 inOffset = segObj["inOffset"].toVariant().toLongLong();
+            qint64 outOffset = segObj["outOffset"].toVariant().toLongLong();
+            qint64 duration = segObj["duration"].toVariant().toLongLong();
+            float volume = segObj["volume"].toDouble(1.0);
+            float pan = segObj["pan"].toDouble(0.0);
+
+            AudioSegment *segment = new AudioSegment(trackItem->scene(), startTime, duration);
+            segment->loadAudio("Segment", file.toUtf8().constData());
+            segment->setInOffset(inOffset);
+            segment->setOutOffset(outOffset);
+            segment->setVolume(volume);
+            segment->setPan(pan);
+
+            trackItem->addSegment(segment);
+        }
+    }
+
+    qDebug() << "Audio tracks loaded successfully.";
+}

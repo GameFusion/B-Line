@@ -119,6 +119,9 @@ protected:
     void deletePanel(double t);
     void timelineOptions();
 
+    void saveAudioTracks();
+    void loadAudioTracks();
+
 protected:
 	Ui::MainWindowBoarder *ui;
 
