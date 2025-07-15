@@ -54,6 +54,8 @@
     <property name="title">
      <string>Windows</string>
     </property>
+    <addaction name="actionConsole_Log"/>
+    <addaction name="actionPerfect_Script"/>
    </widget>
    <widget class="QMenu" name="menuHelp">
     <property name="title">
@@ -996,6 +998,16 @@
   <action name="actionSave_Project">
    <property name="text">
     <string>Save Project</string>
+   </property>
+  </action>
+  <action name="actionConsole_Log">
+   <property name="text">
+    <string>Console Log...</string>
+   </property>
+  </action>
+  <action name="actionPerfect_Script">
+   <property name="text">
+    <string>Perfect Script...</string>
    </property>
   </action>
  </widget>

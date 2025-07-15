@@ -19,6 +19,7 @@ class MainWindowPaint;
 class Segment;
 class ShotPanelWidget;
 class CameraSidePanel;
+class PerfectScriptWidget;
 
 namespace Ui {
 	class MainWindowBoarder;
@@ -133,6 +134,7 @@ protected:
 
     void saveAudioTracks();
     void loadAudioTracks();
+    void loadScript();
 
 protected:
 	Ui::MainWindowBoarder *ui;
@@ -171,6 +173,9 @@ protected:
 
     // Camera side panel and attribute editor
     CameraSidePanel *cameraSidePanel = nullptr;
+
+    // The Script
+    PerfectScriptWidget *perfectScript = nullptr;
 };
 
 

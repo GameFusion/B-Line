@@ -32,6 +32,7 @@
 #include "BreakdownWorker.h"
 #include "ErrorDialog.h"
 #include "CameraSidePanel.h"
+#include "PerfectScriptWidget.h"
 
 #include "GameCore.h" // for GameContext->gameTime()
 #include "SoundServer.h"
@@ -606,18 +607,26 @@ MainWindow::MainWindow(QWidget *parent)
 	shotPanel->show();
 */
 
+    // Create and configure shotPanel inside a scroll area
     shotPanel = new ShotPanelWidget;
-    shotPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred); // allow vertical growth
+    shotPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
     QScrollArea *scrollArea = new QScrollArea;
     scrollArea->setWidget(shotPanel);
-    scrollArea->setWidgetResizable(true); // ensures resizing works correctly
+    scrollArea->setWidgetResizable(true);
     scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
-    ui->splitter->insertWidget(0, scrollArea);
-    scrollArea->show();
+    // Create PerfectScript widget
+    perfectScript = new PerfectScriptWidget(this);
 
+    // Create tab widget and add both panels as tabs
+    QTabWidget *tabWidget = new QTabWidget;
+    tabWidget->addTab(scrollArea, tr("Shots"));
+    tabWidget->addTab(perfectScript, tr("Script"));
+
+    // Insert the tab widget into the splitter at position 0
+    ui->splitter->insertWidget(0, tabWidget);
     /***/
 
     paint = new MainWindowPaint;
@@ -1495,7 +1504,8 @@ void MainWindow::loadProject(QString projectDir){
     this->currentProjectPath = projectDir;
 
     float fps = projectJson["fps"].toDouble();
-    scriptBreakdown = new ScriptBreakdown("", fps);
+    //scriptBreakdown = new ScriptBreakdown("", fps);
+    loadScript();
 
     // Load scenes
     QDir scenesDir(QDir(projectDir).filePath("scenes"));
@@ -1591,6 +1601,33 @@ void MainWindow::loadProject(QString projectDir){
     updateTimeline();
 
     loadAudioTracks();
+
+
+}
+
+void MainWindow::loadScript() {
+    if(scriptBreakdown)
+        delete scriptBreakdown;
+
+    float fps = projectJson["fps"].toDouble();
+    GameScript* dictionary = NULL;
+    GameScript* dictionaryCustom = NULL;
+
+    QString fileName;
+    if(projectJson.contains("script")) {
+        fileName = currentProjectPath + "/" + projectJson["script"].toString();
+        scriptBreakdown = new ScriptBreakdown(fileName.toStdString().c_str(), fps, dictionary, dictionaryCustom, llamaClient);
+        if(!scriptBreakdown->load()) {
+            Log().error() << "Error(s) importing script: " << scriptBreakdown->error() << "\n";
+            Log().info() << "Error(s) importing script: " << scriptBreakdown->error() << "\n";
+        }
+        else{
+            Log().info() << "Imported script: " << scriptBreakdown->fileName() << "\n";
+            perfectScript->loadScript(scriptBreakdown);
+        }
+    }
+    else
+        scriptBreakdown = new ScriptBreakdown(fileName.toStdString().c_str(), fps, dictionary, dictionaryCustom, llamaClient);
 }
 
 ShotContext MainWindow::findShotByUuid(const std::string& uuid) {

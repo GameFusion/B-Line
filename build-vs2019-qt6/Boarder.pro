@@ -250,8 +250,11 @@ HEADERS += $$GF/Applications/TimeLineProject/TimeLineView.h \
 
 
 
-
-
+#
+# Perfect Script
+SOURCES += $$GF/Applications/PerfectScript/PerfectScriptWidget.cpp
+HEADERS += $$GF/Applications/PerfectScript/PerfectScriptWidget.h
+INCLUDEPATH += $$GF/Applications/PerfectScript
 
 #
 # plug and paint tools
