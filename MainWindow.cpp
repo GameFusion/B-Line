@@ -27,9 +27,11 @@
 
 #include "ShotPanelWidget.h"
 #include "MainWindowPaint.h"
+#include "paintarea.h"
 #include "LlamaModel.h"
 #include "BreakdownWorker.h"
 #include "ErrorDialog.h"
+#include "CameraSidePanel.h"
 
 #include "GameCore.h" // for GameContext->gameTime()
 #include "SoundServer.h"
@@ -558,8 +560,20 @@ MainWindow::MainWindow(QWidget *parent)
     connect(actionRenameCamera, &QAction::triggered, this, &MainWindow::onRenameCamera);
     storyboardMenu->addAction(actionRenameCamera);
 
+    //
+    // Camera Global Shortcuts
+    //
+
     actionAddCamera->setShortcut(QKeySequence("Ctrl+Shift+C"));
 
+    //
+    // Camera Side Panel
+    //
+
+    cameraSidePanel = new CameraSidePanel(this);
+    ui->dockCameras->setWidget(cameraSidePanel);
+    connect(cameraSidePanel, &CameraSidePanel::cameraFrameUpdated,
+            this, &MainWindow::onCameraFrameUpdated);
     //
     //
     //
@@ -610,6 +624,15 @@ MainWindow::MainWindow(QWidget *parent)
 	ui->splitter->insertWidget(1, paint);
 	paint->show();
 
+    connect(paint->getPaintArea(), &PaintArea::cameraFrameAdded, this, &MainWindow::onCameraFrameAddedFromPaint);
+    connect(paint->getPaintArea(), &PaintArea::cameraFrameUpdated, this, &MainWindow::onCameraFrameUpdated);
+    connect(paint->getPaintArea(), &PaintArea::cameraFrameUpdated, cameraSidePanel, &CameraSidePanel::updateCameraFrame);
+    connect(paint->getPaintArea(), &PaintArea::cameraFrameDeleted, this, &MainWindow::onCameraFrameDeleted);
+
+    connect(cameraSidePanel, &CameraSidePanel::cameraFrameUpdated,
+            paint->getPaintArea(), &PaintArea::updateCameraFrameUI);
+
+
 	//
 	// Test image in shot tree
 	//new QTreeWidgetItem(shotsTreeWidget);
@@ -655,6 +678,7 @@ MainWindow::MainWindow(QWidget *parent)
     // Add Callback for Tree Item Selection
     connect(ui->shotsTreeWidget, &QTreeWidget::itemClicked, this, &MainWindow::onTreeItemClicked);
 
+    //ui->horizontalLayout_animScroll->
 
 	return;
 	//
@@ -1709,6 +1733,7 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     // Update the panel UI
     float fps = projectJson["fps"].toDouble();
     shotPanel->setPanelInfo(scene, shot, panel, fps);
+
 }
 
 #include "NewProjectDialog.h"
@@ -1838,6 +1863,8 @@ void MainWindow::onTimeCursorMoved(double time)
     float mspf = 1000 / fps;
 
     auto& scenes = scriptBreakdown->getScenes();
+    GameFusion::Shot *theShot = nullptr;
+
 
     for (auto& scene : scenes) {
         for (auto& shot : scene.shots) {
@@ -1856,7 +1883,7 @@ void MainWindow::onTimeCursorMoved(double time)
                 if (time >= (shot.startTime + panel.startTime) &&
                     time < (shot).startTime + (panel.startTime + panel.durationTime)) {
                     newPanel = &panel;
-
+                    theShot = &shot;
                     break;
                 }
             }
@@ -1868,30 +1895,50 @@ void MainWindow::onTimeCursorMoved(double time)
             break;
     }
 
-
+    //float fps = projectJson["fps"].toDouble();
 
     // If no panel found, show white image
     if (!newPanel) {
         Log().debug() << "No panel at time: " << (float)time << ", showing blank image.";
         paint->newImage();
+        if(theShot){
+            long panelStartTime = theShot->startTime + currentPanel->startTime;
+            paint->getPaintArea()->setPanel(currentPanel->uuid.c_str(), panelStartTime, fps, theShot->cameraFrames);
+            cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraFrames);
+        }
         currentPanel = nullptr;
         return;
     }
 
-    if(newPanel == currentPanel)
+    long panelStartTime = (theShot && currentPanel) ? theShot->startTime + currentPanel->startTime : 0;
+
+    if(newPanel == currentPanel) {
+        paint->getPaintArea()->setCurrentTime(time - panelStartTime);
+        paint->getPaintArea()->update();
         return; // no panel change
+    }
 
     currentPanel = newPanel;
+
 
     QString imagePath = currentProjectPath + "/movies/" + currentPanel->image.c_str();
     // Display the panel image, or a white image if not available
     if (!currentPanel->image.empty() && QFile::exists(imagePath)) {
         paint->openImage(imagePath);
+        if(theShot){
+            paint->getPaintArea()->setPanel(currentPanel->uuid.c_str(), panelStartTime, fps, theShot->cameraFrames);
+            cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraFrames);
+        }
+
         Log().debug() << "Loaded image: " << imagePath.toUtf8().constData() << "\n";
     } else {
         Log().debug() << "Panel image not found, showing white frame.";
 
         paint->newImage();
+        if(theShot) {
+            paint->getPaintArea()->setPanel(currentPanel->uuid.c_str(), panelStartTime, fps, theShot->cameraFrames);
+            cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraFrames);
+        }
     }
 }
 
@@ -2105,6 +2152,8 @@ void MainWindow::play() {
     if (isPlaying) return;
 
     isPlaying = true;
+
+    paint->getPaintArea()->startPlayback();
 
     // If range not set, default to full timeline length
     if (playbackEnd <= playbackStart)
@@ -2389,3 +2438,34 @@ void MainWindow::onRenameCamera() {
     paint->renameActiveCamera();
 }
 
+void MainWindow::onCameraFrameAddedFromPaint(const GameFusion::CameraFrame& frame) {
+    scriptBreakdown->addCameraFrame(frame);
+
+    auto& scenes = scriptBreakdown->getScenes();
+    GameFusion::Shot *theShot = nullptr;
+    for (auto& scene : scenes) {
+        for (auto& shot : scene.shots) {
+            for(auto &panel : shot.panels){
+                if(panel.uuid == frame.panelUuid){
+                    cameraSidePanel->setCameraList(frame.panelUuid.c_str(), shot.cameraFrames);
+                    return;
+                }
+            }
+        }
+    }
+
+}
+
+void MainWindow::onCameraFrameAddedFromSidePanel(const GameFusion::CameraFrame& frame) {
+    scriptBreakdown->addCameraFrame(frame);
+}
+
+
+
+void MainWindow::onCameraFrameUpdated(const GameFusion::CameraFrame& frame) {
+    scriptBreakdown->updateCameraFrame(frame);
+}
+
+void MainWindow::onCameraFrameDeleted(const QString& uuid) {
+    scriptBreakdown->deleteCameraFrame(uuid.toStdString());
+}

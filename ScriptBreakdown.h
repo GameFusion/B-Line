@@ -23,6 +23,31 @@ struct Camera {
     std::string framing;  // e.g., "OVER-THE-SHOULDER", "WIDE ANGLE"
 };
 
+struct CameraFrame {
+    std::string name;
+    int frameOffset = 0; // frame offset relative to panel start
+    float x = 0.0f;
+    float y = 0.0f;
+    float zoom = 1.0f;
+    float rotation = 0.0f;
+    std::string panelUuid;     // The panel this keyframe was created in
+
+    std::string uuid;          // Optional: for unique identification
+    int time;                  // Time in frames, relative to shot start
+
+    CameraFrame(int t, float px, float py, float z = 1.0f, float r = 0.0f, const std::string& ownerPanel = "")
+        : time(t), x(px), y(py), zoom(z), rotation(r), panelUuid(ownerPanel)
+    {
+        uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    }
+
+    CameraFrame() {
+        uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    }
+
+    // Extend this for 3D camera and bezier support
+};
+
 struct Audio {
     std::string ambient;         // e.g., "street noise"
     std::vector<std::string> sfx; // e.g., ["barking", "gunshot"]
@@ -100,6 +125,7 @@ struct Shot {
     std::string intent;       // Narrative/emotional purpose
     std::vector<CharacterDialog> characters;
     std::vector<Panel> panels;
+    std::vector<CameraFrame> cameraFrames; // Global across panels, time-based
     std::string uuid;
     int startTime=-1;
     int endTime=-1;
@@ -173,6 +199,11 @@ public:
     void loadScene(const QString& sceneName, const QJsonObject &sceneObj, const QString filename);
 
     void saveModifiedScenes(QString projectPath);
+
+    void addCameraFrame(const CameraFrame& frame);
+    bool updateCameraFrame(const CameraFrame& frame);
+    bool deleteCameraFrame(const std::string& uuid);
+
 private:
     bool initializeLlamaClient(LlamaClient* client, const std::string& modelPath, const std::string& backend);
     bool processScenes(BreakdownMode mode);

@@ -18,6 +18,7 @@ class TimeLineView;
 class MainWindowPaint;
 class Segment;
 class ShotPanelWidget;
+class CameraSidePanel;
 
 namespace Ui {
 	class MainWindowBoarder;
@@ -105,6 +106,12 @@ public slots:
     void onDeleteCamera();
     void onRenameCamera();
 
+    void onCameraFrameAddedFromPaint(const GameFusion::CameraFrame& frame);
+    void onCameraFrameAddedFromSidePanel(const GameFusion::CameraFrame& frame);
+
+    void onCameraFrameUpdated(const GameFusion::CameraFrame& frame);
+    void onCameraFrameDeleted(const QString& uuid);
+
 protected:
 	void dragEnterEvent(QDragEnterEvent *event) override;
 	//void dragMoveEvent(QDragMoveEvent *event) override;
@@ -161,6 +168,9 @@ protected:
     long playbackEnd = 0;
     long currentPlayTime = 0;
     int playbackIntervalMs = 33; // ~30 FPS
+
+    // Camera side panel and attribute editor
+    CameraSidePanel *cameraSidePanel = nullptr;
 };
 
 

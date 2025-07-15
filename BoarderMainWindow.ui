@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1061</width>
-    <height>972</height>
+    <height>841</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -30,7 +30,7 @@
      <x>0</x>
      <y>0</y>
      <width>1061</width>
-     <height>24</height>
+     <height>37</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
@@ -93,7 +93,7 @@
   <widget class="QDockWidget" name="dockAttributes">
    <property name="minimumSize">
     <size>
-     <width>0</width>
+     <width>286</width>
      <height>146</height>
     </size>
    </property>
@@ -298,157 +298,6 @@
         </size>
        </property>
       </widget>
-     </item>
-     <item>
-      <layout class="QHBoxLayout" name="horizontalLayout">
-       <item>
-        <widget class="QComboBox" name="timeLayer">
-         <item>
-          <property name="text">
-           <string>Anim Layer</string>
-          </property>
-         </item>
-        </widget>
-       </item>
-       <item>
-        <widget class="QSlider" name="timeSlider">
-         <property name="orientation">
-          <enum>Qt::Orientation::Horizontal</enum>
-         </property>
-         <property name="tickPosition">
-          <enum>QSlider::TickPosition::TicksAbove</enum>
-         </property>
-         <property name="tickInterval">
-          <number>10</number>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QSpinBox" name="timeBox">
-         <property name="minimumSize">
-          <size>
-           <width>75</width>
-           <height>0</height>
-          </size>
-         </property>
-         <property name="buttonSymbols">
-          <enum>QAbstractSpinBox::ButtonSymbols::PlusMinus</enum>
-         </property>
-         <property name="maximum">
-          <number>500</number>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </item>
-     <item>
-      <layout class="QHBoxLayout" name="horizontalLayout_3">
-       <item>
-        <widget class="QComboBox" name="comboBox_cmd">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-         <property name="editable">
-          <bool>true</bool>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QComboBox" name="comboBox_mode">
-         <item>
-          <property name="text">
-           <string>Animation Mode</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>Game Mode</string>
-          </property>
-         </item>
-        </widget>
-       </item>
-       <item>
-        <widget class="QSpinBox" name="timeMin">
-         <property name="buttonSymbols">
-          <enum>QAbstractSpinBox::ButtonSymbols::NoButtons</enum>
-         </property>
-         <property name="showGroupSeparator" stdset="0">
-          <bool>false</bool>
-         </property>
-         <property name="minimum">
-          <number>-10000000</number>
-         </property>
-         <property name="maximum">
-          <number>10000000</number>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QSpinBox" name="timeMax">
-         <property name="buttonSymbols">
-          <enum>QAbstractSpinBox::ButtonSymbols::NoButtons</enum>
-         </property>
-         <property name="maximum">
-          <number>1000000000</number>
-         </property>
-         <property name="value">
-          <number>20000</number>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QToolButton" name="toolButton_settings">
-         <property name="text">
-          <string>...</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QToolButton" name="toolButton_firstFrame">
-         <property name="text">
-          <string>|&lt;&lt;</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QToolButton" name="toolButton_priorFrame">
-         <property name="text">
-          <string>|&lt;</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QToolButton" name="toolButton_play">
-         <property name="text">
-          <string>&gt;</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QToolButton" name="toolButton_pause">
-         <property name="text">
-          <string>||</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QToolButton" name="toolButton_nextFrame">
-         <property name="text">
-          <string>&gt;|</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QToolButton" name="toolButton_lastFrame">
-         <property name="text">
-          <string>&gt;&gt;|</string>
-         </property>
-        </widget>
-       </item>
-      </layout>
      </item>
     </layout>
    </widget>
@@ -933,8 +782,8 @@
   <widget class="QDockWidget" name="dockCameraAndLayers">
    <property name="minimumSize">
     <size>
-     <width>0</width>
-     <height>197</height>
+     <width>275</width>
+     <height>200</height>
     </size>
    </property>
    <property name="floating">
@@ -1074,10 +923,10 @@
     </layout>
    </widget>
   </widget>
-  <widget class="QDockWidget" name="dockWidget">
+  <widget class="QDockWidget" name="dockCameras">
    <property name="minimumSize">
     <size>
-     <width>0</width>
+     <width>62</width>
      <height>38</height>
     </size>
    </property>

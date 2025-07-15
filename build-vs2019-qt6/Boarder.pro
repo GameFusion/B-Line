@@ -197,9 +197,8 @@ HEADERS += ../LlamaModel.h
 SOURCES += $$GF/Applications/LlamaEngine/LlamaClient.cpp
 INCLUDEPATH += $$GF/Applications/LlamaEngine
 
-
-
-
+SOURCES += ../CameraSidePanel.cpp
+HEADERS += ../CameraSidePanel.h
 
 # Input source files
 SOURCES +=  \
