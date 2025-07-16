@@ -23,6 +23,14 @@ struct Camera {
     std::string framing;  // e.g., "OVER-THE-SHOULDER", "WIDE ANGLE"
 };
 
+enum class EasingType {
+    Linear,
+    EaseIn,
+    EaseOut,
+    EaseInOut,
+    Bezier
+};
+
 struct CameraFrame {
     std::string name;
     int frameOffset = 0; // frame offset relative to panel start
@@ -45,7 +53,12 @@ struct CameraFrame {
         uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
     }
 
+    EasingType easing = EasingType::EaseInOut; // Default to smooth
     // Extend this for 3D camera and bezier support
+
+    // Optional: For Bezier
+    Vector2D bezierControl1;
+    Vector2D bezierControl2;
 };
 
 struct Audio {
