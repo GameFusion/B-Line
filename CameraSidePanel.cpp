@@ -2,6 +2,9 @@
 #include <QInputDialog>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QApplication>
+#include <QFormLayout>
+#include <QScrollArea>
 
 CameraSidePanel::CameraSidePanel(QWidget* parent)
     : QWidget(parent)
@@ -11,11 +14,23 @@ CameraSidePanel::CameraSidePanel(QWidget* parent)
 }
 
 void CameraSidePanel::setupUI() {
+    this->setStyleSheet(R"(
+    QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QListWidget, QPushButton {
+        font-size: 10pt;
+    }
+)");
+
     listWidget = new QListWidget(this);
     listWidget->setSelectionMode(QAbstractItemView::SingleSelection);
     listWidget->setDragDropMode(QAbstractItemView::InternalMove);
     listWidget->setDefaultDropAction(Qt::MoveAction);
     listWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    // Allow the widget to shrink vertically
+    listWidget->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+
+    // Optional: limit the max height so it doesn't grow too tall
+    listWidget->setMaximumHeight(50);  // Adjust based on your design
 
     addButton = new QPushButton("➕");
     delButton = new QPushButton("➖");
@@ -33,14 +48,29 @@ void CameraSidePanel::setupUI() {
 
 
     // Setup camera attribute widgets
+    /*
     formContainer = new QWidget(this);
     formLayout = new QFormLayout(formContainer);
     formContainer->setLayout(formLayout);
 
     layout->addWidget(formContainer); // add form under list
+    */
+
+    QScrollArea* scrollArea = new QScrollArea(this);
+    QWidget* scrollContent = new QWidget(scrollArea);
+    formLayout = new QFormLayout(scrollContent);  // assign this->formLayout
+
+    scrollContent->setLayout(formLayout);
+    scrollArea->setWidget(scrollContent);
+    scrollArea->setWidgetResizable(true);
+
+    layout->addWidget(scrollArea); // add form under list
+
 
     layout->addStretch();
     setLayout(layout);
+
+
 }
 
 void CameraSidePanel::clearForm() {
@@ -50,15 +80,26 @@ void CameraSidePanel::clearForm() {
             item->widget()->deleteLater();
         delete item;
     }
+
+    // Reset all dynamic widget pointers
     nameEdit = nullptr;
     xEdit = yEdit = zoomEdit = rotationEdit = nullptr;
+    frameOffset = nullptr;
     easingCombo = nullptr;
-    //uuidLabel = nullptr;
+    easeInLabel = nullptr;
+    easeInSpinBox = nullptr;
+    easeOutLabel = nullptr;
+    easeOutSpinBox = nullptr;
+
     uuidSelected.clear();
 }
 
 void CameraSidePanel::populateForm(const GameFusion::CameraFrame& frame) {
     clearForm();
+
+
+
+    //this->setFont(QApplication::font());  // or your custom QFont
 
     nameEdit = new QLineEdit(QString::fromStdString(frame.name));
     xEdit = new QDoubleSpinBox(); xEdit->setRange(-10000, 10000); xEdit->setValue(frame.x);
@@ -80,6 +121,29 @@ void CameraSidePanel::populateForm(const GameFusion::CameraFrame& frame) {
     formLayout->addRow("Frame Offset", frameOffset);
     formLayout->addRow("Easing", easingCombo);
 
+    //
+    // In CameraPanel.cpp constructor or UI setup
+
+    easeInLabel = new QLabel("Ease In");
+    easeInSpinBox = new QSpinBox;
+    easeInSpinBox->setRange(0, 100); // adjust as needed
+    easeInSpinBox->setValue(frame.easyIn);     // default value
+    easeInLabel->setFont(QApplication::font());
+    easeOutLabel = new QLabel("Ease Out");
+    easeOutSpinBox = new QSpinBox;
+    easeOutSpinBox->setRange(0, 100);
+    easeOutSpinBox->setValue(frame.easyOut);
+
+
+    formLayout->addRow(easeInLabel, easeInSpinBox); // Add to overall layout
+    formLayout->addRow(easeOutLabel, easeOutSpinBox);
+    // Initially hidden unless "Bezier" selected
+    easeInLabel->hide();
+    easeInSpinBox->hide();
+    easeOutLabel->hide();
+    easeOutSpinBox->hide();
+
+
     // Optional: connect editingFinished() or valueChanged() to a save callback
     connect(nameEdit, &QLineEdit::editingFinished, this, &CameraSidePanel::onAttributeChanged);
     connect(xEdit, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraSidePanel::onAttributeChanged);
@@ -88,6 +152,8 @@ void CameraSidePanel::populateForm(const GameFusion::CameraFrame& frame) {
     connect(rotationEdit, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraSidePanel::onAttributeChanged);
     connect(frameOffset, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraSidePanel::onAttributeChanged);
     connect(easingCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraSidePanel::onAttributeChanged);
+    connect(easeInSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraSidePanel::onAttributeChanged);
+    connect(easeOutSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraSidePanel::onAttributeChanged);
 }
 
 void CameraSidePanel::onAttributeChanged() {
@@ -106,6 +172,14 @@ void CameraSidePanel::onAttributeChanged() {
     currentFrame.rotation = static_cast<float>(rotationEdit->value());
     currentFrame.frameOffset = static_cast<int>(frameOffset->value());
     currentFrame.easing = static_cast<GameFusion::EasingType>(easingCombo->currentIndex());
+    currentFrame.easyIn = static_cast<int>(easeInSpinBox->value());
+    currentFrame.easyOut = static_cast<int>(easeOutSpinBox->value());
+
+    bool isBezier = (currentFrame.easing == GameFusion::EasingType::Bezier);
+    easeInLabel->setVisible(isBezier);
+    easeInSpinBox->setVisible(isBezier);
+    easeOutLabel->setVisible(isBezier);
+    easeOutSpinBox->setVisible(isBezier);
 
     emit cameraFrameUpdated(currentFrame);
 }

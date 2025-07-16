@@ -689,6 +689,31 @@ MainWindow::MainWindow(QWidget *parent)
 
     //ui->horizontalLayout_animScroll->
 
+    ui->dockAttributes->setStyleSheet(R"(
+    QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QListWidget, QPushButton {
+        font-size: 10pt;
+    }
+)");
+
+    ui->dockCameraAndLayers->setStyleSheet(R"(
+    QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QListWidget, QPushButton {
+        font-size: 10pt;
+    }
+)");
+
+    ui->shotsTreeWidget->setStyleSheet(R"(
+    QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QTreeWidget, QListWidget, QPushButton {
+        font-size: 10pt;
+    }
+)");
+
+    shotPanel->setStyleSheet(R"(
+    QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QTreeWidget, QListWidget, QPushButton {
+        font-size: 10pt;
+    }
+)");
+
+
 	return;
 	//
 	QList <int> list;

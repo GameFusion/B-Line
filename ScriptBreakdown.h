@@ -77,6 +77,8 @@ struct CameraFrame {
 
     EasingType easing = EasingType::EaseInOut; // Default to smooth
     // Extend this for 3D camera and bezier support
+    int easyIn = 10;
+    int easyOut = 10;
 
     // Optional: For Bezier
     Vector2D bezierControl1;

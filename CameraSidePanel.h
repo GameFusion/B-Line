@@ -64,6 +64,8 @@ private:
     QWidget* formContainer = nullptr;
     QMap<QString, GameFusion::CameraFrame> frameMap; // uuid → CameraFrame
 
+    //QScrollArea* scrollArea=nullptr;
+
     // Input fields
     QLineEdit* nameEdit = nullptr;
     QDoubleSpinBox* xEdit = nullptr;
@@ -72,7 +74,12 @@ private:
     QDoubleSpinBox* rotationEdit = nullptr;
     QSpinBox* frameOffset = nullptr;
     QComboBox* easingCombo = nullptr;
+    QLabel* easeInLabel;
+    QSpinBox* easeInSpinBox;
+    QLabel* easeOutLabel;
+    QSpinBox* easeOutSpinBox;
     //QLabel* uuidLabel=nullptr;
+    QWidget *easyInField=nullptr;
     QString uuidSelected;
 
     void onAttributeChanged();
