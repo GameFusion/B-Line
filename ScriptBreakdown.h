@@ -28,8 +28,30 @@ enum class EasingType {
     EaseIn,
     EaseOut,
     EaseInOut,
-    Bezier
+    Bezier,
+    Cut
 };
+
+inline std::string toString(EasingType easing) {
+    switch (easing) {
+    case EasingType::Linear:    return "Linear";
+    case EasingType::EaseIn:    return "EaseIn";
+    case EasingType::EaseOut:   return "EaseOut";
+    case EasingType::EaseInOut: return "EaseInOut";
+    case EasingType::Bezier:    return "Bezier";
+    case EasingType::Cut:       return "Cut";
+    default:                    return "Linear";  // Fallback
+    }
+}
+
+inline EasingType fromString(const std::string& str) {
+    if (str == "EaseIn")    return EasingType::EaseIn;
+    if (str == "EaseOut")   return EasingType::EaseOut;
+    if (str == "EaseInOut") return EasingType::EaseInOut;
+    if (str == "Bezier")    return EasingType::Bezier;
+    if (str == "Cut")       return EasingType::Cut;
+    return EasingType::Linear; // Default fallback
+}
 
 struct CameraFrame {
     std::string name;

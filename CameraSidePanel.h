@@ -9,6 +9,7 @@
 #include <QDoubleSpinBox>
 #include <QSpinBox>
 #include <QLabel>
+#include <QComboBox>
 
 #include "ScriptBreakdown.h"
 
@@ -70,6 +71,7 @@ private:
     QDoubleSpinBox* zoomEdit = nullptr;
     QDoubleSpinBox* rotationEdit = nullptr;
     QSpinBox* frameOffset = nullptr;
+    QComboBox* easingCombo = nullptr;
     //QLabel* uuidLabel=nullptr;
     QString uuidSelected;
 

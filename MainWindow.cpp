@@ -1453,9 +1453,10 @@ void MainWindow::loadProject() {
 }
 
 void MainWindow::loadProject(QString projectDir){
-    if(scriptBreakdown)
+    if(scriptBreakdown){
         delete scriptBreakdown;
-
+        scriptBreakdown = nullptr;
+    }
     timeLineView->clear();
 
     currentPanel = nullptr;

@@ -52,6 +52,7 @@ void CameraSidePanel::clearForm() {
     }
     nameEdit = nullptr;
     xEdit = yEdit = zoomEdit = rotationEdit = nullptr;
+    easingCombo = nullptr;
     //uuidLabel = nullptr;
     uuidSelected.clear();
 }
@@ -65,6 +66,9 @@ void CameraSidePanel::populateForm(const GameFusion::CameraFrame& frame) {
     zoomEdit = new QDoubleSpinBox(); zoomEdit->setRange(0.01, 200.0); zoomEdit->setValue(frame.zoom*100.0);
     rotationEdit = new QDoubleSpinBox(); rotationEdit->setRange(-360, 360); rotationEdit->setValue(frame.rotation);
     frameOffset = new QSpinBox(); frameOffset->setValue(frame.frameOffset);
+    easingCombo = new QComboBox();
+    easingCombo->addItems({"Linear", "EaseIn", "EaseOut", "EaseInOut", "Bezier", "Cut"});
+    easingCombo->setCurrentIndex(static_cast<int>(frame.easing));
 
     uuidSelected = QString::fromStdString(frame.uuid);
 
@@ -74,6 +78,7 @@ void CameraSidePanel::populateForm(const GameFusion::CameraFrame& frame) {
     formLayout->addRow("Zoom", zoomEdit);
     formLayout->addRow("Rotation", rotationEdit);
     formLayout->addRow("Frame Offset", frameOffset);
+    formLayout->addRow("Easing", easingCombo);
 
     // Optional: connect editingFinished() or valueChanged() to a save callback
     connect(nameEdit, &QLineEdit::editingFinished, this, &CameraSidePanel::onAttributeChanged);
@@ -82,6 +87,7 @@ void CameraSidePanel::populateForm(const GameFusion::CameraFrame& frame) {
     connect(zoomEdit, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraSidePanel::onAttributeChanged);
     connect(rotationEdit, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraSidePanel::onAttributeChanged);
     connect(frameOffset, QOverload<int>::of(&QSpinBox::valueChanged), this, &CameraSidePanel::onAttributeChanged);
+    connect(easingCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CameraSidePanel::onAttributeChanged);
 }
 
 void CameraSidePanel::onAttributeChanged() {
@@ -99,6 +105,7 @@ void CameraSidePanel::onAttributeChanged() {
     currentFrame.zoom = static_cast<float>(zoomEdit->value()/100.0);
     currentFrame.rotation = static_cast<float>(rotationEdit->value());
     currentFrame.frameOffset = static_cast<int>(frameOffset->value());
+    currentFrame.easing = static_cast<GameFusion::EasingType>(easingCombo->currentIndex());
 
     emit cameraFrameUpdated(currentFrame);
 }
@@ -241,6 +248,7 @@ void CameraSidePanel::updateCameraFrame(const GameFusion::CameraFrame& frame){
     QSignalBlocker blockZoom(zoomEdit);
     QSignalBlocker blockRotation(rotationEdit);
     QSignalBlocker blockFrameOffset(frameOffset);
+    QSignalBlocker blockEasing(easingCombo);
 
     nameEdit->setText(QString::fromStdString(frame.name));
     xEdit->setValue(frame.x);
@@ -249,4 +257,5 @@ void CameraSidePanel::updateCameraFrame(const GameFusion::CameraFrame& frame){
     rotationEdit->setValue(frame.rotation);
     frameOffset->setValue(frame.frameOffset);
     uuidSelected = QString::fromStdString(frame.uuid);
+    easingCombo->setCurrentIndex(static_cast<int>(frame.easing));
 }

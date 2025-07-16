@@ -126,6 +126,11 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
     if(obj.contains("endTime"))
         shot.endTime = obj["endTime"].toInt();
 
+
+
+
+
+
     float mspf = fps > 0 ? 1000./fps : 1;
 
     // Panels (optional support from JSON)
@@ -168,6 +173,8 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
                 frame.rotation = static_cast<float>(frameObj["rotation"].toDouble());
                 frame.panelUuid = frameObj["panelUuid"].toString().toStdString();
                 frame.frameOffset = frameObj["frameOffset"].toInt();
+                if(frameObj.contains("easing"))
+                    frame.easing = fromString(frameObj["easing"].toString().toStdString());
 
                 shot.cameraFrames.push_back(frame);
             }
@@ -788,6 +795,7 @@ void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
                     cameraFrameObj["rotation"] = frame.rotation;
                     cameraFrameObj["panelUuid"] = QString::fromStdString(frame.panelUuid);
                     cameraFrameObj["frameOffset"] = frame.frameOffset;
+                    cameraFrameObj["easing"] = toString(frame.easing).c_str(); //todo get text val;
 
                     framesArray.append(cameraFrameObj);
                 }
