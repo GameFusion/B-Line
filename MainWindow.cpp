@@ -684,9 +684,22 @@ MainWindow::MainWindow(QWidget *parent)
     connect(timeLineView, &TimeLineView::optionsDialog,
             this, &MainWindow::timelineOptions);
 
+
     // Add Callback for Tree Item Selection
     connect(ui->shotsTreeWidget, &QTreeWidget::itemClicked, this, &MainWindow::onTreeItemClicked);
 
+    // Layer connections
+    connect(ui->layerListWidget, &QListWidget::currentItemChanged,
+            this, &MainWindow::onLayerSelectionChanged);
+
+    connect(ui->layerListWidget, &QListWidget::itemChanged,
+            this, &MainWindow::onLayerVisibilityChanged);
+
+    connect(paint->getPaintArea(), &PaintArea::layerAdded,
+            this, &MainWindow::onPaintAreaLayerAdded);
+
+    connect(paint->getPaintArea(), &PaintArea::layerModified,
+            this, &MainWindow::onPaintAreaLayerModified);
     //ui->horizontalLayout_animScroll->
 
     ui->dockAttributes->setStyleSheet(R"(
@@ -695,7 +708,7 @@ MainWindow::MainWindow(QWidget *parent)
     }
 )");
 
-    ui->dockCameraAndLayers->setStyleSheet(R"(
+    ui->dockLayers->setStyleSheet(R"(
     QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QListWidget, QPushButton {
         font-size: 10pt;
     }
@@ -1684,6 +1697,22 @@ PanelContext MainWindow::findPanelByUuid(const std::string& uuid) {
     return {};
 }
 
+LayerContext MainWindow::findLayerByUuid(const std::string& uuid) {
+
+    auto& scenes = scriptBreakdown->getScenes();
+    for (Scene& scene : scenes) {
+        for (Shot& shot : scene.shots) {
+            for(Panel &panel : shot.panels){
+                for(Layer &layer : panel.layers)
+                    if (layer.uuid == uuid)
+                        return { &scene, &shot, &panel, &layer};
+            }
+        }
+    }
+
+    return {};
+}
+
 PanelContext MainWindow::findPanelForTime(double time, double threshold) {
 
     if(!scriptBreakdown){
@@ -1797,6 +1826,104 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     float fps = projectJson["fps"].toDouble();
     shotPanel->setPanelInfo(scene, shot, panel, fps);
 
+    // TODO set panel info for
+    //layerAnd
+    //setPanelLayers()
+    //ui->dockLayers-> ... todo set panel content, and add check state for visibility per layer in list view with name
+
+    // Populate layer list
+    ui->layerListWidget->clear();
+    ui->layerListWidget->clear();
+
+    if (panel->layers.empty()) {
+        GameFusion::Log().info() << "No layers in panel " << panel->uuid.c_str() << "\n";
+        return;
+    }
+
+    for (auto& layer : panel->layers) {
+        QString label = QString::fromStdString(layer.name);
+        QListWidgetItem* item = new QListWidgetItem(label);
+
+        // Set checkbox for visibility
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(layer.visible ? Qt::Checked : Qt::Unchecked);
+
+        // Store layer UUID as item data
+        item->setData(Qt::UserRole, QString::fromStdString(layer.uuid));
+
+        ui->layerListWidget->addItem(item);
+    }
+
+}
+
+void MainWindow::onLayerSelectionChanged(QListWidgetItem* current, QListWidgetItem* previous) {
+    if (!current) return;
+
+    QString uuid = current->data(Qt::UserRole).toString();
+    paint->getPaintArea()->setActiveLayer(uuid);  // You define this in PaintArea
+}
+
+void MainWindow::onLayerVisibilityChanged(QListWidgetItem* item) {
+    QString uuid = item->data(Qt::UserRole).toString();
+    bool visible = item->checkState() == Qt::Checked;
+    paint->getPaintArea()->setLayerVisibility(uuid, visible);
+
+    LayerContext layerContext = findLayerByUuid(uuid.toStdString());
+    if(layerContext.isValid()){
+        layerContext.scene->dirty = true;
+        layerContext.layer->visible = visible;
+    }
+}
+
+void MainWindow::onPaintAreaLayerModified(const Layer &modLayer) {
+    // Do something with the modified layer
+    qDebug() << "Layer modified!";
+    // Example: autosave, update UI, notify timeline, etc.
+
+    if (!currentPanel)
+        return;
+
+    LayerContext layerContext = findLayerByUuid(modLayer.uuid);
+    if(layerContext.isValid()){
+        *layerContext.layer = modLayer; // issue on free Bezier list after this point
+        layerContext.scene->dirty = true;
+        //layerContext.layer->visible = visible;
+    }
+/*
+    for(Layer& layer : currentPanel->layers) {
+        if(layer.uuid == modLayer.uuid) {
+            layer = modLayer;
+
+            return;
+        }
+    }
+*/
+}
+
+void MainWindow::onPaintAreaLayerAdded(const Layer& layer) {
+    // 1. Add to current panel's layers
+    if (currentPanel){
+        currentPanel->layers.push_back(layer);
+
+        PanelContext panelContext = findPanelByUuid(currentPanel->uuid);
+        if(panelContext.isValid()){
+            panelContext.scene->dirty = true;
+        }
+    }
+
+    // 2. Add to layerListWidget
+    QString label = QString::fromStdString(layer.name);
+    QListWidgetItem* item = new QListWidgetItem(label);
+    item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+    item->setCheckState(layer.visible ? Qt::Checked : Qt::Unchecked);
+    item->setData(Qt::UserRole, QString::fromStdString(layer.uuid));
+    ui->layerListWidget->addItem(item);
+
+    // 3. Set it as current/active
+    ui->layerListWidget->setCurrentItem(item);
+
+    // 4. Optional: Add to storyboard if needed
+    // storyboard->addLayerVisual(layer); or similar
 }
 
 #include "NewProjectDialog.h"
@@ -1966,7 +2093,7 @@ void MainWindow::onTimeCursorMoved(double time)
         paint->newImage();
         if(theShot){
             long panelStartTime = theShot->startTime + currentPanel->startTime;
-            paint->getPaintArea()->setPanel(currentPanel->uuid.c_str(), panelStartTime, fps, theShot->cameraFrames);
+            paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraFrames);
             cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraFrames);
         }
         currentPanel = nullptr;
@@ -1989,7 +2116,7 @@ void MainWindow::onTimeCursorMoved(double time)
     if (!currentPanel->image.empty() && QFile::exists(imagePath)) {
         paint->openImage(imagePath);
         if(theShot){
-            paint->getPaintArea()->setPanel(currentPanel->uuid.c_str(), panelStartTime, fps, theShot->cameraFrames);
+            paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraFrames);
             cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraFrames);
         }
 
@@ -1999,7 +2126,7 @@ void MainWindow::onTimeCursorMoved(double time)
 
         paint->newImage();
         if(theShot) {
-            paint->getPaintArea()->setPanel(currentPanel->uuid.c_str(), panelStartTime, fps, theShot->cameraFrames);
+            paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraFrames);
             cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraFrames);
         }
     }
@@ -2516,14 +2643,11 @@ void MainWindow::onCameraFrameAddedFromPaint(const GameFusion::CameraFrame& fram
             }
         }
     }
-
 }
 
 void MainWindow::onCameraFrameAddedFromSidePanel(const GameFusion::CameraFrame& frame) {
     scriptBreakdown->addCameraFrame(frame);
 }
-
-
 
 void MainWindow::onCameraFrameUpdated(const GameFusion::CameraFrame& frame) {
     scriptBreakdown->updateCameraFrame(frame);

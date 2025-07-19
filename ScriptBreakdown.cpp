@@ -153,6 +153,93 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
             if(panelObj.contains("startTime"))
                 panel.startTime = panelObj["startTime"].toInt();
 
+            if (panelObj.contains("layers")) {
+                QJsonArray layersArray = panelObj["layers"].toArray();
+                for (const auto& layerValue : layersArray) {
+                    QJsonObject layerObj = layerValue.toObject();
+                    Layer layer;
+
+                    layer.uuid = layerObj["uuid"].toString().toStdString();
+                    layer.name = layerObj["name"].toString().toStdString();
+                    layer.thumbnail = layerObj["thumbnail"].toString().toStdString();
+                    layer.opacity = float(layerObj["opacity"].toDouble(1.0));
+                    layer.visible = layerObj["visible"].toBool(true);
+                    layer.x = float(layerObj["x"].toDouble());
+                    layer.y = float(layerObj["y"].toDouble());
+                    layer.scale = float(layerObj["scale"].toDouble(1.0));
+                    layer.rotation = float(layerObj["rotation"].toDouble(0.0));
+
+                    // Keyframes
+                    if (layerObj.contains("keyframes")) {
+                        QJsonArray keyframesArray = layerObj["keyframes"].toArray();
+                        for (const auto& kfValue : keyframesArray) {
+                            QJsonObject kfObj = kfValue.toObject();
+                            Layer::KeyFrame kf;
+                            kf.time = kfObj["time"].toInt();
+                            kf.x = float(kfObj["x"].toDouble());
+                            kf.y = float(kfObj["y"].toDouble());
+                            kf.scale = float(kfObj["scale"].toDouble(1.0));
+                            kf.rotation = float(kfObj["rotation"].toDouble(0.0));
+                            kf.opacity = float(kfObj["opacity"].toDouble(1.0));
+                            kf.easing = fromString(kfObj["easing"].toString().toStdString());
+
+                            kf.bezierControl1.x() = float(kfObj["bezierControl1X"].toDouble());
+                            kf.bezierControl1.y() = float(kfObj["bezierControl1Y"].toDouble());
+                            kf.bezierControl2.x() = float(kfObj["bezierControl2X"].toDouble());
+                            kf.bezierControl2.y() = float(kfObj["bezierControl2Y"].toDouble());
+
+                            layer.keyframes.push_back(kf);
+                        }
+                    }
+
+                    if (layerObj.contains("strokes")) {
+                        QJsonArray strokeArray = layerObj["strokes"].toArray();
+
+                        for (const auto& pathVal : strokeArray) {
+                            QJsonArray pathArray = pathVal.toArray();
+                            GameFusion::BezierCurve path;
+
+                            for (const auto& controlPointsVal : pathArray) {
+                                QJsonArray controlPoints = controlPointsVal.toArray();
+
+                                if (controlPoints.size() != 3) continue;  // Safety check
+
+                                QJsonArray pArray = controlPoints[0].toArray();
+                                QJsonArray lArray = controlPoints[1].toArray();
+                                QJsonArray rArray = controlPoints[2].toArray();
+
+                                if (pArray.size() < 2 || lArray.size() < 2 || rArray.size() < 2) continue;
+
+                                Vector3D p(pArray[0].toDouble(), pArray[1].toDouble(), 0);
+                                Vector3D l(lArray[0].toDouble(), lArray[1].toDouble(), 0);
+                                Vector3D r(rArray[0].toDouble(), rArray[1].toDouble(), 0);
+
+                                path += GameFusion::BezierControl(p, l, r);
+                            }
+
+                            layer.strokes.push_back(path);
+                            //layer.strokes.emplace_back(path);
+                        }
+                    }
+
+                    panel.layers.push_back(layer); // this is not working great
+                    // todo change stratagy to re
+
+                } // I get a crash here, when layer is deleted
+            }
+
+            // create a default layers if there are none
+            if(panel.layers.empty()){
+                Layer bg;
+                Layer l1;
+
+                bg.name = "BG";
+                l1.name = "Layer 1";
+
+                panel.layers.push_back(l1);
+                panel.layers.push_back(bg);
+            }
+
             shot.panels.push_back(panel);
         }
     }
@@ -722,7 +809,7 @@ void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
         if (scene.dirty && !scene.filename.empty()) {
             QJsonArray shotsArray;
 
-            for (const Shot& shot : scene.shots) {
+            for ( Shot& shot : scene.shots) {
                 QJsonObject shotObj;
                 shotObj["name"] = QString::fromStdString(shot.name);
                 shotObj["type"] = QString::fromStdString(shot.type);
@@ -748,13 +835,13 @@ void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
                 QJsonObject audioObj;
                 audioObj["ambient"] = QString::fromStdString(shot.audio.ambient);
                 QJsonArray sfxArray;
-                for (const auto& sfx : shot.audio.sfx)
+                for ( auto& sfx : shot.audio.sfx)
                     sfxArray.append(QString::fromStdString(sfx));
                 audioObj["sfx"] = sfxArray;
                 shotObj["audio"] = audioObj;
 
                 QJsonArray characterArray;
-                for (const auto& character : shot.characters) {
+                for ( auto& character : shot.characters) {
                     QJsonObject charObj;
                     charObj["name"] = QString::fromStdString(character.name);
                     charObj["emotion"] = QString::fromStdString(character.emotion);
@@ -768,7 +855,7 @@ void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
                 shotObj["characters"] = characterArray;
 
                 QJsonArray panelArray;
-                for (const auto& panel : shot.panels) {
+                for ( auto& panel : shot.panels) {
                     QJsonObject panelObj;
                     panelObj["name"] = QString::fromStdString(panel.name);
 
@@ -779,6 +866,74 @@ void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
                     panelObj["startTime"] = panel.startTime;
                     panelObj["durationTime"] = panel.durationTime;
 
+                    QJsonArray layersArray;
+                    for ( auto& layer : panel.layers) {
+                        QJsonObject layerObj;
+                        layerObj["uuid"] = QString::fromStdString(layer.uuid);
+                        layerObj["name"] = QString::fromStdString(layer.name);
+                        layerObj["thumbnail"] = QString::fromStdString(layer.thumbnail);
+                        layerObj["opacity"] = layer.opacity;
+                        layerObj["visible"] = layer.visible;
+                        layerObj["x"] = layer.x;
+                        layerObj["y"] = layer.y;
+                        layerObj["scale"] = layer.scale;
+                        layerObj["rotation"] = layer.rotation;
+
+                        // Save strokes
+                        QJsonArray strokeArray;
+
+                        for(GameFusion::BezierCurve &path: layer.strokes)
+                        //for (int i = 0; i < layer.strokes.length(); ++i)
+                        {
+                            QJsonArray pathArray;
+                            //GameFusion::BezierPath &path = layer.strokes[i];
+
+                            for (int j = 0; j < path.size(); ++j) {
+                                BezierControl &handle = path[j];
+                                const Vector3D &p = handle.point;
+                                const Vector3D &l = handle.leftControl;
+                                const Vector3D &r = handle.rightControl;
+
+                                QJsonArray pArray, lArray, rArray;
+                                pArray << p.x() << p.y();
+                                lArray << l.x() << l.y();
+                                rArray << r.x() << r.y();
+
+                                QJsonArray controlPoints;
+                                controlPoints << pArray << lArray << rArray;
+
+                                pathArray.append(controlPoints);
+                            }
+
+                            strokeArray.append(pathArray);
+                        }
+
+                        layerObj["strokes"] = strokeArray;
+
+                        // Keyframes
+                        QJsonArray keyframesArray;
+                        for ( auto& kf : layer.keyframes) {
+                            QJsonObject kfObj;
+                            kfObj["time"] = kf.time;
+                            kfObj["x"] = kf.x;
+                            kfObj["y"] = kf.y;
+                            kfObj["scale"] = kf.scale;
+                            kfObj["rotation"] = kf.rotation;
+                            kfObj["opacity"] = kf.opacity;
+                            kfObj["easing"] = static_cast<int>(kf.easing);
+                            kfObj["bezierControl1X"] = kf.bezierControl1.x();
+                            kfObj["bezierControl1Y"] = kf.bezierControl1.y();
+                            kfObj["bezierControl2X"] = kf.bezierControl2.x();
+                            kfObj["bezierControl2Y"] = kf.bezierControl2.y();
+
+                            keyframesArray.append(kfObj);
+                        }
+
+                        layerObj["keyframes"] = keyframesArray;
+                        layersArray.append(layerObj);
+                    }
+
+                    panelObj["layers"] = layersArray;
                     panelArray.append(panelObj);
                 }
                 shotObj["panels"] = panelArray;

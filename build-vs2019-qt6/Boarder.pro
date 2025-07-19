@@ -200,6 +200,9 @@ INCLUDEPATH += $$GF/Applications/LlamaEngine
 SOURCES += ../CameraSidePanel.cpp
 HEADERS += ../CameraSidePanel.h
 
+SOURCES += ../BezierCurve.cpp
+HEADERS += ../BezierCurve.h
+
 # Input source files
 SOURCES +=  \
            $$GF/Applications/TimeLineProject/TimeLineView.cpp \

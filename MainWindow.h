@@ -40,6 +40,17 @@ struct PanelContext {
     }
 };
 
+struct LayerContext {
+    GameFusion::Scene* scene = nullptr;
+    GameFusion::Shot* shot = nullptr;
+    GameFusion::Panel* panel = nullptr;
+    GameFusion::Layer* layer = nullptr;
+
+    bool isValid() {
+        return scene && shot && panel && layer;
+    }
+};
+
 struct ShotContext {
     GameFusion::Scene* scene = nullptr;
     GameFusion::Shot* shot = nullptr;
@@ -113,6 +124,12 @@ public slots:
     void onCameraFrameUpdated(const GameFusion::CameraFrame& frame);
     void onCameraFrameDeleted(const QString& uuid);
 
+    void onLayerSelectionChanged(QListWidgetItem* current, QListWidgetItem* previous);
+    void onLayerVisibilityChanged(QListWidgetItem* item);
+
+    void onPaintAreaLayerAdded(const GameFusion::Layer& layer);
+    void onPaintAreaLayerModified(const GameFusion::Layer& layer);
+
 protected:
 	void dragEnterEvent(QDragEnterEvent *event) override;
 	//void dragMoveEvent(QDragMoveEvent *event) override;
@@ -125,6 +142,7 @@ protected:
     PanelContext findPanelByUuid(const std::string& uuid);
     PanelContext findPanelForTime(double currentTime, double threshold = 0.05);
     ShotContext findShotForTime(double time/*, double buffer*/);
+    LayerContext findLayerByUuid(const std::string& uuid);
 
     QString generateUniqueShotName(GameFusion::Scene* scene);
 

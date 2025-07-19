@@ -3,6 +3,9 @@
 
 #include "Script.h"
 #include "LlamaClient.h"
+#include "BezierPath.h"
+#include "BezierCurve.h"
+
 #include <vector>
 #include <string>
 
@@ -100,6 +103,50 @@ struct CharacterDialog {
     std::string dialogue;
 };
 
+struct Layer {
+    std::string uuid;
+    std::string name;
+    std::string thumbnail;
+
+    float opacity = 1.0f;
+    bool visible = true;
+
+    float x = 0.0f;
+    float y = 0.0f;
+    float scale = 1.0f;
+    float rotation = 0.0f;
+
+    struct KeyFrame {
+        int time = 0; // in frames
+        float x = 0.0f;
+        float y = 0.0f;
+        float scale = 1.0f;
+        float rotation = 0.0f;
+        float opacity = 1.0f;
+        EasingType easing = EasingType::Linear;
+
+        // Optional: bezier support
+        Vector2D bezierControl1;
+        Vector2D bezierControl2;
+    };
+
+    //GameFusion::List<GameFusion::BezierPath> strokes; // Strokes for this layer
+    //std::vector<GameFusion::BezierPath> strokes;
+    std::vector<BezierCurve> strokes; // Updated to BezierCurve
+    std::vector<KeyFrame> keyframes;
+
+    Layer() {
+        uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    }
+
+    Layer(const std::string& layerName)
+        : name(layerName)
+    {
+        uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    }
+
+};
+
 struct Panel {
     std::string uuid;
     std::string name;            // Panel name or ID
@@ -109,6 +156,8 @@ struct Panel {
     int durationTime = 0;
     //int durationFrames = 0;      // Optional, if needed
     std::string description;     // Optional panel-specific note or caption
+
+    std::vector<GameFusion::Layer> layers; // optional: per panel
 
     Panel() {
         uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
