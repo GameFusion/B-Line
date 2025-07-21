@@ -35,6 +35,10 @@ enum class EasingType {
     Cut
 };
 
+enum class BlendMode {
+    Normal, Multiply, Screen, Overlay
+};
+
 inline std::string toString(EasingType easing) {
     switch (easing) {
     case EasingType::Linear:    return "Linear";
@@ -54,6 +58,23 @@ inline EasingType fromString(const std::string& str) {
     if (str == "Bezier")    return EasingType::Bezier;
     if (str == "Cut")       return EasingType::Cut;
     return EasingType::Linear; // Default fallback
+}
+
+inline std::string toString(BlendMode mode) {
+    switch (mode) {
+    case BlendMode::Normal:   return "Normal";
+    case BlendMode::Multiply: return "Multiply";
+    case BlendMode::Screen:   return "Screen";
+    case BlendMode::Overlay:  return "Overlay";
+    default:                  return "Normal";
+    }
+}
+
+inline BlendMode blendModeFromString(const std::string& str) {
+    if (str == "Multiply") return BlendMode::Multiply;
+    if (str == "Screen")   return BlendMode::Screen;
+    if (str == "Overlay")  return BlendMode::Overlay;
+    return BlendMode::Normal;
 }
 
 struct CameraFrame {
@@ -115,6 +136,8 @@ struct Layer {
     float y = 0.0f;
     float scale = 1.0f;
     float rotation = 0.0f;
+    BlendMode blendMode = BlendMode::Normal;
+    std::string fx;
 
     struct KeyFrame {
         int time = 0; // in frames
@@ -134,6 +157,8 @@ struct Layer {
     //std::vector<GameFusion::BezierPath> strokes;
     std::vector<BezierCurve> strokes; // Updated to BezierCurve
     std::vector<KeyFrame> keyframes;
+
+    std::string imageFilePath; // If set, layer uses this image instead of strokes
 
     Layer() {
         uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();

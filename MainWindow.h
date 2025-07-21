@@ -126,6 +126,25 @@ public slots:
 
     void onLayerSelectionChanged(QListWidgetItem* current, QListWidgetItem* previous);
     void onLayerVisibilityChanged(QListWidgetItem* item);
+    //void onLayerAdded(const GameFusion::Layer &layer);
+    //void onLayerUpdated(const GameFusion::Layer &layer);
+    //void onLayerDeleted(const QString &layerUuid);
+
+    void onLayerBlendMode(int index);
+    void onLayerLoadImage();
+    void onLayerOpacity(int value);
+    void onLayerFX();
+    void onLayerAdd();
+    void onLayerDelete();
+    void onLayerMoveUp();
+    void onLayerMoveDown();
+    void onLayerReordered(const QModelIndex &parent,
+                                      int start, int end,
+                                      const QModelIndex &destination, int row);
+    void onLayerRotationChanged(int value);
+    void onLayerPosXChanged(double value);
+    void onLayerPosYChanged(double value);
+    void onLayerScaleChanged(double value);
 
     void onPaintAreaLayerAdded(const GameFusion::Layer& layer);
     void onPaintAreaLayerModified(const GameFusion::Layer& layer);
@@ -143,6 +162,7 @@ protected:
     PanelContext findPanelForTime(double currentTime, double threshold = 0.05);
     ShotContext findShotForTime(double time/*, double buffer*/);
     LayerContext findLayerByUuid(const std::string& uuid);
+    void populateLayerList(GameFusion::Panel* panel);
 
     QString generateUniqueShotName(GameFusion::Scene* scene);
 

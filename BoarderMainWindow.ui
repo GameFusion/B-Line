@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1061</width>
-    <height>841</height>
+    <height>830</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -93,6 +93,12 @@
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
   <widget class="QDockWidget" name="dockAttributes">
+   <property name="minimumSize">
+    <size>
+     <width>286</width>
+     <height>146</height>
+    </size>
+   </property>
    <property name="windowTitle">
     <string>Attrib&amp;utes</string>
    </property>
@@ -782,6 +788,18 @@
      <verstretch>0</verstretch>
     </sizepolicy>
    </property>
+   <property name="minimumSize">
+    <size>
+     <width>280</width>
+     <height>251</height>
+    </size>
+   </property>
+   <property name="maximumSize">
+    <size>
+     <width>524287</width>
+     <height>320</height>
+    </size>
+   </property>
    <property name="floating">
     <bool>false</bool>
    </property>
@@ -793,8 +811,20 @@
    </attribute>
    <widget class="QWidget" name="dockWidgetContents_2">
     <layout class="QVBoxLayout" name="verticalLayout_2">
+     <property name="spacing">
+      <number>0</number>
+     </property>
+     <property name="topMargin">
+      <number>0</number>
+     </property>
+     <property name="bottomMargin">
+      <number>0</number>
+     </property>
      <item>
       <layout class="QHBoxLayout" name="horizontalLayout_4">
+       <property name="spacing">
+        <number>0</number>
+       </property>
        <item>
         <widget class="QComboBox" name="comboBox_layerBlendMode">
          <item>
@@ -833,16 +863,6 @@
          </property>
         </widget>
        </item>
-       <item>
-        <widget class="QToolButton" name="toolButton_layerTools">
-         <property name="text">
-          <string>...</string>
-         </property>
-         <property name="arrowType">
-          <enum>Qt::ArrowType::DownArrow</enum>
-         </property>
-        </widget>
-       </item>
       </layout>
      </item>
      <item>
@@ -856,7 +876,7 @@
        <property name="maximumSize">
         <size>
          <width>16777215</width>
-         <height>50</height>
+         <height>100</height>
         </size>
        </property>
        <item>
@@ -882,6 +902,9 @@
      </item>
      <item>
       <layout class="QHBoxLayout" name="horizontalLayout_5">
+       <property name="spacing">
+        <number>0</number>
+       </property>
        <item>
         <spacer name="horizontalSpacer">
          <property name="orientation">
@@ -889,11 +912,45 @@
          </property>
          <property name="sizeHint" stdset="0">
           <size>
-           <width>40</width>
-           <height>20</height>
+           <width>0</width>
+           <height>0</height>
           </size>
          </property>
         </spacer>
+       </item>
+       <item>
+        <widget class="QToolButton" name="toolButton_layerAdd">
+         <property name="text">
+          <string>+</string>
+         </property>
+         <property name="toolButtonStyle">
+          <enum>Qt::ToolButtonStyle::ToolButtonTextOnly</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="toolButton_layerDup">
+         <property name="text">
+          <string>Dup</string>
+         </property>
+         <property name="toolButtonStyle">
+          <enum>Qt::ToolButtonStyle::ToolButtonTextOnly</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="toolButton_layerMoveUp">
+         <property name="text">
+          <string>Uo</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="toolButton_layerMoveDown">
+         <property name="text">
+          <string>Dn</string>
+         </property>
+        </widget>
        </item>
        <item>
         <widget class="QToolButton" name="toolButton_layerFX">
@@ -916,7 +973,7 @@
        <item>
         <widget class="QToolButton" name="toolButton_layerImage">
          <property name="text">
-          <string>+</string>
+          <string>img</string>
          </property>
          <property name="icon">
           <iconset>
@@ -938,6 +995,49 @@
       </layout>
      </item>
      <item>
+      <layout class="QGridLayout" name="gridLayout">
+       <property name="horizontalSpacing">
+        <number>-1</number>
+       </property>
+       <property name="verticalSpacing">
+        <number>2</number>
+       </property>
+       <item row="2" column="0">
+        <widget class="QLabel" name="label_8">
+         <property name="text">
+          <string>Rotation</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <widget class="QSpinBox" name="spinBox_layerRotation"/>
+       </item>
+       <item row="0" column="2">
+        <widget class="QDoubleSpinBox" name="doubleSpinBox_layerPosY"/>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="label_7">
+         <property name="text">
+          <string>Scale</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="0">
+        <widget class="QLabel" name="label_6">
+         <property name="text">
+          <string>Pos</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QDoubleSpinBox" name="doubleSpinBox_layerScale"/>
+       </item>
+       <item row="0" column="1">
+        <widget class="QDoubleSpinBox" name="doubleSpinBox_layerPosX"/>
+       </item>
+      </layout>
+     </item>
+     <item>
       <spacer name="verticalSpacer_2">
        <property name="orientation">
         <enum>Qt::Orientation::Vertical</enum>
@@ -945,7 +1045,7 @@
        <property name="sizeHint" stdset="0">
         <size>
          <width>20</width>
-         <height>206</height>
+         <height>53</height>
         </size>
        </property>
       </spacer>

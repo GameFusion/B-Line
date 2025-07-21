@@ -62,9 +62,13 @@ using namespace GameFusion;
 //#include "TimeLineWidget.h"
 
 
+
 class FontAwesomeViewer : public QWidget
 {
 public:
+
+    static QFont fontAwesomeSolid;
+
     FontAwesomeViewer(QWidget *parent = nullptr) : QWidget(parent)
     {
         // Load Font Awesome font
@@ -81,8 +85,8 @@ public:
             return;
         }
 
-        QFont fontAwesome(fontFamilies.at(0));
-        fontAwesome.setPointSize(24);
+        fontAwesomeSolid = fontFamilies.at(0);
+        fontAwesomeSolid.setPointSize(12);
 
         QWidget *containerWidget = new QWidget(this);  // Container widget for the scroll area
         QVBoxLayout *layout = new QVBoxLayout(containerWidget);
@@ -91,7 +95,7 @@ public:
         for (int codePoint = 0xf000; codePoint <= 0xf3ff; ++codePoint) {
             QString iconText = QString(QChar(codePoint));
             QLabel *iconLabel = new QLabel(this);
-            iconLabel->setFont(fontAwesome);
+            iconLabel->setFont(fontAwesomeSolid);
             iconLabel->setText(iconText + " " + QString::number(codePoint, 16).toUpper());
             layout->addWidget(iconLabel);
         }
@@ -111,6 +115,7 @@ public:
     }
 };
 
+QFont FontAwesomeViewer::fontAwesomeSolid;
 
 TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
 {
@@ -694,13 +699,65 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(ui->layerListWidget, &QListWidget::itemChanged,
             this, &MainWindow::onLayerVisibilityChanged);
+    connect(ui->layerListWidget->model(), &QAbstractItemModel::rowsMoved,
+            this, &MainWindow::onLayerReordered);
+
+    // Connect UI widgets to PaintArea slots
+    connect(ui->comboBox_layerBlendMode, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &MainWindow::onLayerBlendMode);
+    connect(ui->toolButton_layerImage, &QToolButton::clicked,
+            this, &MainWindow::onLayerLoadImage);
+    connect(ui->spinBox_layerOpacity, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &MainWindow::onLayerOpacity);
+    connect(ui->toolButton_layerFX, &QToolButton::clicked,
+            this, &MainWindow::onLayerFX);
+    connect(ui->toolButton_layerAdd, &QToolButton::clicked,
+            this, &MainWindow::onLayerAdd);
+    connect(ui->toolButton_layerTrash, &QToolButton::clicked,
+            this, &MainWindow::onLayerDelete);
+    connect(ui->toolButton_layerMoveUp, &QToolButton::clicked,
+            this, &MainWindow::onLayerMoveUp);
+    connect(ui->toolButton_layerMoveDown, &QToolButton::clicked,
+            this, &MainWindow::onLayerMoveDown);
+
+    ui->layerListWidget->setDragDropMode(QAbstractItemView::InternalMove);
+    ui->layerListWidget->setDefaultDropAction(Qt::MoveAction);
+    //ui->layerListWidget->setSelectionMode(QAbstractItemView::SingleSelection);
+
+    // Initialize comboBox_layerBlendMode
+    ui->comboBox_layerBlendMode->clear();
+    ui->comboBox_layerBlendMode->addItems({"Normal", "Multiply", "Screen", "Overlay"});
+
+    // Connect new layer control widgets
+    connect(ui->spinBox_layerRotation, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &MainWindow::onLayerRotationChanged);
+    connect(ui->doubleSpinBox_layerPosX, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &MainWindow::onLayerPosXChanged);
+    connect(ui->doubleSpinBox_layerPosY, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &MainWindow::onLayerPosYChanged);
+    connect(ui->doubleSpinBox_layerScale, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &MainWindow::onLayerScaleChanged);
+    ///
+    ///
+
 
     connect(paint->getPaintArea(), &PaintArea::layerAdded,
             this, &MainWindow::onPaintAreaLayerAdded);
 
     connect(paint->getPaintArea(), &PaintArea::layerModified,
             this, &MainWindow::onPaintAreaLayerModified);
-    //ui->horizontalLayout_animScroll->
+
+
+    // Initialize new widgets
+    ui->spinBox_layerRotation->setRange(-3600, 3600);
+    ui->spinBox_layerRotation->setValue(0);
+    ui->doubleSpinBox_layerPosX->setRange(-38400, 38400);
+    ui->doubleSpinBox_layerPosX->setValue(0.0);
+    ui->doubleSpinBox_layerPosY->setRange(-38400, 38400);
+    ui->doubleSpinBox_layerPosY->setValue(0.0);
+    ui->doubleSpinBox_layerScale->setRange(0., 10.0);
+    ui->doubleSpinBox_layerScale->setSingleStep(0.01);
+    ui->doubleSpinBox_layerScale->setValue(1.0);
 
     ui->dockAttributes->setStyleSheet(R"(
     QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QListWidget, QPushButton {
@@ -725,6 +782,20 @@ MainWindow::MainWindow(QWidget *parent)
         font-size: 10pt;
     }
 )");
+
+    ui->toolButton_layerAdd->setFont(FontAwesomeViewer::fontAwesomeSolid);
+    ui->toolButton_layerDup->setFont(FontAwesomeViewer::fontAwesomeSolid);
+    ui->toolButton_layerImage->setFont(FontAwesomeViewer::fontAwesomeSolid);
+    ui->toolButton_layerTrash->setFont(FontAwesomeViewer::fontAwesomeSolid);
+    ui->toolButton_layerMoveUp->setFont(FontAwesomeViewer::fontAwesomeSolid);
+    ui->toolButton_layerMoveDown->setFont(FontAwesomeViewer::fontAwesomeSolid);
+
+    ui->toolButton_layerAdd->setText(QChar(0xF0FE));
+    ui->toolButton_layerDup->setText(QChar(0xF24D));
+    ui->toolButton_layerImage->setText(QChar(0xF03E));
+    ui->toolButton_layerTrash->setText(QChar(0xF2ED));
+    ui->toolButton_layerMoveUp->setText(QChar(0xf062));
+    ui->toolButton_layerMoveDown->setText(QChar(0xf063));
 
 
 	return;
@@ -1786,8 +1857,6 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     // Use UUID to look up the panel in your project data
     PanelContext panelContext = findPanelByUuid(uuid.toStdString());
 
-
-
     Scene *scene = panelContext.scene;
     Shot *shot = panelContext.shot;
     Panel *panel = panelContext.panel;
@@ -1832,6 +1901,7 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     //ui->dockLayers-> ... todo set panel content, and add check state for visibility per layer in list view with name
 
     // Populate layer list
+    /***
     ui->layerListWidget->clear();
     ui->layerListWidget->clear();
 
@@ -1853,7 +1923,31 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
 
         ui->layerListWidget->addItem(item);
     }
+    ***/
+    populateLayerList(panel);
+}
 
+void MainWindow::populateLayerList(GameFusion::Panel* panel) {
+    if (!panel) return;
+
+    ui->layerListWidget->clear();
+
+    if (panel->layers.empty()) {
+        GameFusion::Log().info() << "No layers in panel " << panel->uuid.c_str() << "\n";
+        return;
+    }
+
+    for (auto& layer : panel->layers) {
+        QString label = QString::fromStdString(layer.name);
+        QListWidgetItem* item = new QListWidgetItem(label);
+
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(layer.visible ? Qt::Checked : Qt::Unchecked);
+
+        item->setData(Qt::UserRole, QString::fromStdString(layer.uuid));
+
+        ui->layerListWidget->addItem(item);
+    }
 }
 
 void MainWindow::onLayerSelectionChanged(QListWidgetItem* current, QListWidgetItem* previous) {
@@ -1874,6 +1968,288 @@ void MainWindow::onLayerVisibilityChanged(QListWidgetItem* item) {
         layerContext.layer->visible = visible;
     }
 }
+
+
+void MainWindow::onLayerBlendMode(int index) {
+    GameFusion::BlendMode mode;
+    switch (index) {
+        case 0: mode = GameFusion::BlendMode::Normal; break;
+        case 1: mode = GameFusion::BlendMode::Multiply; break;
+        case 2: mode = GameFusion::BlendMode::Screen; break;
+        case 3: mode = GameFusion::BlendMode::Overlay; break;
+        default: return;
+    }
+
+    // get selected layer
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    for(auto selected: selectedLayers) {
+        QString uuid = selected->data(Qt::UserRole).toString();
+        LayerContext layerContext = findLayerByUuid(uuid.toStdString());
+        if(layerContext.isValid()){
+            layerContext.scene->dirty = true;
+            layerContext.layer->blendMode = mode;
+            paint->getPaintArea()->updateLayer(*layerContext.layer);
+        }
+    }
+}
+
+void MainWindow::onLayerLoadImage() {
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+
+    for(auto selected: selectedLayers) {
+        QString uuid = selected->data(Qt::UserRole).toString();
+        LayerContext layerContext = findLayerByUuid(uuid.toStdString());
+        if(layerContext.isValid()){
+
+            QString fileName = QFileDialog::getOpenFileName(this, tr("Open Image"), "", tr("Images (*.png *.jpg *.bmp)"));
+
+            if (!fileName.isEmpty()) {
+                layerContext.scene->dirty = true;
+                layerContext.layer->imageFilePath =  fileName.toStdString();
+                QImage image;
+                if (image.load(fileName)) {
+                    //layers[activeLayerIndex].image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+                    //layers[activeLayerIndex].layer.image = QString::fromLatin1(image.toPNG().toBase64()).toStdString();
+                    //updateCompositeImage();
+                    //update();
+
+                    paint->getPaintArea()->updateLayer(*layerContext.layer);
+                }
+            }
+
+        }
+        return; //
+    }
+
+}
+
+void MainWindow::onLayerOpacity(int value) {
+    float opacity = value / 100.0f; // Map 0-100 to 0.0-1.0
+
+    // get selected layer
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    for(auto selected: selectedLayers) {
+        QString uuid = selected->data(Qt::UserRole).toString();
+        LayerContext layerContext = findLayerByUuid(uuid.toStdString());
+        if(layerContext.isValid()){
+            layerContext.scene->dirty = true;
+            layerContext.layer->opacity = opacity;
+            paint->getPaintArea()->updateLayer(*layerContext.layer);
+        }
+    }
+}
+
+void MainWindow::onLayerAdd() {
+    if (!currentPanel)
+        return;
+
+    PanelContext panelContext = findPanelByUuid(currentPanel->uuid);
+    if(panelContext.isValid()){
+
+        GameFusion::Layer layer;
+        layer.name = "Layer " + std::to_string(currentPanel->layers.size() + 1);
+        currentPanel->layers.insert(currentPanel->layers.begin(), layer);
+
+        panelContext.scene->dirty = true;
+
+        long panelStartTime = panelContext.shot->startTime + currentPanel->startTime;
+        float fps = projectJson["fps"].toDouble();
+        paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, panelContext.shot->cameraFrames);
+
+        // Update Layer Panel
+        populateLayerList(panelContext.panel);
+    }
+}
+
+void MainWindow::onLayerDelete() {
+    int erasedCount(0);
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    for(auto selected: selectedLayers) {
+        std::string toDeleteUuid = selected->data(Qt::UserRole).toString().toStdString();
+
+        LayerContext layerContext = findLayerByUuid(toDeleteUuid.c_str());
+        if(layerContext.isValid()){
+            layerContext.scene->dirty = true;
+            int layerIndex = 0;
+            for(auto layer: layerContext.panel->layers){
+                if(layer.uuid == toDeleteUuid){
+                    layerContext.panel->layers.erase(layerContext.panel->layers.begin() + layerIndex);
+                    layerContext.scene->dirty = true;
+                    erasedCount ++;
+                    populateLayerList(layerContext.panel);
+                    break;
+                }
+                layerIndex++;
+            }
+        }
+    }
+
+    if(erasedCount > 0){
+        PanelContext panelContext = findPanelByUuid(currentPanel->uuid);
+        if(panelContext.isValid()){
+            long panelStartTime = panelContext.shot->startTime + currentPanel->startTime;
+            float fps = projectJson["fps"].toDouble();
+            paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, panelContext.shot->cameraFrames);
+        }
+    }
+}
+
+void MainWindow::onLayerFX() {
+
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    for(auto selected: selectedLayers) {
+        std::string toDeleteUuid = selected->data(Qt::UserRole).toString().toStdString();
+
+        LayerContext layerContext = findLayerByUuid(toDeleteUuid.c_str());
+        if(layerContext.isValid()){
+            layerContext.layer->fx = "blur";
+            layerContext.scene->dirty = true;
+            paint->getPaintArea()->updateLayer(*layerContext.layer);
+        }
+    }
+}
+
+void MainWindow::onLayerMoveUp() {
+    //int index = ui->layerListWidget->currentIndex();
+    int index = ui->layerListWidget->currentRow();
+
+    if (index > 0) {
+        QString text = ui->comboBox_layerBlendMode->itemText(index);
+        QVariant data = ui->comboBox_layerBlendMode->itemData(index);
+        ui->comboBox_layerBlendMode->removeItem(index);
+        ui->comboBox_layerBlendMode->insertItem(index - 1, text, data);
+        ui->comboBox_layerBlendMode->setCurrentIndex(index - 1);
+        // Optional: emit or handle reordering logic callback here
+
+        LayerContext layerContext = findLayerByUuid(data.toString().toStdString());
+        if(layerContext.isValid()){
+            layerContext.scene->dirty = true;
+            paint->getPaintArea()->updateLayer(*layerContext.layer);
+        }
+    }
+}
+
+void MainWindow::onLayerMoveDown() {
+    //int index = ui->comboBox_layerBlendMode->currentIndex();
+    int index = ui->layerListWidget->currentRow();
+    int count = ui->comboBox_layerBlendMode->count();
+    if (index < count - 1) {
+        QString text = ui->comboBox_layerBlendMode->itemText(index);
+        QVariant data = ui->comboBox_layerBlendMode->itemData(index);
+        ui->comboBox_layerBlendMode->removeItem(index);
+        ui->comboBox_layerBlendMode->insertItem(index + 1, text, data);
+        ui->comboBox_layerBlendMode->setCurrentIndex(index + 1);
+        // Optional: emit or handle reordering logic callback here
+
+        LayerContext layerContext = findLayerByUuid(data.toString().toStdString());
+        if(layerContext.isValid()){
+            layerContext.scene->dirty = true;
+            paint->getPaintArea()->updateLayer(*layerContext.layer);
+        }
+    }
+}
+
+void MainWindow::onLayerReordered(const QModelIndex &parent,
+                                  int start, int end,
+                                  const QModelIndex &destination, int row)
+{
+    // Sync layer order from QListWidget to panel->layers
+    if (!currentPanel) return;
+
+    std::vector<GameFusion::Layer> reordered;
+
+    for (int i = 0; i < ui->layerListWidget->count(); ++i) {
+        QListWidgetItem* item = ui->layerListWidget->item(i);
+        QString uuid = item->data(Qt::UserRole).toString();
+        auto it = std::find_if(currentPanel->layers.begin(), currentPanel->layers.end(),
+                               [&](const GameFusion::Layer& l) { return l.uuid == uuid.toStdString(); });
+        if (it != currentPanel->layers.end()) {
+            reordered.push_back(*it);
+        }
+    }
+
+    currentPanel->layers = std::move(reordered);
+
+    LayerContext layerContext = findLayerByUuid(currentPanel->uuid);
+    if(layerContext.isValid()){
+        layerContext.scene->dirty = true;
+        paint->getPaintArea()->updateLayer(*layerContext.layer);
+    }
+}
+
+
+void MainWindow::onLayerRotationChanged(int value) {
+    int index = ui->layerListWidget->currentRow();
+
+    if (index >= 0) {
+        QListWidgetItem* item = ui->layerListWidget->item(index);
+        if (!item) return;
+
+        QVariant data = item->data(Qt::UserRole);
+        LayerContext layerContext = findLayerByUuid(data.toString().toStdString());
+
+        if (layerContext.isValid()) {
+            layerContext.scene->dirty = true;
+            layerContext.layer->rotation = value;
+            paint->getPaintArea()->updateLayer(*layerContext.layer);
+        }
+    }
+}
+
+void MainWindow::onLayerPosXChanged(double value) {
+    int index = ui->layerListWidget->currentRow();
+
+    if (index >= 0) {
+        QListWidgetItem* item = ui->layerListWidget->item(index);
+        if (!item) return;
+
+        QVariant data = item->data(Qt::UserRole);
+        LayerContext layerContext = findLayerByUuid(data.toString().toStdString());
+
+        if (layerContext.isValid()) {
+            layerContext.scene->dirty = true;
+            layerContext.layer->x = value;
+            paint->getPaintArea()->updateLayer(*layerContext.layer);
+        }
+    }
+}
+
+void MainWindow::onLayerPosYChanged(double value) {
+    int index = ui->layerListWidget->currentRow();
+
+    if (index >= 0) {
+        QListWidgetItem* item = ui->layerListWidget->item(index);
+        if (!item) return;
+
+        QVariant data = item->data(Qt::UserRole);
+        LayerContext layerContext = findLayerByUuid(data.toString().toStdString());
+
+        if (layerContext.isValid()) {
+            layerContext.scene->dirty = true;
+            layerContext.layer->y = value;
+            paint->getPaintArea()->updateLayer(*layerContext.layer);
+        }
+    }
+}
+
+void MainWindow::onLayerScaleChanged(double value) {
+    int index = ui->layerListWidget->currentRow();
+
+    if (index >= 0) {
+        QListWidgetItem* item = ui->layerListWidget->item(index);
+        if (!item) return;
+
+        QVariant data = item->data(Qt::UserRole);
+        LayerContext layerContext = findLayerByUuid(data.toString().toStdString());
+
+        if (layerContext.isValid()) {
+            layerContext.scene->dirty = true;
+            layerContext.layer->scale = value;
+            paint->getPaintArea()->updateLayer(*layerContext.layer);
+        }
+    }
+}
+
 
 void MainWindow::onPaintAreaLayerModified(const Layer &modLayer) {
     // Do something with the modified layer
@@ -2118,6 +2494,7 @@ void MainWindow::onTimeCursorMoved(double time)
         if(theShot){
             paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraFrames);
             cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraFrames);
+            populateLayerList(currentPanel);
         }
 
         Log().debug() << "Loaded image: " << imagePath.toUtf8().constData() << "\n";
@@ -2128,6 +2505,7 @@ void MainWindow::onTimeCursorMoved(double time)
         if(theShot) {
             paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraFrames);
             cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraFrames);
+            populateLayerList(currentPanel);
         }
     }
 }
@@ -2656,3 +3034,5 @@ void MainWindow::onCameraFrameUpdated(const GameFusion::CameraFrame& frame) {
 void MainWindow::onCameraFrameDeleted(const QString& uuid) {
     scriptBreakdown->deleteCameraFrame(uuid.toStdString());
 }
+
+

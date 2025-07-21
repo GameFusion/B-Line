@@ -163,11 +163,14 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
                     layer.name = layerObj["name"].toString().toStdString();
                     layer.thumbnail = layerObj["thumbnail"].toString().toStdString();
                     layer.opacity = float(layerObj["opacity"].toDouble(1.0));
+                    layer.fx = layerObj["opacity"].toString().toStdString();
+                    layer.blendMode = blendModeFromString(layerObj["blendMode"].toString().toStdString());
                     layer.visible = layerObj["visible"].toBool(true);
                     layer.x = float(layerObj["x"].toDouble());
                     layer.y = float(layerObj["y"].toDouble());
                     layer.scale = float(layerObj["scale"].toDouble(1.0));
                     layer.rotation = float(layerObj["rotation"].toDouble(0.0));
+                    layer.imageFilePath = layerObj["imageFilePath"].toString().toStdString();
 
                     // Keyframes
                     if (layerObj.contains("keyframes")) {
@@ -872,7 +875,10 @@ void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
                         layerObj["uuid"] = QString::fromStdString(layer.uuid);
                         layerObj["name"] = QString::fromStdString(layer.name);
                         layerObj["thumbnail"] = QString::fromStdString(layer.thumbnail);
+                        layerObj["imageFilePath"] = QString::fromStdString(layer.imageFilePath);
                         layerObj["opacity"] = layer.opacity;
+                        layerObj["fx"] = QString::fromStdString(layer.fx);
+                        layerObj["blendMode"] = QString::fromStdString(toString(layer.blendMode));
                         layerObj["visible"] = layer.visible;
                         layerObj["x"] = layer.x;
                         layerObj["y"] = layer.y;
