@@ -5,6 +5,7 @@
 
 #include <vector>
 #include <QPointF>
+#include "StrokeProperties.h"
 #include "Vector3D.h"
 
 namespace GameFusion {
@@ -54,9 +55,19 @@ public:
 
     int size(){return handles_.size();}
 
+    // Get and set stroke properties
+    void setStrokeProperties(const StrokeProperties& props) {
+        strokeProperties_ = props;
+    }
+    const StrokeProperties& getStrokeProperties() const {
+        return strokeProperties_;
+    }
+
 private:
     std::vector<BezierControl> handles_; // Control points defining the curve
     std::vector<Vector3D> vertices_;    // Generated vertices for rendering
+    StrokeProperties strokeProperties_; // Per-stroke attributes
+
 };
 
 } // namespace GameFusion

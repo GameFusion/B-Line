@@ -797,8 +797,63 @@ MainWindow::MainWindow(QWidget *parent)
     ui->toolButton_layerMoveUp->setText(QChar(0xf062));
     ui->toolButton_layerMoveDown->setText(QChar(0xf063));
 
+    paint->createTools(&FontAwesomeViewer::fontAwesomeSolid);
 
-	return;
+    //
+
+    StrokeAttributeDockWidget *strokeDock = new StrokeAttributeDockWidget(this);
+    addDockWidget(Qt::RightDockWidgetArea, strokeDock);
+
+    connect(strokeDock, &StrokeAttributeDockWidget::strokePropertiesChanged,
+            paint->getPaintArea(), &PaintArea::setStrokeProperties);
+
+    strokeDock->setStyleSheet("QLabel { font-size: 10px; } QSlider, QComboBox, QSpinBox { margin-bottom: 4px; }");
+
+    strokeDock->setStyleSheet(R"(
+QLabel {
+    font-size: 10px;
+}
+
+QSlider {
+    min-height: 16px;
+}
+
+QSlider::groove:horizontal {
+    height: 6px;
+    border-radius: 3px;
+}
+
+QSlider::handle:horizontal {
+    background: #999;
+    border: 1px solid #999;
+    width: 14px;
+    height: 14px;
+    margin: -5px 0; /* centers handle vertically */
+    border-radius: 7px;
+}
+
+QSlider::groove:vertical {
+    border: 1px solid #ccc;
+    width: 6px;
+    background: #eee;
+    border-radius: 3px;
+}
+
+QSlider::handle:vertical {
+    background: #999;
+    border: 1px solid #777;
+    width: 12px;
+    height: 12px;
+    margin: 0 -4px; /* centers handle horizontally */
+    border-radius: 6px;
+}
+
+QComboBox, QSpinBox {
+    margin-bottom: 4px;
+}
+)");
+
+    return;
 	//
 	QList <int> list;
 	list += 150;

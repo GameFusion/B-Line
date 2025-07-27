@@ -12,6 +12,7 @@
 #include "GameTime.h"
 #include "ScriptBreakdown.h"
 #include "LlamaClient.h"
+#include "StrokeAttributeDockWidget.h"
 
 class LlamaModel;
 class TimeLineView;
@@ -211,6 +212,8 @@ protected:
 
     // Camera side panel and attribute editor
     CameraSidePanel *cameraSidePanel = nullptr;
+
+    //
 
     // The Script
     PerfectScriptWidget *perfectScript = nullptr;

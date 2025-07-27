@@ -200,8 +200,11 @@ INCLUDEPATH += $$GF/Applications/LlamaEngine
 SOURCES += ../CameraSidePanel.cpp
 HEADERS += ../CameraSidePanel.h
 
+SOURCES += ../StrokeAttributeDockWidget.cpp
+HEADERS += ../StrokeAttributeDockWidget.h
+
 SOURCES += ../BezierCurve.cpp
-HEADERS += ../BezierCurve.h
+HEADERS += ../BezierCurve.h ../StrokeProperties.h
 
 # Input source files
 SOURCES +=  \
