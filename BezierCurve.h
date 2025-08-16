@@ -63,6 +63,12 @@ public:
         return strokeProperties_;
     }
 
+    // Iterator support
+    auto begin() { return handles_.begin(); }
+    auto end() { return handles_.end(); }
+    auto begin() const { return handles_.begin(); }
+    auto end() const { return handles_.end(); }
+
 private:
     std::vector<BezierControl> handles_; // Control points defining the curve
     std::vector<Vector3D> vertices_;    // Generated vertices for rendering

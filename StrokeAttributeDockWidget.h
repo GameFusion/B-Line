@@ -31,6 +31,7 @@ private slots:
     void updateMaxWidthLabel(int value);
     void updateMinWidthLabel(int value);
     void updateSamplingLabel(int value);
+    void updateTaperLabel(int value);
     void emitStrokeProperties();
     void selectForegroundColor();
     void selectBackgroundColor();
@@ -45,6 +46,8 @@ private:
     QSlider *minWidthSlider;
     QLabel *minWidthLabel;
     QSlider *samplingSlider;
+    QLabel *taperLabel;
+    QSlider *taperSlider;
     QLabel *samplingLabel;
     QComboBox *variableWidthCombo;
     QPushButton *foregroundColorButton;

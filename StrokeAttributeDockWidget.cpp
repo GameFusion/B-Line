@@ -64,6 +64,18 @@ StrokeAttributeDockWidget::StrokeAttributeDockWidget(QWidget *parent)
     layout->addLayout(titleValue);
     layout->addWidget(samplingSlider);
 
+    // Bézier sampling slider (5 to 100)
+    titleValue = new QHBoxLayout;
+    taperSlider = new QSlider(Qt::Horizontal);
+    taperSlider->setRange(0, 40);
+    taperSlider->setValue(10); // Default: 10
+    taperLabel = new QLabel("1");
+    titleValue->addWidget(new QLabel("Taper timing:"));
+    titleValue->addWidget(taperLabel);
+    titleValue->addStretch(1);
+    layout->addLayout(titleValue);
+    layout->addWidget(taperSlider);
+
     // Variable width mode combo box
     layout->addWidget(new QLabel("Width Variation:"));
     variableWidthCombo = new QComboBox;
@@ -117,6 +129,8 @@ StrokeAttributeDockWidget::StrokeAttributeDockWidget(QWidget *parent)
     connect(minWidthSlider, &QSlider::valueChanged, this, &StrokeAttributeDockWidget::emitStrokeProperties);
     connect(samplingSlider, &QSlider::valueChanged, this, &StrokeAttributeDockWidget::updateSamplingLabel);
     connect(samplingSlider, &QSlider::valueChanged, this, &StrokeAttributeDockWidget::emitStrokeProperties);
+    connect(taperSlider, &QSlider::valueChanged, this, &StrokeAttributeDockWidget::updateTaperLabel);
+    connect(taperSlider, &QSlider::valueChanged, this, &StrokeAttributeDockWidget::emitStrokeProperties);
     connect(variableWidthCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &StrokeAttributeDockWidget::emitStrokeProperties);
     connect(foregroundColorButton, &QPushButton::clicked, this, &StrokeAttributeDockWidget::selectForegroundColor);
@@ -146,6 +160,13 @@ void StrokeAttributeDockWidget::updateMinWidthLabel(int value)
 void StrokeAttributeDockWidget::updateSamplingLabel(int value)
 {
     samplingLabel->setText(QString("%1").arg(value));
+    emitStrokeProperties();
+}
+
+void StrokeAttributeDockWidget::updateTaperLabel(int value)
+{
+    double displayValue = value / 10.0; // convert int slider value to float
+    taperLabel->setText(QString::number(displayValue, 'f', 1));
     emitStrokeProperties();
 }
 
@@ -185,6 +206,7 @@ void StrokeAttributeDockWidget::emitStrokeProperties()
     props.foregroundColor = foregroundColor;
     props.backgroundColor = backgroundColor;
     props.colorMode = static_cast<StrokeProperties::ColorMode>(colorModeCombo->currentIndex());
+    props.taperControl = taperSlider->value() / 10.0;
     emit strokePropertiesChanged(props);
 }
 
@@ -199,5 +221,6 @@ StrokeProperties StrokeAttributeDockWidget::getStrokeProperties() const
     props.foregroundColor = foregroundColor;
     props.backgroundColor = backgroundColor;
     props.colorMode = static_cast<StrokeProperties::ColorMode>(colorModeCombo->currentIndex());
+    props.taperControl = taperSlider->value() / 10.0;
     return props;
 }

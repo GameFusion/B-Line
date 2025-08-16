@@ -646,7 +646,6 @@ MainWindow::MainWindow(QWidget *parent)
     connect(cameraSidePanel, &CameraSidePanel::cameraFrameUpdated,
             paint->getPaintArea(), &PaintArea::updateCameraFrameUI);
 
-
 	//
 	// Test image in shot tree
 	//new QTreeWidgetItem(shotsTreeWidget);
@@ -1365,6 +1364,7 @@ void MainWindow::updateTimeline(){
                 ShotContext shotContext = findShotByUuid(segment->getUuid().toUtf8().constData());
                 if (shotContext.isValid()) {
                     shotContext.scene->dirty = true;
+                    updateWindowTitle(true);
                     Shot *shot = shotContext.shot;
 
                     //shot->startTime = newStartTime;
@@ -1400,6 +1400,7 @@ void MainWindow::updateTimeline(){
                 if (panelContext.isValid()) {
 
                     panelContext.scene->dirty = true;
+                    updateWindowTitle(true);
 
                     Panel *panel = panelContext.panel;
                     panel->startTime = newStartTime;
@@ -1767,7 +1768,7 @@ void MainWindow::loadProject(QString projectDir){
 
     loadAudioTracks();
 
-
+    this->updateWindowTitle(false);
 }
 
 void MainWindow::loadScript() {
@@ -2020,6 +2021,7 @@ void MainWindow::onLayerVisibilityChanged(QListWidgetItem* item) {
     LayerContext layerContext = findLayerByUuid(uuid.toStdString());
     if(layerContext.isValid()){
         layerContext.scene->dirty = true;
+        updateWindowTitle(true);
         layerContext.layer->visible = visible;
     }
 }
@@ -2042,6 +2044,7 @@ void MainWindow::onLayerBlendMode(int index) {
         LayerContext layerContext = findLayerByUuid(uuid.toStdString());
         if(layerContext.isValid()){
             layerContext.scene->dirty = true;
+            updateWindowTitle(true);
             layerContext.layer->blendMode = mode;
             paint->getPaintArea()->updateLayer(*layerContext.layer);
         }
@@ -2060,6 +2063,7 @@ void MainWindow::onLayerLoadImage() {
 
             if (!fileName.isEmpty()) {
                 layerContext.scene->dirty = true;
+                updateWindowTitle(true);
                 layerContext.layer->imageFilePath =  fileName.toStdString();
                 QImage image;
                 if (image.load(fileName)) {
@@ -2088,6 +2092,7 @@ void MainWindow::onLayerOpacity(int value) {
         LayerContext layerContext = findLayerByUuid(uuid.toStdString());
         if(layerContext.isValid()){
             layerContext.scene->dirty = true;
+            updateWindowTitle(true);
             layerContext.layer->opacity = opacity;
             paint->getPaintArea()->updateLayer(*layerContext.layer);
         }
@@ -2106,6 +2111,7 @@ void MainWindow::onLayerAdd() {
         currentPanel->layers.insert(currentPanel->layers.begin(), layer);
 
         panelContext.scene->dirty = true;
+        updateWindowTitle(true);
 
         long panelStartTime = panelContext.shot->startTime + currentPanel->startTime;
         float fps = projectJson["fps"].toDouble();
@@ -2125,11 +2131,13 @@ void MainWindow::onLayerDelete() {
         LayerContext layerContext = findLayerByUuid(toDeleteUuid.c_str());
         if(layerContext.isValid()){
             layerContext.scene->dirty = true;
+            updateWindowTitle(true);
             int layerIndex = 0;
             for(auto layer: layerContext.panel->layers){
                 if(layer.uuid == toDeleteUuid){
                     layerContext.panel->layers.erase(layerContext.panel->layers.begin() + layerIndex);
                     layerContext.scene->dirty = true;
+                    updateWindowTitle(true);
                     erasedCount ++;
                     populateLayerList(layerContext.panel);
                     break;
@@ -2159,6 +2167,7 @@ void MainWindow::onLayerFX() {
         if(layerContext.isValid()){
             layerContext.layer->fx = "blur";
             layerContext.scene->dirty = true;
+            updateWindowTitle(true);
             paint->getPaintArea()->updateLayer(*layerContext.layer);
         }
     }
@@ -2179,6 +2188,7 @@ void MainWindow::onLayerMoveUp() {
         LayerContext layerContext = findLayerByUuid(data.toString().toStdString());
         if(layerContext.isValid()){
             layerContext.scene->dirty = true;
+            updateWindowTitle(true);
             paint->getPaintArea()->updateLayer(*layerContext.layer);
         }
     }
@@ -2199,6 +2209,7 @@ void MainWindow::onLayerMoveDown() {
         LayerContext layerContext = findLayerByUuid(data.toString().toStdString());
         if(layerContext.isValid()){
             layerContext.scene->dirty = true;
+            updateWindowTitle(true);
             paint->getPaintArea()->updateLayer(*layerContext.layer);
         }
     }
@@ -2228,6 +2239,7 @@ void MainWindow::onLayerReordered(const QModelIndex &parent,
     LayerContext layerContext = findLayerByUuid(currentPanel->uuid);
     if(layerContext.isValid()){
         layerContext.scene->dirty = true;
+        updateWindowTitle(true);
         paint->getPaintArea()->updateLayer(*layerContext.layer);
     }
 }
@@ -2245,6 +2257,7 @@ void MainWindow::onLayerRotationChanged(int value) {
 
         if (layerContext.isValid()) {
             layerContext.scene->dirty = true;
+            updateWindowTitle(true);
             layerContext.layer->rotation = value;
             paint->getPaintArea()->updateLayer(*layerContext.layer);
         }
@@ -2263,6 +2276,7 @@ void MainWindow::onLayerPosXChanged(double value) {
 
         if (layerContext.isValid()) {
             layerContext.scene->dirty = true;
+            updateWindowTitle(true);
             layerContext.layer->x = value;
             paint->getPaintArea()->updateLayer(*layerContext.layer);
         }
@@ -2281,6 +2295,7 @@ void MainWindow::onLayerPosYChanged(double value) {
 
         if (layerContext.isValid()) {
             layerContext.scene->dirty = true;
+            updateWindowTitle(true);
             layerContext.layer->y = value;
             paint->getPaintArea()->updateLayer(*layerContext.layer);
         }
@@ -2299,6 +2314,7 @@ void MainWindow::onLayerScaleChanged(double value) {
 
         if (layerContext.isValid()) {
             layerContext.scene->dirty = true;
+            updateWindowTitle(true);
             layerContext.layer->scale = value;
             paint->getPaintArea()->updateLayer(*layerContext.layer);
         }
@@ -2318,6 +2334,7 @@ void MainWindow::onPaintAreaLayerModified(const Layer &modLayer) {
     if(layerContext.isValid()){
         *layerContext.layer = modLayer; // issue on free Bezier list after this point
         layerContext.scene->dirty = true;
+        updateWindowTitle(true);
         //layerContext.layer->visible = visible;
     }
 /*
@@ -2339,6 +2356,7 @@ void MainWindow::onPaintAreaLayerAdded(const Layer& layer) {
         PanelContext panelContext = findPanelByUuid(currentPanel->uuid);
         if(panelContext.isValid()){
             panelContext.scene->dirty = true;
+            updateWindowTitle(true);
         }
     }
 
@@ -3090,4 +3108,14 @@ void MainWindow::onCameraFrameDeleted(const QString& uuid) {
     scriptBreakdown->deleteCameraFrame(uuid.toStdString());
 }
 
+void MainWindow::updateWindowTitle(bool isModified) {
+    QString projectName = projectJson["projectName"].toString("Untitled Project");
+    QString title = projectName;
 
+    if (isModified) {
+        title += " *";
+    }
+
+    title += " - B-Line";
+    setWindowTitle(title);
+}

@@ -175,6 +175,8 @@ protected:
     void loadAudioTracks();
     void loadScript();
 
+    void updateWindowTitle(bool isModified);
+
 protected:
 	Ui::MainWindowBoarder *ui;
 

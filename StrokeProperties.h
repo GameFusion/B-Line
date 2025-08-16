@@ -27,6 +27,11 @@ struct StrokeProperties {
     QColor foregroundColor = Qt::black;
     QColor backgroundColor = Qt::gray;
     ColorMode colorMode = SolidForeground;
+
+
+    // taperControl > 1 → longer tapered ends, shorter full-width section
+    // taperControl < 1 → shorter tapered ends, longer full-width section
+    float taperControl = 0.5; // e.g. 1.0 = normal, 2.0 = more tapered ends
 };
 
 #endif

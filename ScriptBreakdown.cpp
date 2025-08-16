@@ -195,35 +195,48 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
                         }
                     }
 
+                    // Load strokes
                     if (layerObj.contains("strokes")) {
                         QJsonArray strokeArray = layerObj["strokes"].toArray();
+                        //layer.strokes.clear(); // Clear existing strokes
 
-                        for (const auto& pathVal : strokeArray) {
-                            QJsonArray pathArray = pathVal.toArray();
+                        for (const auto& strokeVal : strokeArray) {
+
                             GameFusion::BezierCurve path;
+                            if(strokeVal.isObject()){
 
-                            for (const auto& controlPointsVal : pathArray) {
-                                QJsonArray controlPoints = controlPointsVal.toArray();
+                                QJsonObject strokeObj = strokeVal.toObject();
 
-                                if (controlPoints.size() != 3) continue;  // Safety check
-
-                                QJsonArray pArray = controlPoints[0].toArray();
-                                QJsonArray lArray = controlPoints[1].toArray();
-                                QJsonArray rArray = controlPoints[2].toArray();
-
-                                if (pArray.size() < 2 || lArray.size() < 2 || rArray.size() < 2) continue;
-
-                                Vector3D p(pArray[0].toDouble(), pArray[1].toDouble(), 0);
-                                Vector3D l(lArray[0].toDouble(), lArray[1].toDouble(), 0);
-                                Vector3D r(rArray[0].toDouble(), rArray[1].toDouble(), 0);
-
-                                path += GameFusion::BezierControl(p, l, r);
+                                path.fromJson(strokeObj); // Deserialize handles and strokeProperties
+                                layer.strokes.push_back(path);
                             }
+                            else {
+                                QJsonArray pathArray = strokeVal.toArray();
 
-                            layer.strokes.push_back(path);
-                            //layer.strokes.emplace_back(path);
+                                for (const auto& controlPointsVal : pathArray) {
+                                    QJsonArray controlPoints = controlPointsVal.toArray();
+
+                                    if (controlPoints.size() != 3) continue;  // Safety check
+
+                                    QJsonArray pArray = controlPoints[0].toArray();
+                                    QJsonArray lArray = controlPoints[1].toArray();
+                                    QJsonArray rArray = controlPoints[2].toArray();
+
+                                    if (pArray.size() < 2 || lArray.size() < 2 || rArray.size() < 2) continue;
+
+                                    Vector3D p(pArray[0].toDouble(), pArray[1].toDouble(), 0);
+                                    Vector3D l(lArray[0].toDouble(), lArray[1].toDouble(), 0);
+                                    Vector3D r(rArray[0].toDouble(), rArray[1].toDouble(), 0);
+
+                                    path += GameFusion::BezierControl(p, l, r);
+                                }
+
+                                layer.strokes.push_back(path);
+                            }
                         }
                     }
+
+
 
                     panel.layers.push_back(layer); // this is not working great
                     // todo change stratagy to re
@@ -887,33 +900,11 @@ void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
 
                         // Save strokes
                         QJsonArray strokeArray;
-
-                        for(GameFusion::BezierCurve &path: layer.strokes)
-                        //for (int i = 0; i < layer.strokes.length(); ++i)
-                        {
-                            QJsonArray pathArray;
-                            //GameFusion::BezierPath &path = layer.strokes[i];
-
-                            for (int j = 0; j < path.size(); ++j) {
-                                BezierControl &handle = path[j];
-                                const Vector3D &p = handle.point;
-                                const Vector3D &l = handle.leftControl;
-                                const Vector3D &r = handle.rightControl;
-
-                                QJsonArray pArray, lArray, rArray;
-                                pArray << p.x() << p.y();
-                                lArray << l.x() << l.y();
-                                rArray << r.x() << r.y();
-
-                                QJsonArray controlPoints;
-                                controlPoints << pArray << lArray << rArray;
-
-                                pathArray.append(controlPoints);
-                            }
-
-                            strokeArray.append(pathArray);
+                        for (const GameFusion::BezierCurve& path : layer.strokes) {
+                            QJsonObject strokeObj;
+                            path.toJson(strokeObj); // Serialize handles and strokeProperties
+                            strokeArray.append(strokeObj);
                         }
-
                         layerObj["strokes"] = strokeArray;
 
                         // Keyframes
