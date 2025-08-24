@@ -29,6 +29,7 @@
 #include "MainWindowPaint.h"
 #include "paintarea.h"
 #include "LlamaModel.h"
+#include "PromptLogger.h"
 #include "BreakdownWorker.h"
 #include "ErrorDialog.h"
 #include "CameraSidePanel.h"
@@ -513,7 +514,7 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
 }
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), ui(new Ui::MainWindowBoarder), llamaModel(nullptr), scriptBreakdown(nullptr)
+    : QMainWindow(parent), ui(new Ui::MainWindowBoarder), llamaModel(nullptr), scriptBreakdown(nullptr), logger(new PromptLogger())
 {
 	ui->setupUi(this);
 
@@ -1190,7 +1191,7 @@ void MainWindow::importScript()
 
     float fps = projectJson["fps"].toDouble();
 
-    scriptBreakdown = new ScriptBreakdown(fileName.toStdString().c_str(), fps, dictionary, dictionaryCustom, llamaClient);
+    scriptBreakdown = new ScriptBreakdown(fileName.toStdString().c_str(), fps, dictionary, dictionaryCustom, llamaClient, logger);
 
 
     // Threaded breakdown using QThread
@@ -1541,6 +1542,8 @@ bool MainWindow::consoleCommand(const QString &the_command_line)
         }
 
         QString prompt = the_command_line;
+        QElapsedTimer timer;
+        timer.start();
         QString response = llamaModel->generateResponse(
             prompt,
             [](const QString &msg){
@@ -1552,6 +1555,27 @@ bool MainWindow::consoleCommand(const QString &the_command_line)
                 QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
             }
             );
+
+        qint64 processingTimeMs = timer.elapsed();
+
+        QJsonObject contextJson;
+        contextJson["response"] = response;
+        contextJson["context_info"] = llamaModel->getContextInfo();
+        contextJson["model"] =  llamaModel->getModelFile();
+        contextJson["vendor"] = llamaModel->getVendor();
+        contextJson["location"] = llamaModel->getLocation();
+        contextJson["api_tech"] = llamaModel->getApiTech();
+        contextJson["processing_time"] = processingTimeMs;
+        logger->logPromptAndResult("console", prompt.toStdString(), response.toStdString(), llamaModel->getLatestTokenCount(), llamaModel->getLatestCost(), contextJson);
+
+        QJsonDocument doc = QJsonDocument::fromJson(response.toUtf8());
+        if (!doc.isNull()) {
+           // Process JSON response (e.g., update UI)
+           Log::info() << "Console command processed: " << prompt.toUtf8().constData() << "\n";
+        } else {
+           Log::error("Invalid JSON response from console command\n");
+        }
+
         qDebug() << "Response: " << response;
     }
     else
@@ -1796,6 +1820,7 @@ void MainWindow::loadScript() {
     if(projectJson.contains("script")) {
         fileName = currentProjectPath + "/" + projectJson["script"].toString();
         scriptBreakdown = new ScriptBreakdown(fileName.toStdString().c_str(), fps, dictionary, dictionaryCustom, llamaClient);
+
         if(!scriptBreakdown->load()) {
             Log().error() << "Error(s) importing script: " << scriptBreakdown->error() << "\n";
             Log().info() << "Error(s) importing script: " << scriptBreakdown->error() << "\n";
@@ -1806,7 +1831,7 @@ void MainWindow::loadScript() {
         }
     }
     else
-        scriptBreakdown = new ScriptBreakdown(fileName.toStdString().c_str(), fps, dictionary, dictionaryCustom, llamaClient);
+        scriptBreakdown = new ScriptBreakdown(fileName.toStdString().c_str(), fps, dictionary, dictionaryCustom, llamaClient, logger);
 }
 
 ShotContext MainWindow::findShotByUuid(const std::string& uuid) {

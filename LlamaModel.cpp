@@ -109,3 +109,34 @@ QString LlamaModel::getContextInfo(){
     }
     return "Llama client is unloaded";
 }
+
+QString LlamaModel::getModelFile() {
+    if(client){
+        return client->getModelFile().c_str();
+    }
+    return "Llama client is unloaded";
+}
+
+QString LlamaModel::getVendor() {
+    return "LlamaEngine"; // alternativly this could be an interface to OpenAI, grok, claude, other
+}
+
+QString LlamaModel::getLocation() {
+    return "local";
+}
+
+QString LlamaModel::getApiTech() {
+    return "LlamaEngine";
+}
+
+int LlamaModel::getLatestTokenCount() {
+    if(client)
+        return client->getLatestTokenCount();
+    return 0;
+}
+
+double LlamaModel::getLatestCost() {
+    if(client)
+        return client->getLatestCost();
+    return 0.0;
+}

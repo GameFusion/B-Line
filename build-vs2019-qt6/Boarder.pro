@@ -180,6 +180,7 @@ SOURCES += $$GF/Applications/CommonQt/QtUtils.cpp
 
 QT += opengl
 QT += widgets
+QT += network
 CONFIG += qt thread release
 
 # Input
@@ -193,6 +194,9 @@ HEADERS += ../ScriptBreakdown.h ../BreakdownWorker.h ../ErrorDialog.h
 
 SOURCES += ../LlamaModel.cpp
 HEADERS += ../LlamaModel.h
+
+SOURCES += ../PromptLogger.cpp
+HEADERS += ../PromptLogger.h
 
 SOURCES += $$GF/Applications/LlamaEngine/LlamaClient.cpp
 INCLUDEPATH += $$GF/Applications/LlamaEngine

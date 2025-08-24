@@ -21,6 +21,8 @@ struct Dialog {
 };
 */
 
+class PromptLogger;
+
 struct Camera {
     std::string movement; // e.g., "PAN LEFT", "STATIC"
     std::string framing;  // e.g., "OVER-THE-SHOULDER", "WIDE ANGLE"
@@ -293,7 +295,7 @@ public:
         ChunkedContext // Break context into smaller prompts
     };
 
-    ScriptBreakdown(const Str& fileName, const float fps, GameScript* dictionary = nullptr, GameScript* dictionaryCustom = nullptr, LlamaClient* client=nullptr);
+    ScriptBreakdown(const Str& fileName, const float fps, GameScript* dictionary = nullptr, GameScript* dictionaryCustom = nullptr, LlamaClient* client=nullptr, PromptLogger* logger = nullptr);
     ~ScriptBreakdown();
 
     bool breakdownScript(BreakdownMode mode = BreakdownMode::FullContext, bool enableSequences = false);
@@ -336,6 +338,7 @@ private:
     static void finishedCallback(const char* msg, void* user_data);
 
     LlamaClient* llamaClient;
+    PromptLogger* logger;
 
     float fps;
 };

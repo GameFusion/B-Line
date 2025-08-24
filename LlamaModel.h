@@ -32,6 +32,12 @@ public:
                              std::function<void(const QString &)> callbackFinished);
 
     QString getContextInfo();
+    QString getModelFile();
+    QString getVendor();
+    QString getLocation();
+    QString getApiTech();
+    int     getLatestTokenCount();
+    double  getLatestCost();
 
 signals:
     void responseGenerated(const QString &piece); // Signal to emit each piece of the response

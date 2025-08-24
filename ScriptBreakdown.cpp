@@ -9,6 +9,7 @@
 
 #include "Paragraph.h"
 #include "LlamaClient.h"
+#include "PromptLogger.h"
 
 namespace GameFusion {
 
@@ -16,8 +17,8 @@ struct CallbackData {
     std::string result;
 };
 
-ScriptBreakdown::ScriptBreakdown(const Str& fileName, const float fps, GameScript* dictionary, GameScript* dictionaryCustom, LlamaClient* llamaClient)
-    : Script(fileName, dictionary, dictionaryCustom), fps(fps), llamaClient(llamaClient) {}
+ScriptBreakdown::ScriptBreakdown(const Str& fileName, const float fps, GameScript* dictionary, GameScript* dictionaryCustom, LlamaClient* llamaClient, PromptLogger* logger)
+    : Script(fileName, dictionary, dictionaryCustom), fps(fps), llamaClient(llamaClient), logger(logger) {}
 
 ScriptBreakdown::~ScriptBreakdown() {}
 
@@ -374,6 +375,30 @@ bool ScriptBreakdown::processShots(Scene& scene, int sceneIndex, BreakdownMode m
             Log::error("Failed to generate shots for scene: %s\n", scene.name.c_str());
             return false;
         }
+
+        // Log prompt and result (assuming tokenCount and cost are provided by LlamaClient)
+        int tokenCount = 0; // TODO: Get from LlamaClient
+        double cost = 0.0;  // TODO: Get from LlamaClient
+
+        QJsonObject contextJson;
+        contextJson["sceneId"] = QString::fromStdString(scene.sceneId);
+        contextJson["sceneName"] = QString::fromStdString(scene.name);
+
+        logger->logPromptAndResult("shots", prompt, callbackData.result, tokenCount, cost, contextJson);
+
+        QString cleanData = cleanJsonMessage(QString::fromStdString(callbackData.result));
+        QJsonDocument doc = QJsonDocument::fromJson(cleanData.toUtf8());
+        if (!doc.isNull()) {
+            QJsonArray shotsArray = doc.array();
+            for (const auto& shotJson : shotsArray) {
+                QJsonObject shotObj = shotJson.toObject();
+                if (!shotObj.contains("name")) {
+                    QString shotName = Str().sprintf("SHOT_%04d", ++shotCount * 10).c_str();
+                    shotObj["name"] = shotName;
+                }
+                addShotFromJson(shotObj, scene);
+            }
+        }
     } else { // ChunkedContext
         for (int i = sceneIndex; i < m_paragraphs.length(); ++i) {
             Paragraph& p = m_paragraphs[i];
@@ -390,6 +415,18 @@ bool ScriptBreakdown::processShots(Scene& scene, int sceneIndex, BreakdownMode m
                 Log::error("Failed to generate shots for chunk in scene: %s\n", scene.name.c_str());
                 continue;
             }
+
+            // Structure prompt, result and context in json
+            QJsonObject contextJson;
+            contextJson["sceneId"] = QString::fromStdString(scene.sceneId);
+            contextJson["sceneName"] = QString::fromStdString(scene.name);
+            contextJson["paragraphIndex"] = i;
+
+            // Log prompt and result
+            int tokenCount = 0; // TODO: Get from LlamaClient
+            double cost = 0.0;  // TODO: Get from LlamaClient
+            logger->logPromptAndResult("shots", prompt, callbackData.result, tokenCount, cost, contextJson);
+
             const QString cleanData = cleanJsonMessage(callbackData.result.c_str());
             QJsonDocument doc = QJsonDocument::fromJson(cleanData.toUtf8());
             if (!doc.isNull()) {
@@ -464,6 +501,12 @@ bool ScriptBreakdown::processShots(Scene& scene, int sceneIndex, BreakdownMode m
             return false;
         }
 
+        QJsonObject contextJson;
+        contextJson["sceneId"] = QString::fromStdString(scene.sceneId);
+        contextJson["sceneName"] = QString::fromStdString(scene.name);
+        contextJson["repair"] = true;
+        logger->logPromptAndResult("shots_repair", repairPrompt.toStdString(), callbackDataFix.result, 0, 0.0, contextJson); // Log repair attempt
+
         QString fixedData = cleanJsonMessage(callbackDataFix.result.c_str());
         // create a prompt and
         // save again with fix suffix
@@ -529,6 +572,10 @@ bool ScriptBreakdown::processSequences() {
         return false;
     }
 
+    QJsonObject contextJson;
+    contextJson["contextType"] = "sequences";
+    logger->logPromptAndResult("sequences", prompt, callbackData.result, 0, 0.0, contextJson); // TODO: Get tokens/cost
+
     QString cleanData = cleanJsonMessage(callbackData.result.c_str());
     QJsonDocument doc = QJsonDocument::fromJson(cleanData.toUtf8());
     if (doc.isNull()) {
@@ -579,6 +626,10 @@ bool ScriptBreakdown::processActs(BreakdownMode mode) {
         Log::error("Failed to generate acts\n");
         return false;
     }
+
+    QJsonObject contextJson;
+    contextJson["contextType"] = "acts";
+    logger->logPromptAndResult("acts", prompt, callbackData.result, 0, 0.0, contextJson); // TODO: Get tokens/cost
 
     QString cleanData = cleanJsonMessage(callbackData.result.c_str());
     QJsonDocument doc = QJsonDocument::fromJson(cleanData.toUtf8());

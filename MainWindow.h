@@ -26,6 +26,10 @@ namespace Ui {
 	class MainWindowBoarder;
 }
 
+namespace GameFusion {
+    class PromptLogger;
+}
+
 struct TimecodeDuration {
     qint64 durationMs=0;
     int frameCount=0;
@@ -187,6 +191,7 @@ protected:
 	GameFusion::GameTime animation_time;
 
     LlamaClient* llamaClient; // Externally managed LlamaClient
+    GameFusion::PromptLogger* logger;
     GameFusion::ScriptBreakdown* scriptBreakdown; // Current script breakdown instance
 
     LlamaModel *llamaModel;
