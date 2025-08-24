@@ -150,6 +150,8 @@ public slots:
     void onPaintAreaLayerAdded(const GameFusion::Layer& layer);
     void onPaintAreaLayerModified(const GameFusion::Layer& layer);
 
+    void updateLayerThumbnail(const QString& uuid, const QImage& thumbnail);
+
 protected:
 	void dragEnterEvent(QDragEnterEvent *event) override;
 	//void dragMoveEvent(QDragMoveEvent *event) override;
@@ -219,6 +221,8 @@ protected:
 
     // The Script
     PerfectScriptWidget *perfectScript = nullptr;
+
+    QString currentPanelUuid;
 };
 
 

@@ -721,6 +721,16 @@ MainWindow::MainWindow(QWidget *parent)
 
     ui->layerListWidget->setDragDropMode(QAbstractItemView::InternalMove);
     ui->layerListWidget->setDefaultDropAction(Qt::MoveAction);
+
+    //ui->layerListWidget->setColumnWidth(0, 240); // Thumbnail column
+    //ui->layerListWidget->setColumnWidth(1, 200); // Name column
+    ui->layerListWidget->setIconSize(QSize(240, 135)); // Match thumbnail size
+    //ui->layerListWidget->setViewMode(QListView::ListMode);
+    ui->layerListWidget->setSelectionMode(QAbstractItemView::SingleSelection);
+
+    // Connect PaintArea's layerThumbnailComputed signal
+    connect(this->paint->getPaintArea(), &PaintArea::layerThumbnailComputed, this, &MainWindow::updateLayerThumbnail);
+
     //ui->layerListWidget->setSelectionMode(QAbstractItemView::SingleSelection);
 
     // Initialize comboBox_layerBlendMode
@@ -1618,6 +1628,9 @@ void MainWindow::loadProject() {
 }
 
 void MainWindow::loadProject(QString projectDir){
+
+    currentPanelUuid.clear();
+
     if(scriptBreakdown){
         delete scriptBreakdown;
         scriptBreakdown = nullptr;
@@ -1826,6 +1839,9 @@ PanelContext MainWindow::findPanelByUuid(const std::string& uuid) {
 
 LayerContext MainWindow::findLayerByUuid(const std::string& uuid) {
 
+    if(!scriptBreakdown)
+        return {};
+
     auto& scenes = scriptBreakdown->getScenes();
     for (Scene& scene : scenes) {
         for (Shot& shot : scene.shots) {
@@ -1945,6 +1961,7 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     //paint->openImage(imagePath);
 
     // set time cursor to panel start time
+    populateLayerList(panel);
     timeLineView->setTimeCursor(shot->startTime + panel->startTime);
 
     // Update the panel UI
@@ -1980,11 +1997,14 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
         ui->layerListWidget->addItem(item);
     }
     ***/
-    populateLayerList(panel);
+
 }
 
 void MainWindow::populateLayerList(GameFusion::Panel* panel) {
     if (!panel) return;
+
+    //if(currentPanelUuid == panel->uuid.c_str())
+    //    return;
 
     ui->layerListWidget->clear();
 
@@ -1993,17 +2013,33 @@ void MainWindow::populateLayerList(GameFusion::Panel* panel) {
         return;
     }
 
+    // Set a consistent icon size for all items
+    ui->layerListWidget->setIconSize(QSize(240, 135));
+
     for (auto& layer : panel->layers) {
         QString label = QString::fromStdString(layer.name);
         QListWidgetItem* item = new QListWidgetItem(label);
 
+        // Create a dummy black pixmap (240 x 135)
+        QPixmap dummyPixmap(240, 135);
+        dummyPixmap.fill(Qt::black);
+
+        // Assign the dummy icon
+        item->setIcon(QIcon(dummyPixmap));
+
+        // Enable checkbox
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
         item->setCheckState(layer.visible ? Qt::Checked : Qt::Unchecked);
 
+        // Store layer UUID
         item->setData(Qt::UserRole, QString::fromStdString(layer.uuid));
 
         ui->layerListWidget->addItem(item);
     }
+
+    //currentPanelUuid = panel->uuid.c_str();
+    paint->getPaintArea()->invalidateAllLayers();
+    paint->getPaintArea()->updateCompositeImage();
 }
 
 void MainWindow::onLayerSelectionChanged(QListWidgetItem* current, QListWidgetItem* previous) {
@@ -2565,9 +2601,10 @@ void MainWindow::onTimeCursorMoved(double time)
     if (!currentPanel->image.empty() && QFile::exists(imagePath)) {
         paint->openImage(imagePath);
         if(theShot){
+            populateLayerList(currentPanel);
             paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraFrames);
             cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraFrames);
-            populateLayerList(currentPanel);
+
         }
 
         Log().debug() << "Loaded image: " << imagePath.toUtf8().constData() << "\n";
@@ -3118,4 +3155,89 @@ void MainWindow::updateWindowTitle(bool isModified) {
 
     title += " - B-Line";
     setWindowTitle(title);
+}
+
+void MainWindow::updateLayerThumbnail(const QString& uuid, const QImage& thumbnail)
+{
+    // Debug: Check if thumbnail is
+    /**********
+    if (thumbnail.isNull()) {
+        qDebug() << "Thumbnail is null for layer:" << uuid;
+        Log().info() << "Thumbnail is null for layer:" << uuid.toUtf8().constData() << "\n";
+    } else {
+        qDebug() << "Thumbnail size:" << thumbnail.size()
+        << "Format:" << thumbnail.format()
+        << "Is grayscale:" << thumbnail.isGrayscale();
+
+        Log().info() << "Thumbnail size:" << thumbnail.size().width() << " " << thumbnail.size().height() << "\n";
+    }
+
+    bool hasVisiblePixels = false;
+    for (int y = 0; y < thumbnail.height() && !hasVisiblePixels; ++y) {
+        const QRgb *row = reinterpret_cast<const QRgb*>(thumbnail.constScanLine(y));
+        for (int x = 0; x < thumbnail.width(); ++x) {
+            if (qAlpha(row[x]) > 0) {
+                hasVisiblePixels = true;
+                break;
+            }
+        }
+    }
+    qDebug() << "Thumbnail has visible pixels:" << hasVisiblePixels;
+
+    // Optionally, display the thumbnail in a temporary QLabel for debugging
+    QLabel *debugLabel = new QLabel();
+    debugLabel->setPixmap(QPixmap::fromImage(thumbnail));
+    debugLabel->setScaledContents(true); // Ensures the pixmap fills the QLabel
+    debugLabel->setWindowTitle("Debug Thumbnail");
+    debugLabel->resize(thumbnail.size());
+    debugLabel->show();
+********/
+
+    // Find existing item with matching UUID
+    QListWidgetItem *item = nullptr;
+    for (int i = 0; i < ui->layerListWidget->count(); ++i) {
+        QListWidgetItem *current = ui->layerListWidget->item(i);
+        QString currentUuid = current->data(Qt::UserRole).toString();
+        if (currentUuid == uuid) {
+            item = current;
+            break;
+        }
+    }
+
+
+
+    // If no item found, create a new one
+    if (!item) {
+
+        return;
+
+        item = new QListWidgetItem(ui->layerListWidget);
+        item->setData(Qt::UserRole, uuid); // Store UUID for identification
+        ui->layerListWidget->addItem(item);
+    }
+
+
+    // disable the item changed callback to avoid infinit callback loops
+    // Disable signals to avoid recursive itemChanged or other event triggers
+    bool prevState = ui->layerListWidget->blockSignals(true);
+    QString layerName = item->text();
+    // Set thumbnail and name
+    item->setIcon(QIcon(QPixmap::fromImage(thumbnail))); // First column: thumbnail
+    ui->layerListWidget->setIconSize(QSize(250, 150)); // or whatever size you want
+    //ui->layerListWidget->setViewMode(QListView::IconMode);
+    //ui->layerListWidget->setResizeMode(QListView::Adjust);
+    QImage debugThumbnail = thumbnail;
+    QPainter p(&debugThumbnail);
+    p.setPen(Qt::red);
+    p.drawRect(0, 0, debugThumbnail.width() - 1, debugThumbnail.height() - 1);
+    p.end();
+
+    item->setIcon(QIcon(QPixmap::fromImage(debugThumbnail)));
+    item->setText(layerName); // Second column: name
+    // Re-enable signals
+    ui->layerListWidget->blockSignals(prevState);
+
+    // In constructor or setupUi()
+    ui->layerListWidget->setIconSize(QSize(debugThumbnail.width(), debugThumbnail.height()));
+    ui->layerListWidget->update(); // Force redraw
 }
