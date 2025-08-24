@@ -210,6 +210,9 @@ HEADERS += ../StrokeAttributeDockWidget.h
 SOURCES += ../BezierCurve.cpp
 HEADERS += ../BezierCurve.h ../StrokeProperties.h
 
+SOURCES += ../OptionsDialog.cpp
+HEADERS += ../OptionsDialog.h
+
 # Input source files
 SOURCES +=  \
            $$GF/Applications/TimeLineProject/TimeLineView.cpp \

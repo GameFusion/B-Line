@@ -34,6 +34,7 @@
 #include "ErrorDialog.h"
 #include "CameraSidePanel.h"
 #include "PerfectScriptWidget.h"
+#include "OptionsDialog.h"
 
 #include "GameCore.h" // for GameContext->gameTime()
 #include "SoundServer.h"
@@ -606,6 +607,7 @@ MainWindow::MainWindow(QWidget *parent)
 	QObject::connect(ui->actionDark, SIGNAL(triggered()), this, SLOT(setDarkTheme()));
 	QObject::connect(ui->actionBlack, SIGNAL(triggered()), this, SLOT(setBlackTheme()));
 
+    connect(ui->actionPainterOptions, &QAction::triggered, this, &MainWindow::showOptionsDialog);
 	connect(ui->actionAbout, SIGNAL(triggered()), this, SLOT(about()));
 /*
 	ShotPanelWidget *shotPanel = new ShotPanelWidget;
@@ -3265,4 +3267,22 @@ void MainWindow::updateLayerThumbnail(const QString& uuid, const QImage& thumbna
     // In constructor or setupUi()
     ui->layerListWidget->setIconSize(QSize(debugThumbnail.width(), debugThumbnail.height()));
     ui->layerListWidget->update(); // Force redraw
+}
+
+void MainWindow::showOptionsDialog()
+{
+
+    OptionsDialog dialog(this);
+    // Access PaintArea's settings
+    dialog.findChild<QCheckBox*>()->setChecked(
+        paint->getPaintArea()->selectionSettings().multiLayerSelection
+        );
+
+    if (dialog.exec() == QDialog::Accepted) {
+        paint->getPaintArea()->selectionSettings().multiLayerSelection =
+            dialog.isMultiLayerSelectionEnabled();
+
+        qDebug() << "Multi-layer selection:"
+                 << (paint->getPaintArea()->selectionSettings().multiLayerSelection ? "enabled" : "disabled");
+    }
 }

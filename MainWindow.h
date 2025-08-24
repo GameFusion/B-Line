@@ -155,6 +155,7 @@ public slots:
     void onPaintAreaLayerModified(const GameFusion::Layer& layer);
 
     void updateLayerThumbnail(const QString& uuid, const QImage& thumbnail);
+    void showOptionsDialog();
 
 protected:
 	void dragEnterEvent(QDragEnterEvent *event) override;

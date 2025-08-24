@@ -76,6 +76,7 @@
      <addaction name="actionBlack"/>
     </widget>
     <addaction name="menuThemes"/>
+    <addaction name="actionPainterOptions"/>
    </widget>
    <widget class="QMenu" name="menuCommunity">
     <property name="title">
@@ -1096,6 +1097,16 @@
   <action name="actionPerfect_Script">
    <property name="text">
     <string>Perfect Script...</string>
+   </property>
+  </action>
+  <action name="actionPainterOptions">
+   <property name="text">
+    <string>Selection Options...</string>
+   </property>
+  </action>
+  <action name="actionjunk">
+   <property name="text">
+    <string>junk</string>
    </property>
   </action>
  </widget>
