@@ -264,7 +264,6 @@ HEADERS += $$GF/Applications/TimeLineProject/TimeLineView.h \
            $$GF/Applications/TimeLineProject/CameraTrack.h
 
 
-
 #
 # Perfect Script
 SOURCES += $$GF/Applications/PerfectScript/PerfectScriptWidget.cpp

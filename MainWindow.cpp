@@ -306,6 +306,10 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     timelineView->scene()->setSceneRect(0, 0, 20000, 700);  // Adjust dimensions as needed
     timelineView->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
+    timelineView->addCameraKeyFrame("A", 100, "");
+    timelineView->addCameraKeyFrame("B", 500, "");
+    timelineView->addCameraKeyFrame("C", 1500, "");
+
     // Create tracks
     Track *track1 = new Track("Track 1", 0, 500000, TrackType::Storyboard); // Name, Start Time, Duration in seconds
     Track *track2 = new Track("Track 2", 0, 150000, TrackType::Audio); // Name, Start Time, Duration in seconds
@@ -692,7 +696,10 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::deletePanel);
     connect(timeLineView, &TimeLineView::optionsDialog,
             this, &MainWindow::timelineOptions);
-
+    connect(timeLineView, &TimeLineView::cameraKeyFrameUpdated,
+            this, &MainWindow::timelineCameraUpdate);
+    connect(timeLineView, &TimeLineView::cameraKeyFrameDeleted,
+            this, &MainWindow::timelineCameraDeleted);
 
     // Add Callback for Tree Item Selection
     connect(ui->shotsTreeWidget, &QTreeWidget::itemClicked, this, &MainWindow::onTreeItemClicked);
@@ -1338,6 +1345,7 @@ void MainWindow::updateTimeline(){
     //gfxscene->clear();
 
     qreal fps = 25;
+    fps = projectJson["fps"].toDouble();
     qreal mspf = 1000.f/fps;
     //long startTimeFrame = episodeDuration.frameCount;
     long startTime = 0;
@@ -1457,12 +1465,33 @@ void MainWindow::updateTimeline(){
                 panelMarker->setUuid(panel.uuid.c_str());
 
                 panelMarker->setStartTimePos(panel.startTime);
+
+
                 pannelIndex ++;
             }
 
             segment->updateMarkersEndTime();
 
             track->addSegment(segment);
+
+            // Add cameras to timeline
+            for(auto camera: shot.cameraFrames){
+                Log().debug() << "Processing cameras for shot "<<shot.startTime<<"\n";
+                QString panelUuid = camera.panelUuid.c_str();
+                int frameOffset = camera.frameOffset;
+                Panel *panelPtr = nullptr;
+                long timeMs = -1;
+                for (auto& panel : shot.panels)
+                    if(panel.uuid == camera.panelUuid){
+                        panelPtr = &panel;
+                        timeMs = shot.startTime + panel.startTime + camera.frameOffset * mspf;
+                        Log().debug() << "Found parent panel start time "<< panel.startTime<<"\n";
+                        break;
+                    }
+                timeLineView->addCameraKeyFrame(camera.uuid.c_str(), timeMs, panelUuid);
+
+                Log().debug() << "Adding camera at "<< timeMs<<" " <<camera.uuid.c_str()<<"\n";
+            }
 
             // Advance frame cursor by shot's frame count
             startTime = shot.endTime;
@@ -1948,6 +1977,42 @@ ShotContext MainWindow::findShotForTime(double time/*, double buffer*/) {
     return {};
 }
 
+CameraContext MainWindow::findCameraByUuid(const std::string& uuid) {
+    if (!scriptBreakdown)
+        return {};
+
+    auto& scenes = scriptBreakdown->getScenes();
+    for (auto& scene : scenes) {
+        for (auto& shot : scene.shots) {
+            for (auto& cameraFrame : shot.cameraFrames) {
+                if (cameraFrame.uuid == uuid) {
+                    return { &scene, &shot, &cameraFrame };
+                }
+            }
+        }
+    }
+
+    return {};
+}
+
+ShotContext MainWindow::findSceneByPanel(const std::string& panelUuid) {
+    if (!scriptBreakdown)
+        return {};
+
+    auto& scenes = scriptBreakdown->getScenes();
+    for (auto& scene : scenes) {
+        for (auto& shot : scene.shots) {
+            for (auto& panel : shot.panels) {
+                if (panel.uuid == panelUuid) {
+                    return { &scene, &shot };
+                }
+            }
+        }
+    }
+
+    return {};
+}
+
 void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     QVariant uuidData = item->data(0, Qt::UserRole);
     if (!uuidData.isValid())
@@ -2065,6 +2130,48 @@ void MainWindow::populateLayerList(GameFusion::Panel* panel) {
 
         ui->layerListWidget->addItem(item);
     }
+
+        // --- Add Reference Image if it exists ---
+        if (!panel->image.empty()) {
+            QString imagePath = currentProjectPath + "/movies/" + panel->image.c_str();
+
+            if (QFile::exists(imagePath)) {
+                // Add a separator (visual)
+                QListWidgetItem* separator = new QListWidgetItem("──────────────");
+                separator->setFlags(Qt::NoItemFlags); // non-selectable
+                ui->layerListWidget->addItem(separator);
+
+                // Load and resize the reference image
+                QImage refImage;
+                if (refImage.load(imagePath)) {
+                    constexpr int thumbWidth = 1920 / 14;  // 192
+                    constexpr int thumbHeight = 1080 / 14; // 108
+                    QPixmap refPixmap = QPixmap::fromImage(refImage.scaled(
+                        thumbWidth,
+                        thumbHeight,
+                        Qt::KeepAspectRatio,
+                        Qt::SmoothTransformation
+                        ));
+
+                    QListWidgetItem* refItem = new QListWidgetItem(tr("Reference"));
+                    QFont italicFont = refItem->font();
+                    italicFont.setItalic(true);
+                    refItem->setFont(italicFont);
+
+                    refItem->setIcon(QIcon(refPixmap));
+
+                    // Reference is always visible but cannot be reordered
+                    refItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+                    refItem->setCheckState(Qt::Checked); // or Qt::Unchecked if you want to toggle
+
+                    // Store a custom role to identify as reference
+                    refItem->setData(Qt::UserRole, "REFERENCE");
+
+                    ui->layerListWidget->addItem(refItem);
+                }
+            }
+        }
+
 
     //currentPanelUuid = panel->uuid.c_str();
     paint->getPaintArea()->invalidateAllLayers();
@@ -3325,4 +3432,138 @@ void MainWindow::exportStoryboardPDF() {
             }
         }
     }
+}
+
+void MainWindow::timelineCameraUpdate(const QString& uuid, long frameOffset, const QString& newPanelUuid) {
+    /**********
+
+    1.	Find the original camera frame.
+    2.	Check if the panel UUID has changed.
+    3.	If changed, verify whether it is in the same scene or a different one.
+    4.	Move the camera frame to the new shot if necessary.
+    5.	Mark the relevant scene as dirty if the camera moved or frame offset changed.
+
+    ***********/
+
+
+    GameFusion::Log().debug()
+    << "Timeline camera update: uuid=" << uuid.toUtf8().constData()
+    << ", frameOffset=" << frameOffset
+    << ", newPanelUuid=" << newPanelUuid.toUtf8().constData()
+    << "\n";
+
+    // 1. Locate the original camera
+    CameraContext cameraCtx = findCameraByUuid(uuid.toStdString());
+    if (!cameraCtx.isValid()) {
+        GameFusion::Log().warning() << "Camera with UUID " << uuid.toUtf8().constData() << " not found.\n";
+        return;
+    }
+
+    bool markDirty = false;
+    bool frameOffsetChanged = (cameraCtx.camera->frameOffset != frameOffset);
+
+    // 2. Handle panel/shot/scene changes
+    if (cameraCtx.camera->panelUuid != newPanelUuid.toStdString()) {
+        GameFusion::Log().debug()
+        << "Panel changed from " << cameraCtx.camera->panelUuid.c_str()
+        << " to " << newPanelUuid.toUtf8().constData() << "\n";
+
+        // Locate the new scene/shot for the panel
+        ShotContext newCtx = findSceneByPanel(newPanelUuid.toStdString());
+        if (!newCtx.isValid()) {
+            GameFusion::Log().warning()
+            << "New panel UUID " << newPanelUuid.toUtf8().constData() << " not found.\n";
+            return;
+        }
+
+        bool shotChanged = (cameraCtx.shot != newCtx.shot);
+        bool sceneChanged = (cameraCtx.scene != newCtx.scene);
+
+        if (shotChanged) {
+            // Remove from old shot
+            auto& oldFrames = cameraCtx.shot->cameraFrames;
+            oldFrames.erase(
+                std::remove_if(oldFrames.begin(), oldFrames.end(),
+                               [&](const GameFusion::CameraFrame& cam) { return cam.uuid == cameraCtx.camera->uuid; }),
+                oldFrames.end()
+                );
+
+            // Add to new shot
+            newCtx.shot->cameraFrames.push_back(*cameraCtx.camera);
+            cameraCtx.camera = &newCtx.shot->cameraFrames.back();
+            cameraCtx.shot = newCtx.shot;
+            cameraCtx.scene = newCtx.scene;
+
+            // Both old and new scenes become dirty if they differ
+            markDirty = true;
+            if (sceneChanged) {
+                newCtx.scene->setDirty(true);
+            }
+        }
+
+        // Update panel UUID
+        cameraCtx.camera->panelUuid = newPanelUuid.toStdString();
+        markDirty = true; // camera reassignment = dirty
+    }
+
+    // 3. Update frame offset if changed
+    if (frameOffsetChanged) {
+        cameraCtx.camera->frameOffset = frameOffset;
+        markDirty = true;
+    }
+
+    // 4. Mark current scene as dirty if needed
+    if (markDirty) {
+        cameraCtx.scene->setDirty(true);
+        GameFusion::Log().debug()
+            << "Scene " << cameraCtx.scene->uuid.c_str()
+            << " marked as dirty due to camera change.\n";
+    }
+
+    // TODO update camera side panel if necessary !!!
+}
+
+void MainWindow::timelineCameraDeleted(const QString& uuid) {
+    GameFusion::Log().debug()
+    << "Timeline camera delete: uuid=" << uuid.toUtf8().constData() << "\n";
+
+    // 1. Locate the camera context
+    CameraContext cameraCtx = findCameraByUuid(uuid.toStdString());
+    if (!cameraCtx.isValid()) {
+        GameFusion::Log().warning()
+        << "Cannot delete camera: UUID " << uuid.toUtf8().constData() << " not found.\n";
+        return;
+    }
+
+    QString panelUuid = cameraCtx.camera->panelUuid.c_str();
+
+    // 2. Remove the camera from its shot
+    auto& cameraFrames = cameraCtx.shot->cameraFrames;
+    auto it = std::remove_if(
+        cameraFrames.begin(), cameraFrames.end(),
+        [&](const GameFusion::CameraFrame& cam) { return cam.uuid == cameraCtx.camera->uuid; }
+        );
+
+    if (it == cameraFrames.end()) {
+        GameFusion::Log().warning()
+        << "Camera UUID " << uuid.toUtf8().constData() << " not found in its shot.\n";
+        return;
+    }
+
+    cameraFrames.erase(it, cameraFrames.end());
+
+    // 3. Mark scene as dirty
+    if (cameraCtx.scene) {
+        cameraCtx.scene->setDirty(true);
+        GameFusion::Log().debug()
+            << "Scene " << cameraCtx.scene->uuid.c_str()
+            << " marked dirty after camera deletion.\n";
+    }
+
+    // 4. Optional: update UI or notify other subsystems if needed
+    //emit cameraRemoved(uuid); // if such signal exists
+
+    // TODO update camera side panel if necessary !!!
+
+    //cameraSidePanel->setCameraList(panelUuid, cameraCtx.shot->cameraFrames);
 }

@@ -89,7 +89,7 @@ struct CameraFrame {
     std::string panelUuid;     // The panel this keyframe was created in
 
     std::string uuid;          // Optional: for unique identification
-    int time;                  // Time in frames, relative to shot start
+    int time;                  // Time in frames of ms ???, redundan with frameOffset ???, relative to shot start
 
     CameraFrame(int t, float px, float py, float z = 1.0f, float r = 0.0f, const std::string& ownerPanel = "")
         : time(t), x(px), y(py), zoom(z), rotation(r), panelUuid(ownerPanel)
@@ -178,7 +178,7 @@ struct Panel {
     std::string uuid;
     std::string name;            // Panel name or ID
     std::string thumbnail;   // Thumbnail path for the panel
-    std::string image;   // Image path for the panel
+    std::string image;   // Reference image path for the panel
     int startTime = 0;          // Relative to shot start
     int durationTime = 0;
     //int durationFrames = 0;      // Optional, if needed
@@ -276,6 +276,8 @@ struct Scene {
     Scene() {
         uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
     }
+
+    void setDirty(bool d){dirty=d;}
 };
 
 struct Sequence {

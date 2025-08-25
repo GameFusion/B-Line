@@ -65,6 +65,16 @@ struct ShotContext {
     }
 };
 
+struct CameraContext {
+    GameFusion::Scene* scene = nullptr;
+    GameFusion::Shot* shot = nullptr;
+    GameFusion::CameraFrame* camera = nullptr;
+
+    bool isValid() const {
+        return scene && shot && camera;
+    }
+};
+
 class MainWindow : public QMainWindow
 {
 	Q_OBJECT
@@ -159,6 +169,9 @@ public slots:
 
     void exportStoryboardPDF();
 
+    void timelineCameraUpdate(const QString& uuid, long frameOffset, const QString& newPanelUuid);
+    void timelineCameraDeleted(const QString& uuid);
+
 protected:
 	void dragEnterEvent(QDragEnterEvent *event) override;
 	//void dragMoveEvent(QDragMoveEvent *event) override;
@@ -167,11 +180,15 @@ protected:
 
     bool initializeLlamaClient();
     void updateTimeline();
-    ShotContext findShotByUuid(const std::string& uuid);
-    PanelContext findPanelByUuid(const std::string& uuid);
-    PanelContext findPanelForTime(double currentTime, double threshold = 0.05);
-    ShotContext findShotForTime(double time/*, double buffer*/);
-    LayerContext findLayerByUuid(const std::string& uuid);
+
+    ShotContext   findShotByUuid(const std::string& uuid);
+    PanelContext  findPanelByUuid(const std::string& uuid);
+    PanelContext  findPanelForTime(double currentTime, double threshold = 0.05);
+    ShotContext   findShotForTime(double time/*, double buffer*/);
+    LayerContext  findLayerByUuid(const std::string& uuid);
+    CameraContext findCameraByUuid(const std::string& uuid);
+    ShotContext   findSceneByPanel(const std::string& panelUuid);
+
     void populateLayerList(GameFusion::Panel* panel);
 
     QString generateUniqueShotName(GameFusion::Scene* scene);
