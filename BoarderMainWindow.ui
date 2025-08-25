@@ -43,6 +43,11 @@
     <addaction name="separator"/>
     <addaction name="actionLogin"/>
     <addaction name="separator"/>
+    <addaction name="actionExport_as_PDF"/>
+    <addaction name="actionExport_Movie"/>
+    <addaction name="actionExport_EDL"/>
+    <addaction name="actionUpload_to_Flow"/>
+    <addaction name="separator"/>
     <addaction name="actionQuit"/>
    </widget>
    <widget class="QMenu" name="menuEdit">
@@ -1107,6 +1112,26 @@
   <action name="actionjunk">
    <property name="text">
     <string>junk</string>
+   </property>
+  </action>
+  <action name="actionExport_as_PDF">
+   <property name="text">
+    <string>Export As PDF...</string>
+   </property>
+  </action>
+  <action name="actionExport_Movie">
+   <property name="text">
+    <string>Export Movie...</string>
+   </property>
+  </action>
+  <action name="actionExport_EDL">
+   <property name="text">
+    <string>Export EDL</string>
+   </property>
+  </action>
+  <action name="actionUpload_to_Flow">
+   <property name="text">
+    <string>Upload to Flow...</string>
    </property>
   </action>
  </widget>

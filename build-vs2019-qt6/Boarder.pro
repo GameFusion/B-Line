@@ -234,7 +234,8 @@ SOURCES +=  \
            $$GF/Applications/TimeLineProject/TimeLineWidget.cpp \
            $$GF/Applications/TimeLineProject/SpectrographHelper.cpp \
            $$GF/Applications/TimeLineProject/TimelineOptionsDialog.cpp \
-           $$GF/Applications/TimeLineProject/TimelineShortcutsDialog.cpp
+           $$GF/Applications/TimeLineProject/TimelineShortcutsDialog.cpp \
+           $$GF/Applications/TimeLineProject/CameraTrack.cpp
 
 # Include header files
 HEADERS += $$GF/Applications/TimeLineProject/TimeLineView.h \
@@ -259,7 +260,8 @@ HEADERS += $$GF/Applications/TimeLineProject/TimeLineView.h \
            $$GF/Applications/TimeLineProject/TimelineOptionsDialog.h \
            $$GF/Applications/TimeLineProject/TimelineShortcutsDialog.h \
            $$GF/Applications/TimeLineProject/ShortcutEdit.h \
-           $$GF/Applications/TimeLineProject/Shortcut.h
+           $$GF/Applications/TimeLineProject/Shortcut.h \
+           $$GF/Applications/TimeLineProject/CameraTrack.h
 
 
 

@@ -157,6 +157,8 @@ public slots:
     void updateLayerThumbnail(const QString& uuid, const QImage& thumbnail);
     void showOptionsDialog();
 
+    void exportStoryboardPDF();
+
 protected:
 	void dragEnterEvent(QDragEnterEvent *event) override;
 	//void dragMoveEvent(QDragMoveEvent *event) override;

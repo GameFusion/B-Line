@@ -306,7 +306,6 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     timelineView->scene()->setSceneRect(0, 0, 20000, 700);  // Adjust dimensions as needed
     timelineView->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-
     // Create tracks
     Track *track1 = new Track("Track 1", 0, 500000, TrackType::Storyboard); // Name, Start Time, Duration in seconds
     Track *track2 = new Track("Track 2", 0, 150000, TrackType::Audio); // Name, Start Time, Duration in seconds
@@ -609,6 +608,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(ui->actionPainterOptions, &QAction::triggered, this, &MainWindow::showOptionsDialog);
 	connect(ui->actionAbout, SIGNAL(triggered()), this, SLOT(about()));
+
+    connect(ui->actionExport_as_PDF, &QAction::triggered, this, &MainWindow::exportStoryboardPDF);
+
 /*
 	ShotPanelWidget *shotPanel = new ShotPanelWidget;
 	ui->splitter->insertWidget(0, shotPanel);
@@ -3284,5 +3286,43 @@ void MainWindow::showOptionsDialog()
 
         qDebug() << "Multi-layer selection:"
                  << (paint->getPaintArea()->selectionSettings().multiLayerSelection ? "enabled" : "disabled");
+    }
+}
+
+#include <QPdfWriter>
+
+void MainWindow::exportStoryboardPDF() {
+    QPdfWriter pdf(currentProjectPath + "/storyboard.pdf");
+    QPainter painter(&pdf);
+    int y = 0;
+
+    for (const auto& scene : scriptBreakdown->getScenes()) {
+        for (const auto& shot : scene.shots) {
+            for (const auto& panel : shot.panels) {
+                QImage image(QString::fromStdString(panel.image)); // Load image from string path
+                if (!image.isNull()) {
+                    painter.drawImage(QRect(10, y, 100, 100), image);
+                } else {
+                    painter.drawText(10, y + 50, "[Missing Image]");
+                }
+
+                painter.drawText(120, y + 20, "Action: " + QString::fromStdString(shot.action));
+                if(!shot.cameraFrames.empty()) {
+                    painter.drawText(120, y + 40,
+                                 QString("Camera: Pos(%1,%2) Rot:%3 Scale:%4")
+                                     .arg(shot.cameraFrames[0].x)
+                                     .arg(shot.cameraFrames[0].y)
+                                     .arg(shot.cameraFrames[0].rotation)
+                                     .arg(shot.cameraFrames[0].zoom)
+                                 );
+                }
+
+                y += 120;
+                if (y > pdf.height() - 100) {
+                    pdf.newPage();
+                    y = 0;
+                }
+            }
+        }
     }
 }
