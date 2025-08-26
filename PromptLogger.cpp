@@ -9,7 +9,7 @@
 
 namespace GameFusion {
 
-PromptLogger::PromptLogger(QObject* parent) : QObject(parent), serverUrl(""), oauthToken(""), projectPath("") {}
+PromptLogger::PromptLogger(QObject* parent) : QObject(parent), serverUrl("http://localhost:50000"), oauthToken("your-secret-token-here"), projectPath("") {}
 
 void PromptLogger::setServerConfig(const QString& url, const QString& token) {
     serverUrl = url;
