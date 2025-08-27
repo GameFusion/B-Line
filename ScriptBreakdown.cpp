@@ -384,7 +384,7 @@ bool ScriptBreakdown::processShots(Scene& scene, int sceneIndex, BreakdownMode m
         contextJson["sceneId"] = QString::fromStdString(scene.sceneId);
         contextJson["sceneName"] = QString::fromStdString(scene.name);
 
-        logger->logPromptAndResult("shots", prompt, callbackData.result, tokenCount, cost, contextJson);
+        logger->logPromptAndResult("Text", "shots", prompt, callbackData.result, tokenCount, cost, contextJson);
 
         QString cleanData = cleanJsonMessage(QString::fromStdString(callbackData.result));
         QJsonDocument doc = QJsonDocument::fromJson(cleanData.toUtf8());
@@ -425,7 +425,7 @@ bool ScriptBreakdown::processShots(Scene& scene, int sceneIndex, BreakdownMode m
             // Log prompt and result
             int tokenCount = 0; // TODO: Get from LlamaClient
             double cost = 0.0;  // TODO: Get from LlamaClient
-            logger->logPromptAndResult("shots", prompt, callbackData.result, tokenCount, cost, contextJson);
+            logger->logPromptAndResult("Text", "shots", prompt, callbackData.result, tokenCount, cost, contextJson);
 
             const QString cleanData = cleanJsonMessage(callbackData.result.c_str());
             QJsonDocument doc = QJsonDocument::fromJson(cleanData.toUtf8());
@@ -505,7 +505,7 @@ bool ScriptBreakdown::processShots(Scene& scene, int sceneIndex, BreakdownMode m
         contextJson["sceneId"] = QString::fromStdString(scene.sceneId);
         contextJson["sceneName"] = QString::fromStdString(scene.name);
         contextJson["repair"] = true;
-        logger->logPromptAndResult("shots_repair", repairPrompt.toStdString(), callbackDataFix.result, 0, 0.0, contextJson); // Log repair attempt
+        logger->logPromptAndResult("Text", "shots_repair", repairPrompt.toStdString(), callbackDataFix.result, 0, 0.0, contextJson); // Log repair attempt
 
         QString fixedData = cleanJsonMessage(callbackDataFix.result.c_str());
         // create a prompt and
@@ -574,7 +574,7 @@ bool ScriptBreakdown::processSequences() {
 
     QJsonObject contextJson;
     contextJson["contextType"] = "sequences";
-    logger->logPromptAndResult("sequences", prompt, callbackData.result, 0, 0.0, contextJson); // TODO: Get tokens/cost
+    logger->logPromptAndResult("Text", "sequences", prompt, callbackData.result, 0, 0.0, contextJson); // TODO: Get tokens/cost
 
     QString cleanData = cleanJsonMessage(callbackData.result.c_str());
     QJsonDocument doc = QJsonDocument::fromJson(cleanData.toUtf8());
@@ -629,7 +629,7 @@ bool ScriptBreakdown::processActs(BreakdownMode mode) {
 
     QJsonObject contextJson;
     contextJson["contextType"] = "acts";
-    logger->logPromptAndResult("acts", prompt, callbackData.result, 0, 0.0, contextJson); // TODO: Get tokens/cost
+    logger->logPromptAndResult("Text", "acts", prompt, callbackData.result, 0, 0.0, contextJson); // TODO: Get tokens/cost
 
     QString cleanData = cleanJsonMessage(callbackData.result.c_str());
     QJsonDocument doc = QJsonDocument::fromJson(cleanData.toUtf8());

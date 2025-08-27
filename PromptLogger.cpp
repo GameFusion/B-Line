@@ -17,9 +17,46 @@ void PromptLogger::setServerConfig(const QString& url, const QString& token) {
     Log::info() << "PromptLogger: Set server config: URL=" << url.toStdString().c_str() << ", Token=" << (token.isEmpty() ? "empty" : "set");
 }
 
-void PromptLogger::logPromptAndResult(const std::string& type, const std::string& prompt, const std::string& result,
+void PromptLogger::logPromptAndResult(const std::string& category, const QString& type, const QString& prompt, const QString& result,
+                        int tokens, double cost, const QJsonObject& context,
+                        const QString& userId, const QString& projectId,
+                        const QString& sessionId, const QUuid& correlationId,
+                        const QString& environment, const QJsonObject& errorDetails,
+                        int inputSize, int outputSize, const QJsonObject& latencyBreakdown,
+                                      const QJsonObject& modelParams){
+    QJsonObject logData;
+    logData["category"] = QString::fromStdString(category);
+    logData["type"] = type;
+    logData["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    logData["user"] = QString::fromStdString("default_user"); // TODO: Replace with actual user
+    logData["version"] = "1.0"; // TODO: Replace with app/model version
+    logData["llm"] = QString::fromStdString("llama"); // TODO: Get from LlamaClient
+    logData["prompt"] = prompt;
+    logData["response"] = result;
+    logData["tokens"] = tokens;
+    logData["cost"] = cost;
+    if (!context.isEmpty()) {
+        logData["context"] = context;
+    }
+
+    logData["userId"] = userId;
+    logData["projectId"] = projectId;
+    logData["sessionId"] = sessionId;
+    logData["correlationId"] = correlationId.toString();
+    logData["environment"] = environment;
+    if (!errorDetails.isEmpty()) {
+        logData["errorDetails"] = errorDetails;
+    }
+    logData["inputSize"] = inputSize;
+    logData["outputSize"] = outputSize;
+    logData["latencyBreakdown"] = latencyBreakdown;
+    logData["modelParams"] = modelParams;
+}
+
+void PromptLogger::logPromptAndResult(const std::string& category, const std::string& type, const std::string& prompt, const std::string& result,
                                       int tokens, double cost, const QJsonObject& context) {
     QJsonObject logData;
+    logData["category"] = QString::fromStdString(category);
     logData["type"] = QString::fromStdString(type);
     logData["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
     logData["user"] = QString::fromStdString("default_user"); // TODO: Replace with actual user

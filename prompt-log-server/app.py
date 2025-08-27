@@ -42,17 +42,29 @@ def log_prompt_history():
 
     # Create log entry
     log_entry = PromptLog(
-        type=data.get('type'),
-        timestamp=datetime.utcnow(),
-        user=data.get('user', 'unknown'),
-        version=data.get('version', '1.0'),
-        llm=data.get('llm', 'unknown'),
-        prompt=data.get('prompt'),
-        response=data.get('response'),
-        tokens=data.get('tokens', 0),
-        cost=data.get('cost', 0.0),
-        context=data.get('context', {})
-    )
+            type=data.get('type', 'unknown'),
+            timestamp=datetime.utcnow(),
+            category=data.get('category', 'unknown'),
+            date_time=data.get('dateTime', None),
+            user_id=data.get('userId', 'unknown'),
+            project_id=data.get('projectId', 'unknown'),
+            session_id=data.get('sessionId', 'unknown'),
+            correlation_id=data.get('correlationId', '00000000-0000-0000-0000-000000000000'),
+            environment=data.get('environment', 'unknown'),
+            error_details=data.get('errorDetails', {}),
+            input_size=data.get('inputSize', 0),
+            output_size=data.get('outputSize', 0),
+            latency_breakdown=data.get('latencyBreakdown', {}),
+            model_params=data.get('modelParams', {}),
+            user=data.get('user', 'unknown'),
+            version=data.get('version', '1.0'),
+            llm=data.get('llm', 'llama'),
+            prompt=data.get('prompt', ''),
+            response=data.get('response', ''),
+            tokens=data.get('tokens', 0),
+            cost=data.get('cost', 0.0),
+            context=data.get('context', {})
+        )
 
     db_session.add(log_entry)
     db_session.commit()

@@ -1599,7 +1599,7 @@ bool MainWindow::consoleCommand(const QString &the_command_line)
         contextJson["location"] = llamaModel->getLocation();
         contextJson["api_tech"] = llamaModel->getApiTech();
         contextJson["processing_time"] = processingTimeMs;
-        logger->logPromptAndResult("console", prompt.toStdString(), response.toStdString(), llamaModel->getLatestTokenCount(), llamaModel->getLatestCost(), contextJson);
+        logger->logPromptAndResult("Text", "console", prompt.toStdString(), response.toStdString(), llamaModel->getLatestTokenCount(), llamaModel->getLatestCost(), contextJson);
 
         QJsonDocument doc = QJsonDocument::fromJson(response.toUtf8());
         if (!doc.isNull()) {

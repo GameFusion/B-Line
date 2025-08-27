@@ -21,6 +21,18 @@ class PromptLog(Base):
     tokens = Column(Integer)
     cost = Column(Float)
     context = Column(JSON)  # Flexible JSON for metadata (e.g., sceneId, model, etc.)
+    category = Column(String(100))
+    session_id = Column(String(100))
+    correlation_id = Column(String(36))
+    environment = Column(String(50))
+    error_details = Column(JSON)
+    input_size = Column(Integer)
+    output_size = Column(Integer)
+    latency_breakdown = Column(JSON)
+    model_params = Column(JSON)
+    user_id = Column(String(100))
+    project_id = Column(String(100))
+    date_time = Column(DateTime)
 
 def init_db(db_url):
     engine = create_engine(db_url)
