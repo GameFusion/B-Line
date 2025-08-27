@@ -56,6 +56,15 @@ FLASK_ENV=development
 - **DATABASE_URL**: Connection string (user:pass@host/dbname).
 - **AUTH_TOKEN**: Bearer token for auth (change for security).
 
+For S3 storage add these env vars, here we are using Digital Ocean
+```
+AWS_ACCESS_KEY_ID=your-aws-key
+AWS_SECRET_ACCESS_KEY=your-aws-secret
+AWS_REGION=us-east-1
+DO_SPACES_ENDPOINT=https://nyc3.digitaloceanspaces.com
+DO_SPACE_NAME=your-space-bucket-name
+ENABLE_S3=true
+```
 
 #### Step 3: Run the Server
 1. **Set Up Database**:

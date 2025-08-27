@@ -3,3 +3,5 @@ sqlalchemy
 psycopg2-binary
 flask-cors
 python-dotenv
+boto3
+flask_httpauth
