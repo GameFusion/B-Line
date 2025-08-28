@@ -161,6 +161,7 @@ public slots:
     void onPaintAreaLayerModified(const GameFusion::Layer& layer);
 
     void updateLayerThumbnail(const QString& uuid, const QImage& thumbnail);
+    void onPaintAreaImageModified(const QString& uuid, const QImage& image, bool editing);
     void showOptionsDialog();
 
     void exportStoryboardPDF();
@@ -169,6 +170,7 @@ public slots:
     void timelineCameraDeleted(const QString& uuid);
 
 protected:
+
 	void dragEnterEvent(QDragEnterEvent *event) override;
 	//void dragMoveEvent(QDragMoveEvent *event) override;
 	//void dragLeaveEvent(QDragLeaveEvent *event) override;
