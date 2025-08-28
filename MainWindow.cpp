@@ -761,13 +761,14 @@ MainWindow::MainWindow(QWidget *parent)
     ///
     ///
 
-
     connect(paint->getPaintArea(), &PaintArea::layerAdded,
             this, &MainWindow::onPaintAreaLayerAdded);
 
     connect(paint->getPaintArea(), &PaintArea::layerModified,
             this, &MainWindow::onPaintAreaLayerModified);
 
+    connect(paint->getPaintArea(), &PaintArea::compositImageModified,
+            this, &MainWindow::onPaintAreaImageModified);
 
     // Initialize new widgets
     ui->spinBox_layerRotation->setRange(-3600, 3600);
@@ -1455,15 +1456,20 @@ void MainWindow::updateTimeline(){
                 qreal panelTimeStart = startTime + panel.startTime;
                 //qreal panelTimeStart = panelFrameStart * mspf;
                 //qreal panelDuration = panel.durationFrames * mspf;
-                QString thumbnail = currentProjectPath + "/movies/" + panel.thumbnail.c_str();
 
-                // by default ShotSegment had one initial panel
+
+                // todo , first see if thumbnail exists and use this
+                QString thumbnailPath = currentProjectPath + "/thumbnails/panel_" + panel.uuid.c_str() + ".png";
+
+                if (!QFile::exists(thumbnailPath)) // fallback
+                    thumbnailPath = currentProjectPath + "/movies/" + panel.thumbnail.c_str();
+
+                // by default reference image if it exists had one initial panel
                 PanelMarker *panelMarker = pannelIndex == 0 ? segment->marker() : new PanelMarker(0, 30, 0, 220, segment, panel.name.c_str(), "", "");
 
                 panelMarker->setPanelName(QString::fromStdString(panel.name));
-                panelMarker->loadThumbnail(thumbnail);
+                panelMarker->loadThumbnail(thumbnailPath);
                 panelMarker->setUuid(panel.uuid.c_str());
-
                 panelMarker->setStartTimePos(panel.startTime);
 
 
@@ -1738,6 +1744,7 @@ void MainWindow::loadProject(QString projectDir){
     // (Optional) Store project metadata
     this->currentProjectName = projectJson["projectName"].toString();
     this->currentProjectPath = projectDir;
+    paint->getPaintArea()->setProjectPath(projectDir);
 
     float fps = projectJson["fps"].toDouble();
     //scriptBreakdown = new ScriptBreakdown("", fps);
@@ -1881,6 +1888,9 @@ ShotContext MainWindow::findShotByUuid(const std::string& uuid) {
 }
 
 PanelContext MainWindow::findPanelByUuid(const std::string& uuid) {
+
+    if(!scriptBreakdown)
+        return {};
 
     auto& scenes = scriptBreakdown->getScenes();
     for (auto& scene : scenes) {
@@ -2287,6 +2297,7 @@ void MainWindow::onLayerAdd() {
 
         long panelStartTime = panelContext.shot->startTime + currentPanel->startTime;
         float fps = projectJson["fps"].toDouble();
+
         paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, panelContext.shot->cameraFrames);
 
         // Update Layer Panel
@@ -2573,6 +2584,7 @@ void MainWindow::newProject()
         "assets/LoRA",
         "assets/audio",
         "assets/controlnet",
+        "audio/tracks",
         "movies",
         "panels",
         "references",
@@ -2581,7 +2593,7 @@ void MainWindow::newProject()
         "references/props",
         "scenes",
         "scripts",
-        "audio/tracks"
+        "thumbnails"
     };
 
     // Create all subdirectories
@@ -2711,12 +2723,15 @@ void MainWindow::onTimeCursorMoved(double time)
     // If no panel found, show white image
     if (!newPanel) {
         Log().debug() << "No panel at time: " << (float)time << ", showing blank image.";
-        paint->newImage();
+
         if(theShot){
             long panelStartTime = theShot->startTime + currentPanel->startTime;
             paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraFrames);
             cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraFrames);
         }
+
+
+
         currentPanel = nullptr;
         return;
     }
@@ -2731,28 +2746,10 @@ void MainWindow::onTimeCursorMoved(double time)
 
     currentPanel = newPanel;
 
-
-    QString imagePath = currentProjectPath + "/movies/" + currentPanel->image.c_str();
-    // Display the panel image, or a white image if not available
-    if (!currentPanel->image.empty() && QFile::exists(imagePath)) {
-        paint->openImage(imagePath);
-        if(theShot){
-            populateLayerList(currentPanel);
-            paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraFrames);
-            cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraFrames);
-
-        }
-
-        Log().debug() << "Loaded image: " << imagePath.toUtf8().constData() << "\n";
-    } else {
-        Log().debug() << "Panel image not found, showing white frame.";
-
-        paint->newImage();
-        if(theShot) {
-            paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraFrames);
-            cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraFrames);
-            populateLayerList(currentPanel);
-        }
+    if(theShot) {
+        paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraFrames);
+        populateLayerList(currentPanel);
+        cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraFrames);
     }
 }
 
@@ -3376,6 +3373,63 @@ void MainWindow::updateLayerThumbnail(const QString& uuid, const QImage& thumbna
     // In constructor or setupUi()
     ui->layerListWidget->setIconSize(QSize(debugThumbnail.width(), debugThumbnail.height()));
     ui->layerListWidget->update(); // Force redraw
+}
+
+void MainWindow::onPaintAreaImageModified(const QString& uuid, const QImage& image, bool isEditing)
+{
+    if (uuid.isEmpty())
+        return;
+
+    PanelContext panelContext = this->findPanelByUuid(uuid.toStdString());
+    if (!panelContext.isValid())
+        return;
+
+    //--- get the storyboard track
+    TrackItem *track = timeLineView->getTrack(0);
+    if (!track)
+        return;
+
+    //--- get the ShotSegment* segment from the timelineView
+    Segment *segment = track->getSegmentByUuid(panelContext.shot->uuid.c_str());
+    if (!segment)
+        return;
+
+    // Safe cast to ShotSegment
+    ShotSegment *shotSegment = dynamic_cast<ShotSegment*>(segment);
+    if (!shotSegment)
+        return;
+
+    MarkerItem *marker = shotSegment->getMarkerItemByUuid(uuid);
+    if (!marker)
+        return;
+
+    // Safe cast to PanelMarker
+    PanelMarker *panelMarker = dynamic_cast<PanelMarker*>(marker);
+    if (!panelMarker)
+        return;
+
+    // --- Resize the image to height = 200px, maintain 16:9 aspect ratio
+    int targetHeight = 200;
+    int targetWidth = static_cast<int>(targetHeight * 16.0 / 9.0);
+
+    QImage resizedImage;
+
+    if (image.isNull()) {
+        // Create a white image with 16:9 aspect ratio
+        resizedImage = QImage(targetWidth, targetHeight, QImage::Format_ARGB32);
+        resizedImage.fill(Qt::white);
+    } else
+        resizedImage = image.scaled(targetWidth, targetHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+
+    // If we are done editing, save the thumbnail to disk
+    if (!isEditing) {
+        QString imagePath = currentProjectPath + "/thumbnails/panel_" + uuid + ".png";
+        QDir().mkpath(QFileInfo(imagePath).absolutePath()); // Ensure the directory exists
+        resizedImage.save(imagePath, "PNG");
+    }
+
+    // Set the resized thumbnail in the marker
+    panelMarker->setThumbnail(resizedImage);
 }
 
 void MainWindow::showOptionsDialog()
