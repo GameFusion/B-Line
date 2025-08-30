@@ -21,6 +21,7 @@ class Segment;
 class ShotPanelWidget;
 class CameraSidePanel;
 class PerfectScriptWidget;
+class AudioMeterWidget;
 
 namespace Ui {
 	class MainWindowBoarder;
@@ -245,6 +246,9 @@ protected:
     PerfectScriptWidget *perfectScript = nullptr;
 
     QString currentPanelUuid;
+
+    // Audio Meter
+    //AudioMeterWidget *audioMeter = nullptr;
 };
 
 
