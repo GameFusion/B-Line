@@ -17,14 +17,21 @@
 
 #include "ConsoleDialog.h"
 
+#ifdef ENABLE_PLUGIN_SUPPORT
 #include <QtPlugin>
 Q_IMPORT_PLUGIN(BasicToolsPlugin)
+#endif
 
 using GameFusion::Log;
 
 int main(int argc, char *argv[])
 {
 	QApplication app(argc, argv);
+
+	// Prompt to attach debugger
+#ifdef DEBUG
+	MessageBox(NULL, L"Attach the debugger now (e.g., via Visual Studio 'Debug' -> 'Attach to Process').\nClick OK to continue.", L"Wait for Debug", MB_OK | MB_ICONINFORMATION);
+#endif
 
 	QPixmap pixmap("Btrfs3D.png");
 	QSplashScreen splash(pixmap);
