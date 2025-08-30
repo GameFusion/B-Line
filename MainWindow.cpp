@@ -55,6 +55,7 @@
 #include "../TimeLineProject/PanelMarker.h"
 #include "../TimeLineProject/CursorItem.h"
 #include "../TimeLineProject/TimelineOptionsDialog.h"
+#include "../TimeLineProject/AudioMeterWidget.h"
 
 // END TimeLine related includes
 
@@ -383,12 +384,15 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
 
     QSpacerItem *spacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
 
+    QHBoxLayout *topTopLayout = new QHBoxLayout(&parent);
     QVBoxLayout *toplayout = new QVBoxLayout(&parent);
     QHBoxLayout *hlayout = new QHBoxLayout(&parent);
 
     QVBoxLayout *gfxlayout = new QVBoxLayout(&parent);
 
     gfxlayout->setSpacing(0);  // Remove spacing between the elements
+    topTopLayout->setSpacing(0);
+    topTopLayout->setContentsMargins(0,0,0,0);
 
     // Grouping for toggle buttons (play/pause)
     QButtonGroup *toggleGroup = new QButtonGroup(&parent);
@@ -465,8 +469,17 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     toplayout->addLayout(hlayout);
     toplayout->addLayout(gfxlayout);
 
+    // Create audio meter
+    AudioMeterWidget *audioMeter = new AudioMeterWidget(&parent);
+    audioMeter->resize(100, 600);
+    audioMeter->setMinimumWidth(70);
+    audioMeter->show();
 
-    parent.setLayout(toplayout);
+    topTopLayout->addLayout(toplayout);
+    topTopLayout->addWidget(audioMeter);
+
+    parent.setLayout(topTopLayout);
+    //parent.setLayout(toplayout);
 
     QObject::connect(addPanelButton, &QToolButton::clicked, [timelineView]() {
         timelineView->onAddPanel();
@@ -513,6 +526,10 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
 
     t1->loadAudio("WarnerTest", "/users/andreascarlen/GameFusion/GameEngine/Applications/GameEditor/WarnerTest/TT.257.500.ACT.B.TEST44100.wav");
     t2->loadAudio("WarnerTest", "/users/andreascarlen/GameFusion/GameEngine/Applications/GameEditor/WarnerTest/TT.257.500.ACT.B.TEST44100.wav");
+
+
+
+
 
     return timelineView;
 }
@@ -874,6 +891,10 @@ QComboBox, QSpinBox {
     margin-bottom: 4px;
 }
 )");
+
+
+
+
 
     return;
 	//
@@ -3434,7 +3455,6 @@ void MainWindow::onPaintAreaImageModified(const QString& uuid, const QImage& ima
 
 void MainWindow::showOptionsDialog()
 {
-
     OptionsDialog dialog(this);
     // Access PaintArea's settings
     dialog.findChild<QCheckBox*>()->setChecked(
