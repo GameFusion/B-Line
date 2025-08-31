@@ -208,6 +208,11 @@ void StrokeAttributeDockWidget::updateColorButtonStyle(QPushButton *button, cons
 
 void StrokeAttributeDockWidget::emitStrokeProperties()
 {
+
+    if (skipUpdate) {
+        return; // Premature return if skipUpdate is true
+    }
+
     StrokeProperties props = getStrokeProperties();
 
     GameFusion::BezierCurve &curve = panel.layers.back().strokes.back();
@@ -238,8 +243,6 @@ StrokeProperties StrokeAttributeDockWidget::getStrokeProperties() const
 // In StrokeProperties.cpp or relevant file
 void StrokeAttributeDockWidget::setupPreviewCurve()
 {
-
-
     // Inline JSON as a QString (multi-line string)
     QString jsonString = R"({
         "handles": [
@@ -305,6 +308,30 @@ void StrokeAttributeDockWidget::setupPreviewCurve()
     } else {
         qWarning() << "previewArea is null";
     }
+}
 
+void StrokeAttributeDockWidget::setStrokeProperties(const StrokeProperties &props) {
+    GameFusion::BezierCurve &curve = panel.layers.back().strokes.back();
+    curve.setStrokeProperties(props);
+    previewArea->setPanel(panel);
+    previewArea->setStrokeProperties(props);
 
+    // Set skipUpdate to true to avoid feedback loop
+    skipUpdate = true;
+
+    // Update UI properties
+    smoothnessSlider->setValue(static_cast<int>(props.smoothness * 100));
+    maxWidthSlider->setValue(static_cast<int>(props.maxWidth * 10));
+    minWidthSlider->setValue(static_cast<int>(props.minWidth * 10));
+    samplingSlider->setValue(props.stepCount);
+    taperSlider->setValue(static_cast<int>(props.taperControl * 10));
+    variableWidthCombo->setCurrentIndex(static_cast<int>(props.variableWidthMode));
+    colorModeCombo->setCurrentIndex(static_cast<int>(props.colorMode));
+    foregroundColor = props.foregroundColor;
+    updateColorButtonStyle(foregroundColorButton, foregroundColor);
+    backgroundColor = props.backgroundColor;
+    updateColorButtonStyle(backgroundColorButton, backgroundColor);
+
+    // Reset skipUpdate to false after updates
+    skipUpdate = false;
 }

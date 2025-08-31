@@ -682,6 +682,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(paint->getPaintArea(), &PaintArea::cameraFrameUpdated, cameraSidePanel, &CameraSidePanel::updateCameraFrame);
     connect(paint->getPaintArea(), &PaintArea::cameraFrameDeleted, this, &MainWindow::onCameraFrameDeleted);
     connect(paint->getPaintArea(), &PaintArea::toolModeChanged, this, &MainWindow::onToolModeChanged);
+    connect(paint->getPaintArea(), &PaintArea::strokeSelected, this, &MainWindow::onStrokeSelected);
 
     connect(cameraSidePanel, &CameraSidePanel::cameraFrameUpdated,
             paint->getPaintArea(), &PaintArea::updateCameraFrameUI);
@@ -3689,4 +3690,19 @@ void MainWindow::onToolModeChanged(PaintArea::ToolMode mode)
         this->splitDockWidget(ui->dockLayers, strokeDock, Qt::Horizontal);
     }
     // Update other UI elements as needed
+}
+
+void MainWindow::onStrokeSelected(const SelectionFrameUI& selectedStrokes) {
+    // Handle stroke selection update
+    // Example: Update UI or log selection
+    qDebug() << "Stroke selected:" << selectedStrokes.selectedStrokes.size() << "strokes";
+    // Add custom logic here, e.g., update strokeDock or other UI elements
+    if (strokeDock) {
+        strokeDock->setEnabled(selectedStrokes.selectedStrokes.size() > 0);
+
+        if(selectedStrokes.selectedStrokes.size()){
+            StrokeProperties strokeProperties = selectedStrokes.selectedStrokes.back().stroke->getStrokeProperties();
+            strokeDock->setStrokeProperties(strokeProperties);
+        }
+    }
 }
