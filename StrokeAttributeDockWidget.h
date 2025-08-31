@@ -22,6 +22,7 @@ public:
     explicit StrokeAttributeDockWidget(QWidget *parent = nullptr);
 
     StrokeProperties getStrokeProperties() const;
+    void setStrokeProperties(const StrokeProperties &);
 
 signals:
     void strokePropertiesChanged(const StrokeProperties &properties);
@@ -60,6 +61,8 @@ private:
     PaintArea *previewArea;
 
     GameFusion::Panel panel; // preview panel with curve
+
+    bool skipUpdate = false;
 };
 
 #endif // STROKEATTRIBUTEDOCKWIDGET_H

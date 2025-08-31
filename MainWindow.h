@@ -172,6 +172,8 @@ public slots:
     void timelineCameraUpdate(const QString& uuid, long frameOffset, const QString& newPanelUuid);
     void timelineCameraDeleted(const QString& uuid);
 
+    void onStrokeSelected(const SelectionFrameUI& selectedStrokes);
+
 protected:
 
 	void dragEnterEvent(QDragEnterEvent *event) override;
