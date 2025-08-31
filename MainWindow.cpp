@@ -1897,7 +1897,38 @@ void MainWindow::loadProject(QString projectDir){
 
     loadAudioTracks();
 
+    // Post-load: Select the earliest panel by startTime across all scenes
+    if (scriptBreakdown) {
+        qint64 earliestTime = -1;
+        QTreeWidgetItem* targetItem = nullptr;
+        QTreeWidgetItemIterator it(ui->shotsTreeWidget);
+        float fps = projectJson["fps"].toDouble();
+        float mspf = fps > 0 ? 1000.0 / fps : 1.0;
+
+        while (*it) {
+            QString uuid = (*it)->data(0, Qt::UserRole).toString();
+            if (!uuid.isEmpty()) {
+                auto panelContext = findPanelByUuid(uuid.toStdString());
+                if (panelContext.isValid()) {
+                    qint64 startTimeMs = static_cast<qint64>(panelContext.panel->startTime / mspf);
+                    if (earliestTime == -1 || startTimeMs < earliestTime) {
+                        earliestTime = startTimeMs;
+                        targetItem = *it;
+                    }
+                }
+            }
+            ++it;
+        }
+
+        if (targetItem) {
+            ui->shotsTreeWidget->setCurrentItem(targetItem);
+            onTreeItemClicked(targetItem, 0); // Trigger callback
+        }
+    }
+
     this->updateWindowTitle(false);
+
+
 }
 
 void MainWindow::loadScript() {
