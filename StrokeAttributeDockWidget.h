@@ -8,10 +8,10 @@
 #include <QLabel>
 #include <QPushButton>
 
-
+#include "ScriptBreakdown.h"
 #include "StrokeProperties.h"
 
-
+class PaintArea;
 
 class StrokeAttributeDockWidget : public QDockWidget
 {
@@ -38,6 +38,7 @@ private slots:
 
 private:
     void updateColorButtonStyle(QPushButton *button, const QColor &color);
+    void setupPreviewCurve();
 
     QSlider *smoothnessSlider;
     QLabel *smoothnessLabel;
@@ -55,6 +56,10 @@ private:
     QComboBox *colorModeCombo;
     QColor foregroundColor;
     QColor backgroundColor;
+
+    PaintArea *previewArea;
+
+    GameFusion::Panel panel; // preview panel with curve
 };
 
 #endif // STROKEATTRIBUTEDOCKWIDGET_H

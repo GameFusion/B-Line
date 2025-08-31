@@ -13,6 +13,7 @@
 #include "ScriptBreakdown.h"
 #include "LlamaClient.h"
 #include "StrokeAttributeDockWidget.h"
+#include "paintarea.h"
 
 class LlamaModel;
 class TimeLineView;
@@ -157,6 +158,7 @@ public slots:
     void onLayerPosXChanged(double value);
     void onLayerPosYChanged(double value);
     void onLayerScaleChanged(double value);
+    void onToolModeChanged(PaintArea::ToolMode mode); // Slot to handle mode change from paint area
 
     void onPaintAreaLayerAdded(const GameFusion::Layer& layer);
     void onPaintAreaLayerModified(const GameFusion::Layer& layer);
@@ -249,6 +251,8 @@ protected:
 
     // Audio Meter
     //AudioMeterWidget *audioMeter = nullptr;
+
+    StrokeAttributeDockWidget *strokeDock;
 };
 
 

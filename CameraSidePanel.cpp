@@ -27,10 +27,10 @@ void CameraSidePanel::setupUI() {
     listWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
     // Allow the widget to shrink vertically
-    listWidget->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+    listWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
     // Optional: limit the max height so it doesn't grow too tall
-    listWidget->setMaximumHeight(50);  // Adjust based on your design
+    //listWidget->setMaximumHeight(50);  // Adjust based on your design
 
     addButton = new QPushButton("➕");
     delButton = new QPushButton("➖");
