@@ -599,6 +599,7 @@ MainWindow::MainWindow(QWidget *parent)
     //
 
     cameraSidePanel = new CameraSidePanel(this);
+    cameraSidePanel->setMaximumWidth(350);
     ui->dockCameras->setWidget(cameraSidePanel);
     connect(cameraSidePanel, &CameraSidePanel::cameraFrameUpdated,
             this, &MainWindow::onCameraFrameUpdated);
@@ -664,10 +665,23 @@ MainWindow::MainWindow(QWidget *parent)
 	ui->splitter->insertWidget(1, paint);
 	paint->show();
 
+    /* Create a default dump panel scene
+     *
+     */
+    {
+        GameFusion::Panel panel;
+        GameFusion::Layer layer;
+        panel.layers.push_back(layer);
+        paint->getPaintArea()->setPanel(panel);
+    }
+
+
+
     connect(paint->getPaintArea(), &PaintArea::cameraFrameAdded, this, &MainWindow::onCameraFrameAddedFromPaint);
     connect(paint->getPaintArea(), &PaintArea::cameraFrameUpdated, this, &MainWindow::onCameraFrameUpdated);
     connect(paint->getPaintArea(), &PaintArea::cameraFrameUpdated, cameraSidePanel, &CameraSidePanel::updateCameraFrame);
     connect(paint->getPaintArea(), &PaintArea::cameraFrameDeleted, this, &MainWindow::onCameraFrameDeleted);
+    connect(paint->getPaintArea(), &PaintArea::toolModeChanged, this, &MainWindow::onToolModeChanged);
 
     connect(cameraSidePanel, &CameraSidePanel::cameraFrameUpdated,
             paint->getPaintArea(), &PaintArea::updateCameraFrameUI);
@@ -840,7 +854,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     //
 
-    StrokeAttributeDockWidget *strokeDock = new StrokeAttributeDockWidget(this);
+    strokeDock = new StrokeAttributeDockWidget(this);
     addDockWidget(Qt::RightDockWidgetArea, strokeDock);
 
     connect(strokeDock, &StrokeAttributeDockWidget::strokePropertiesChanged,
@@ -893,6 +907,22 @@ QComboBox, QSpinBox {
 )");
 
 
+    /******************************/
+
+    delete ui->dockAttributes;
+
+    this->setDockNestingEnabled(true);
+
+
+    //this->tabifyDockWidget(ui->dockCameras, strokeDock);
+
+    ui->dockCameras->setVisible(false);
+
+    this->splitDockWidget(ui->dockLayers, strokeDock, Qt::Horizontal);
+
+    ui->dockCameras->setMaximumWidth(350);
+    strokeDock->setMaximumWidth(350);
+    /******************************/
 
 
 
@@ -3640,4 +3670,23 @@ void MainWindow::timelineCameraDeleted(const QString& uuid) {
     // TODO update camera side panel if necessary !!!
 
     //cameraSidePanel->setCameraList(panelUuid, cameraCtx.shot->cameraFrames);
+}
+
+
+void MainWindow::onToolModeChanged(PaintArea::ToolMode mode)
+{
+    // Handle mode change in MainWindow
+    if (mode == PaintArea::ToolMode::Camera) {
+        strokeDock->setVisible(false);
+        ui->dockCameras->setVisible(true);
+        ui->dockLayers->setVisible(true);
+        this->splitDockWidget(ui->dockLayers, ui->dockCameras, Qt::Horizontal);
+
+    } else {
+        strokeDock->setVisible(true); // Editable in Vector Edit
+        ui->dockCameras->setVisible(false);
+        ui->dockLayers->setVisible(true);
+        this->splitDockWidget(ui->dockLayers, strokeDock, Qt::Horizontal);
+    }
+    // Update other UI elements as needed
 }

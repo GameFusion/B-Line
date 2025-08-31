@@ -6,6 +6,10 @@
 #include <QComboBox>
 #include <QPushButton>
 #include <QColorDialog>
+#include <QJsonDocument>
+
+#include "paintarea.h"
+#include "ScriptBreakdown.h"
 
 StrokeAttributeDockWidget::StrokeAttributeDockWidget(QWidget *parent)
     : QDockWidget("Stroke Attributes", parent)
@@ -15,6 +19,13 @@ StrokeAttributeDockWidget::StrokeAttributeDockWidget(QWidget *parent)
     QVBoxLayout *layout = new QVBoxLayout(widget);
     layout->setSpacing(4);
     layout->setContentsMargins(8, 8, 8, 8);
+
+    previewArea = new PaintArea(this);
+    previewArea->setFixedHeight(100);
+    previewArea->setFpsDisplay(false);
+    layout->addWidget(previewArea);
+
+    setupPreviewCurve();
 
     // Smoothness slider (0.0 to 1.0, mapped to 0-100)
     QHBoxLayout *titleValue = new QHBoxLayout;
@@ -197,22 +208,20 @@ void StrokeAttributeDockWidget::updateColorButtonStyle(QPushButton *button, cons
 
 void StrokeAttributeDockWidget::emitStrokeProperties()
 {
-    StrokeProperties props;
-    props.smoothness = smoothnessSlider->value() / 100.0;
-    props.maxWidth = maxWidthSlider->value() / 10.0;
-    props.minWidth = minWidthSlider->value() / 10.0;
-    props.variableWidthMode = static_cast<StrokeProperties::VariableWidthMode>(variableWidthCombo->currentIndex());
-    props.stepCount = samplingSlider->value();
-    props.foregroundColor = foregroundColor;
-    props.backgroundColor = backgroundColor;
-    props.colorMode = static_cast<StrokeProperties::ColorMode>(colorModeCombo->currentIndex());
-    props.taperControl = taperSlider->value() / 10.0;
+    StrokeProperties props = getStrokeProperties();
+
+    GameFusion::BezierCurve &curve = panel.layers.back().strokes.back();
+    curve.setStrokeProperties(props);
+    previewArea->setPanel(panel);
+    previewArea->setStrokeProperties(props);
+
     emit strokePropertiesChanged(props);
 }
 
 StrokeProperties StrokeAttributeDockWidget::getStrokeProperties() const
 {
     StrokeProperties props;
+
     props.smoothness = smoothnessSlider->value() / 100.0;
     props.maxWidth = maxWidthSlider->value() / 10.0;
     props.minWidth = minWidthSlider->value() / 10.0;
@@ -222,5 +231,80 @@ StrokeProperties StrokeAttributeDockWidget::getStrokeProperties() const
     props.backgroundColor = backgroundColor;
     props.colorMode = static_cast<StrokeProperties::ColorMode>(colorModeCombo->currentIndex());
     props.taperControl = taperSlider->value() / 10.0;
+
     return props;
+}
+
+// In StrokeProperties.cpp or relevant file
+void StrokeAttributeDockWidget::setupPreviewCurve()
+{
+
+
+    // Inline JSON as a QString (multi-line string)
+    QString jsonString = R"({
+        "handles": [
+            {
+                "leftControl": {"x": 0, "y": 0, "z": 0},
+                "point": {"x": 20, "y": 75, "z": 0},
+                "rightControl": {"x": 35, "y": -45, "z": 0}
+            },
+            {
+                "leftControl": {"x": -20, "y": 0, "z": 0},
+                "point": {"x": 85, "y": 25, "z": 0},
+                "rightControl": {"x": 20, "y": 0, "z": 0}
+            },
+            {
+                "leftControl": {"x": -20, "y": 0, "z": 0},
+                "point": {"x": 150, "y": 70, "z": 0},
+                "rightControl": {"x": 20, "y": 0, "z": 0}
+            },
+            {
+                "leftControl": {"x": -20, "y": 0, "z": 0},
+                "point": {"x": 200, "y": 37, "z": 0},
+                "rightControl": {"x": 20, "y": 0, "z": 0}
+            },
+            {
+                "leftControl": {"x": -40, "y": 0, "z": 0},
+                "point": {"x": 275, "y": 75, "z": 0},
+                "rightControl": {"x": 0, "y": 0, "z": 0}
+            }
+        ],
+        "strokeProperties": {
+            "backgroundColor": {"a": 255, "b": 164, "g": 160, "r": 160},
+            "colorMode": 0,
+            "foregroundColor": {"a": 255, "b": 0, "g": 0, "r": 0},
+            "maxWidth": 4,
+            "minWidth": 1,
+            "smoothness": 20,
+            "stepCount": 20,
+            "variableWidthMode": 0
+        }
+    })";
+
+    // Parse JSON string to QJsonObject
+    QJsonDocument doc = QJsonDocument::fromJson(jsonString.toUtf8());
+    if (doc.isNull()) {
+        qWarning() << "Failed to parse JSON";
+        return;
+    }
+    QJsonObject inlineJson = doc.object();
+
+    // Initialize BezierCurve from JSON
+    GameFusion::BezierCurve stroke;
+    stroke.fromJson(inlineJson);
+
+    // Set up Layer and Panel
+    GameFusion::Layer layer;
+    layer.strokes.push_back(stroke);
+    panel.layers.push_back(layer);
+
+    // Set the panel in the preview area
+    if (previewArea) {
+        previewArea->setPanel(panel);
+        previewArea->setToolMode(PaintArea::ToolMode::Edit);
+    } else {
+        qWarning() << "previewArea is null";
+    }
+
+
 }
