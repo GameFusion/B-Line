@@ -44,6 +44,8 @@ RESOURCES += ../Boarder.qrc
 macx {
         QMAKE_CXXFLAGS += -std=c++20
 
+    DEFINES += ENABLE_PLUGIN_SUPPORT
+
 CONFIG(debug, debug|release) {
         message("+++++ debug mode")
 
@@ -124,7 +126,7 @@ unix:!macx{
 
 
 win32 {
-   CONFIG += c++17
+   CONFIG += c++17 debug
 
    LIBS	+= -lglu32 -lopengl32 -lUser32
    LIBS += legacy_stdio_definitions.lib 
@@ -132,7 +134,9 @@ win32 {
    CONFIG(debug, debug|release) {
 	   DEFINES += DEBUG
 
-		LIBS += $$GF\GameEngine\build-vs2019\Debug\GameEngine.lib $$GF\GameEngine\build-vs2019\Debug\GameEngineGL.lib $$GF\GameEngine\build-vs2019\Debug\GameFramework.lib
+		LIBS += $$GF\GameEngine\build-vs2019\Debug\GameEngine.lib
+         LIBS += $$GF\GameEngine\build-vs2019\Debug\GameEngineGL.lib $$GF\GameEngine\build-vs2019\Debug\GameFramework.lib
+         LIBS += $$GF\GameEngine\build-vs2019\Debug\English2Phone.lib
 		LIBS += $$GF/ExternalLibs/libharu-2.1.0/x64/Debug/libharu.lib
 		
 		LIBS += comdlg32.lib
@@ -142,9 +146,11 @@ win32 {
 		LIBS += $$GF/ExternalLibs/libpng-1.6.24/build-win64-vs2019/Debug/libpng16_staticd.lib
 		LIBS += $$GF/ExternalLibs/zlib-vs2019/Debug/zlib.lib
 
-		LIBS += -lpnp_basictoolsd
+                #LIBS += -lpnp_basictoolsd
 	} else {
-		LIBS += $$GF\GameEngine\build-vs2019\Release\GameEngine.lib $$GF\GameEngine\build-vs2019\Release\GameEngineGL.lib $$GF\GameEngine\build-vs2019\Release\GameFramework.lib
+		#LIBS += $$GF\GameEngine\build-vs2019\Release\GameEngine.lib 
+        # LIBS += $$GF\GameEngine\build-vs2019\Release\GameEngineGL.lib $$GF\GameEngine\build-vs2019\Release\GameFramework.lib
+        # LIBS += $$GF\GameEngine\build-vs2019\Release\English2Phone.lib
 		#LIBS += $$GF/ExternalLibs/harmonicBlender/x64/Release/harmonicBlender.lib
 		LIBS += $$GF/ExternalLibs/libharu-2.1.0/x64/Release/libharu.lib
 		SOURCES += $$GF/Projects/PhoneDEC/dec_phone_corr/Phone.cpp
@@ -156,7 +162,7 @@ win32 {
 		LIBS += crypt32.lib secur32.lib
 		LIBS += $$GF/ExternalLibs/zlib-vs2019/Release/zlib.lib
 
-		LIBS += -lpnp_basictools
+                #LIBS += -lpnp_basictools
 		LIBS += comdlg32.lib
    }
 
