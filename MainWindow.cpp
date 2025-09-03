@@ -598,6 +598,7 @@ MainWindow::MainWindow(QWidget *parent)
     //
 
     cameraSidePanel = new CameraSidePanel(this);
+    cameraSidePanel->setMaximumWidth(350);
     ui->dockCameras->setWidget(cameraSidePanel);
     connect(cameraSidePanel, &CameraSidePanel::cameraFrameUpdated,
             this, &MainWindow::onCameraFrameUpdated);
@@ -663,10 +664,24 @@ MainWindow::MainWindow(QWidget *parent)
 	ui->splitter->insertWidget(1, paint);
 	paint->show();
 
+    /* Create a default dump panel scene
+     *
+     */
+    {
+        GameFusion::Panel panel;
+        GameFusion::Layer layer;
+        panel.layers.push_back(layer);
+        paint->getPaintArea()->setPanel(panel);
+    }
+
+
+
     connect(paint->getPaintArea(), &PaintArea::cameraFrameAdded, this, &MainWindow::onCameraFrameAddedFromPaint);
     connect(paint->getPaintArea(), &PaintArea::cameraFrameUpdated, this, &MainWindow::onCameraFrameUpdated);
     connect(paint->getPaintArea(), &PaintArea::cameraFrameUpdated, cameraSidePanel, &CameraSidePanel::updateCameraFrame);
     connect(paint->getPaintArea(), &PaintArea::cameraFrameDeleted, this, &MainWindow::onCameraFrameDeleted);
+    connect(paint->getPaintArea(), &PaintArea::toolModeChanged, this, &MainWindow::onToolModeChanged);
+    connect(paint->getPaintArea(), &PaintArea::strokeSelected, this, &MainWindow::onStrokeSelected);
 
     connect(cameraSidePanel, &CameraSidePanel::cameraFrameUpdated,
             paint->getPaintArea(), &PaintArea::updateCameraFrameUI);
@@ -839,7 +854,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     //
 
-    StrokeAttributeDockWidget *strokeDock = new StrokeAttributeDockWidget(this);
+    strokeDock = new StrokeAttributeDockWidget(this);
     addDockWidget(Qt::RightDockWidgetArea, strokeDock);
 
     connect(strokeDock, &StrokeAttributeDockWidget::strokePropertiesChanged,
@@ -892,6 +907,22 @@ QComboBox, QSpinBox {
 )");
 
 
+    /******************************/
+
+    delete ui->dockAttributes;
+
+    this->setDockNestingEnabled(true);
+
+
+    //this->tabifyDockWidget(ui->dockCameras, strokeDock);
+
+    ui->dockCameras->setVisible(false);
+
+    this->splitDockWidget(ui->dockLayers, strokeDock, Qt::Horizontal);
+
+    ui->dockCameras->setMaximumWidth(350);
+    strokeDock->setMaximumWidth(350);
+    /******************************/
 
 
 
@@ -1842,7 +1873,38 @@ void MainWindow::loadProject(QString projectDir){
 
     loadAudioTracks();
 
+    // Post-load: Select the earliest panel by startTime across all scenes
+    if (scriptBreakdown) {
+        qint64 earliestTime = -1;
+        QTreeWidgetItem* targetItem = nullptr;
+        QTreeWidgetItemIterator it(ui->shotsTreeWidget);
+        float fps = projectJson["fps"].toDouble();
+        float mspf = fps > 0 ? 1000.0 / fps : 1.0;
+
+        while (*it) {
+            QString uuid = (*it)->data(0, Qt::UserRole).toString();
+            if (!uuid.isEmpty()) {
+                auto panelContext = findPanelByUuid(uuid.toStdString());
+                if (panelContext.isValid()) {
+                    qint64 startTimeMs = static_cast<qint64>(panelContext.panel->startTime / mspf);
+                    if (earliestTime == -1 || startTimeMs < earliestTime) {
+                        earliestTime = startTimeMs;
+                        targetItem = *it;
+                    }
+                }
+            }
+            ++it;
+        }
+
+        if (targetItem) {
+            ui->shotsTreeWidget->setCurrentItem(targetItem);
+            onTreeItemClicked(targetItem, 0); // Trigger callback
+        }
+    }
+
     this->updateWindowTitle(false);
+
+
 }
 
 void MainWindow::loadScript() {
@@ -2960,6 +3022,7 @@ void MainWindow::play() {
 
     isPlaying = true;
 
+    paint->getPaintArea()->setFpsDisplay(true);
     paint->getPaintArea()->startPlayback();
 
     // If range not set, default to full timeline length
@@ -2978,6 +3041,8 @@ void MainWindow::play() {
 void MainWindow::pause() {
     qDebug() << "Pause pressed";
 
+    paint->getPaintArea()->setFpsDisplay(false);
+
     GameFusion::SoundServer::context()->stop();
 
     if (!isPlaying) return;
@@ -2988,6 +3053,8 @@ void MainWindow::pause() {
 }
 
 void MainWindow::stop() {
+
+    paint->getPaintArea()->setFpsDisplay(false);
 
     GameFusion::SoundServer::context()->stop();
 
@@ -3615,4 +3682,38 @@ void MainWindow::timelineCameraDeleted(const QString& uuid) {
     // TODO update camera side panel if necessary !!!
 
     //cameraSidePanel->setCameraList(panelUuid, cameraCtx.shot->cameraFrames);
+}
+
+
+void MainWindow::onToolModeChanged(PaintArea::ToolMode mode)
+{
+    // Handle mode change in MainWindow
+    if (mode == PaintArea::ToolMode::Camera) {
+        strokeDock->setVisible(false);
+        ui->dockCameras->setVisible(true);
+        ui->dockLayers->setVisible(true);
+        this->splitDockWidget(ui->dockLayers, ui->dockCameras, Qt::Horizontal);
+
+    } else {
+        strokeDock->setVisible(true); // Editable in Vector Edit
+        ui->dockCameras->setVisible(false);
+        ui->dockLayers->setVisible(true);
+        this->splitDockWidget(ui->dockLayers, strokeDock, Qt::Horizontal);
+    }
+    // Update other UI elements as needed
+}
+
+void MainWindow::onStrokeSelected(const SelectionFrameUI& selectedStrokes) {
+    // Handle stroke selection update
+    // Example: Update UI or log selection
+    qDebug() << "Stroke selected:" << selectedStrokes.selectedStrokes.size() << "strokes";
+    // Add custom logic here, e.g., update strokeDock or other UI elements
+    if (strokeDock) {
+        strokeDock->setEnabled(selectedStrokes.selectedStrokes.size() > 0);
+
+        if(selectedStrokes.selectedStrokes.size()){
+            StrokeProperties strokeProperties = selectedStrokes.selectedStrokes.back().stroke->getStrokeProperties();
+            strokeDock->setStrokeProperties(strokeProperties);
+        }
+    }
 }
