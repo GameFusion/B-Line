@@ -3047,6 +3047,7 @@ void MainWindow::play() {
 
     isPlaying = true;
 
+    paint->getPaintArea()->setFpsDisplay(true);
     paint->getPaintArea()->startPlayback();
 
     // If range not set, default to full timeline length
@@ -3065,6 +3066,8 @@ void MainWindow::play() {
 void MainWindow::pause() {
     qDebug() << "Pause pressed";
 
+    paint->getPaintArea()->setFpsDisplay(false);
+
     GameFusion::SoundServer::context()->stop();
 
     if (!isPlaying) return;
@@ -3075,6 +3078,8 @@ void MainWindow::pause() {
 }
 
 void MainWindow::stop() {
+
+    paint->getPaintArea()->setFpsDisplay(false);
 
     GameFusion::SoundServer::context()->stop();
 
