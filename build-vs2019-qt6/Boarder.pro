@@ -126,7 +126,7 @@ unix:!macx{
 
 
 win32 {
-   CONFIG += c++17 debug
+   CONFIG += c++17
 
    LIBS	+= -lglu32 -lopengl32 -lUser32
    LIBS += legacy_stdio_definitions.lib 
@@ -148,9 +148,9 @@ win32 {
 
                 #LIBS += -lpnp_basictoolsd
 	} else {
-		#LIBS += $$GF\GameEngine\build-vs2019\Release\GameEngine.lib 
-        # LIBS += $$GF\GameEngine\build-vs2019\Release\GameEngineGL.lib $$GF\GameEngine\build-vs2019\Release\GameFramework.lib
-        # LIBS += $$GF\GameEngine\build-vs2019\Release\English2Phone.lib
+		LIBS += $$GF\GameEngine\build-vs2019\Release\GameEngine.lib 
+        LIBS += $$GF\GameEngine\build-vs2019\Release\GameEngineGL.lib $$GF\GameEngine\build-vs2019\Release\GameFramework.lib
+        LIBS += $$GF\GameEngine\build-vs2019\Release\English2Phone.lib
 		#LIBS += $$GF/ExternalLibs/harmonicBlender/x64/Release/harmonicBlender.lib
 		LIBS += $$GF/ExternalLibs/libharu-2.1.0/x64/Release/libharu.lib
 		SOURCES += $$GF/Projects/PhoneDEC/dec_phone_corr/Phone.cpp

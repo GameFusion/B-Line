@@ -96,6 +96,7 @@ int main(int argc, char *argv[])
     Log().info() << "Welcome to B-Line - Ai Powered Storyboarder\n";
 
     GameFusion::GameCore *core = new GameFusion::GameCore();
+	GameFusion::SoundDevice::SampleRateDefault = 44100;
     core->initialize();
 //    GameFusion::SoundServer::Initialize();
 

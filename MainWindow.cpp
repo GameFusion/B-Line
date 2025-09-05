@@ -377,9 +377,14 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
 
     styleComboBox->addItem("None");
 
+    styleComboBox->setCurrentText("None");
+    timelineView->setVisualStyle("None");
+
     // Create a checkbox for waveform display
     QCheckBox *waveformCheckbox = new QCheckBox("Waveform", &parent);
     waveformCheckbox->setChecked(false);
+    
+    
 
     QSpacerItem *spacer = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
 
@@ -472,6 +477,7 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     AudioMeterWidget *audioMeter = new AudioMeterWidget(&parent);
     audioMeter->resize(100, 600);
     audioMeter->setMinimumWidth(70);
+    audioMeter->setMaximumWidth(70);
     audioMeter->show();
 
     topTopLayout->addLayout(toplayout);
@@ -523,11 +529,15 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     // Show the main window
     parent.show();
 
+#ifdef WIN32
+    t1->loadAudio("WarnerTest", "../../GameEngine/Applications/GameEditor/WarnerTest/TT.257.500.ACT.B.TEST44100.wav");
+    t2->loadAudio("WarnerTest", "../../GameEngine/Applications/GameEditor/WarnerTest/TT.257.500.ACT.B.TEST44100.wav");
+#else
     t1->loadAudio("WarnerTest", "/users/andreascarlen/GameFusion/GameEngine/Applications/GameEditor/WarnerTest/TT.257.500.ACT.B.TEST44100.wav");
     t2->loadAudio("WarnerTest", "/users/andreascarlen/GameFusion/GameEngine/Applications/GameEditor/WarnerTest/TT.257.500.ACT.B.TEST44100.wav");
+#endif
 
-
-
+    
 
 
     return timelineView;
@@ -711,6 +721,7 @@ MainWindow::MainWindow(QWidget *parent)
 	newItem->setIcon(1, QIcon("2018-09-15 (4).png"));
 	//newItem->setSizeHint(1, QSize(256, 144));
 	
+    projectJson["fps"] = 25.0;
 	
 	//shotTree->addTopLeveItem(newItem);
 	
@@ -2713,17 +2724,16 @@ void MainWindow::newProject()
 
 void MainWindow::onTimeCursorMoved(double time)
 {
-    // Respond to timeline cursor change
+    //--- Respond to timeline cursor change
     //qDebug() << "Timeline cursor moved to time:" << time;
-    Log().debug() << "Timeline cursor moved to time:" << (float)time << "\n";
-    // Update other UI parts if needed
+    //Log().debug() << "Timeline cursor moved to time:" << (float)time << "\n";
 
+    //--- Update other UI parts if needed
 
-    // Find the current Scene → Shot → Panel at given time
-    /*
+    //--- Find the current Scene → Shot → Panel at given time
+
+    /*----------------------------------------------------
      * Find the current Scene → Shot → Panel at given time
-     *
-     *
      *
      * Project
      * └─ Scenes (each has Shots)
@@ -2742,6 +2752,9 @@ void MainWindow::onTimeCursorMoved(double time)
         return;
     }
     float mspf = 1000 / fps;
+
+    if (!scriptBreakdown)
+        return;
 
     auto& scenes = scriptBreakdown->getScenes();
     GameFusion::Shot *theShot = nullptr;
@@ -2776,9 +2789,7 @@ void MainWindow::onTimeCursorMoved(double time)
             break;
     }
 
-    //float fps = projectJson["fps"].toDouble();
-
-    // If no panel found, show white image
+    //--- If no panel found, show white image
     if (!newPanel) {
         Log().debug() << "No panel at time: " << (float)time << ", showing blank image.";
 
@@ -2806,8 +2817,11 @@ void MainWindow::onTimeCursorMoved(double time)
 
     if(theShot) {
         paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraFrames);
-        populateLayerList(currentPanel);
-        cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraFrames);
+        
+        if (!isPlaying) {
+            populateLayerList(currentPanel);
+            cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraFrames);
+        }
     }
 }
 
@@ -3282,8 +3296,10 @@ void MainWindow::loadAudioTracks() {
             float volume = segObj["volume"].toDouble(1.0);
             float pan = segObj["pan"].toDouble(0.0);
 
+
             AudioSegment *segment = new AudioSegment(trackItem->scene(), startTime, duration);
-            segment->loadAudio("Segment", file.toUtf8().constData());
+            QString absolutAutioPath = currentProjectPath + "/" + file;
+            segment->loadAudio("Segment", absolutAutioPath.toUtf8().constData());
             segment->setInOffset(inOffset);
             segment->setOutOffset(outOffset);
             segment->setVolume(volume);
