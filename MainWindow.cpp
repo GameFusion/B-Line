@@ -3323,8 +3323,15 @@ void MainWindow::loadAudioTracks() {
 
 
             AudioSegment *segment = new AudioSegment(trackItem->scene(), startTime, duration);
-            QString absolutAutioPath = currentProjectPath + "/" + file;
-            segment->loadAudio("Segment", absolutAutioPath.toUtf8().constData());
+
+            QString absoluteAudioPath;
+            if (QDir::isAbsolutePath(file)) {
+                absoluteAudioPath = QDir::toNativeSeparators(file); // Use as-is, convert separators
+            } else {
+                absoluteAudioPath = QDir::toNativeSeparators(currentProjectPath + "/" + file); // Relative to project
+            }
+
+            segment->loadAudio("Segment", absoluteAudioPath.toUtf8().constData());
             segment->setInOffset(inOffset);
             segment->setOutOffset(outOffset);
             segment->setVolume(volume);
