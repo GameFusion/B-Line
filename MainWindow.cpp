@@ -3605,9 +3605,90 @@ void MainWindow::exportStoryboardPDF() {
     }
 }
 
+#include <QProgressDialog>
+#include <QDir>
+#include <QDateTime>
+#include <QMessageBox>
+#include <QApplication>
+
 void MainWindow::exportMovie() {
     Log().info() << "Export Movie\n";
+
+    if (!scriptBreakdown) {
+        QMessageBox::warning(this, "Error", "No script loaded. Cannot export movie.");
+        return;
+    }
+
+    // Pre-scan to compute total duration
+    qint64 totalDurationMs = 0;
+    float fps = projectJson["fps"].toDouble(25.0);  // Default to 25 if not set
+    const auto& scenes = scriptBreakdown->getScenes();
+    for (const auto& scene : scenes) {
+        for (const auto& shot : scene.shots) {
+            for (const auto& panel : shot.panels) {
+                totalDurationMs += panel.durationTime;
+            }
+        }
+    }
+
+    int totalFrames = static_cast<int>((totalDurationMs / 1000.0) * fps);
+    if (totalFrames == 0) {
+        QMessageBox::warning(this, "Error", "No frames to export.");
+        return;
+    }
+
+    // Create export directory
+    QString safeProjectName = ProjectContext::instance().currentProjectName().replace(QRegularExpression("[^a-zA-Z0-9_-]"), "_");  // Sanitize name
+    QString dateStr = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+    QString exportDir = ProjectContext::instance().currentProjectPath() + "/animatic/" + safeProjectName + "_" + dateStr;
+    if (!QDir().mkpath(exportDir)) {
+        QMessageBox::warning(this, "Error", "Failed to create export directory.");
+        return;
+    }
+
+    // Progress dialog
+    QProgressDialog progress("Exporting movie frames...", "Cancel", 0, totalFrames, this);
+    progress.setWindowModality(Qt::WindowModal);
+
+    // Export frame by frame
+    qint64 currentTimeMs = 0;
+    int frameNumber = 0;
+    while (frameNumber < totalFrames) {
+        if (progress.wasCanceled()) {
+            Log().info() << "Export canceled by user\n";
+            return;
+        }
+
+        // Set timeline cursor to current frame
+        timeLineView->setTimeCursor(currentTimeMs);
+
+        // Render and save frame (assuming renderFrameToImage exists in PaintArea)
+        QImage frameImage(1920, 1080, QImage::Format_ARGB32_Premultiplied);
+        frameImage.fill(Qt::transparent);
+
+        paint->getPaintArea()->renderFrameToImage(frameImage);
+        if (frameImage.isNull()) {
+            QMessageBox::warning(this, "Error", "Failed to render frame " + QString::number(frameNumber));
+            return;
+        }
+
+        QString framePath = exportDir + "/frame_" + QString::number(frameNumber, 10).rightJustified(5, '0') + ".png";
+        if (!frameImage.save(framePath)) {
+            QMessageBox::warning(this, "Error", "Failed to save frame " + framePath);
+            return;
+        }
+
+        // Advance to next frame
+        currentTimeMs += static_cast<qint64>(1000.0 / fps);
+        frameNumber++;
+        progress.setValue(frameNumber);
+        QApplication::processEvents();  // Keep UI responsive
+    }
+
+    progress.setValue(totalFrames);
+    QMessageBox::information(this, "Success", "Movie exported to: " + exportDir);
 }
+
 
 void MainWindow::timelineCameraUpdate(const QString& uuid, long frameOffset, const QString& newPanelUuid) {
     /**********
