@@ -215,6 +215,8 @@ HEADERS += ../BezierCurve.h ../StrokeProperties.h
 SOURCES += ../OptionsDialog.cpp
 HEADERS += ../OptionsDialog.h
 
+HEADERS += ../ProjectContext.h
+
 # Input source files
 SOURCES +=  \
            $$GF/Applications/TimeLineProject/TimeLineView.cpp \

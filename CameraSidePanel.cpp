@@ -5,6 +5,9 @@
 #include <QApplication>
 #include <QFormLayout>
 #include <QScrollArea>
+#include <QFile>
+
+#include "ProjectContext.h"
 
 CameraSidePanel::CameraSidePanel(QWidget* parent)
     : QWidget(parent)
@@ -43,7 +46,9 @@ void CameraSidePanel::setupUI() {
 
     auto layout = new QVBoxLayout(this);
     layout->addLayout(buttonLayout);
-    layout->addWidget(listWidget);
+
+    // Give listWidget priority to expand
+    layout->addWidget(listWidget, /*stretch*/ 1);
     //layout->addStretch();
 
 
@@ -56,18 +61,18 @@ void CameraSidePanel::setupUI() {
     layout->addWidget(formContainer); // add form under list
     */
 
-    QScrollArea* scrollArea = new QScrollArea(this);
-    QWidget* scrollContent = new QWidget(scrollArea);
+    //QScrollArea* scrollArea = new QScrollArea(this);
+    QWidget* scrollContent = new QWidget(this);
     formLayout = new QFormLayout(scrollContent);  // assign this->formLayout
 
     scrollContent->setLayout(formLayout);
-    scrollArea->setWidget(scrollContent);
-    scrollArea->setWidgetResizable(true);
+    //scrollArea->setWidget(scrollContent);
+    //scrollArea->setWidgetResizable(true);
 
-    layout->addWidget(scrollArea); // add form under list
+    // Add the scroll area with lower priority
+    layout->addWidget(scrollContent, /*stretch*/ 0);
 
-
-    layout->addStretch();
+    //layout->addStretch();
     setLayout(layout);
 
 
@@ -181,7 +186,7 @@ void CameraSidePanel::onAttributeChanged() {
     easeOutLabel->setVisible(isBezier);
     easeOutSpinBox->setVisible(isBezier);
 
-    emit cameraFrameUpdated(currentFrame);
+    emit cameraFrameUpdated(currentFrame, false);
 }
 
 void CameraSidePanel::setupConnections() {
@@ -212,6 +217,7 @@ void CameraSidePanel::setCameraList(const QString& panelUuid, const std::vector<
     clearForm();
 
     int cameraIndex = 0;
+    listWidget->setIconSize(QSize(1920 / 14, 1080 / 14)); // Match layer panel icon size
 
     for (const auto& frame : frames) {
         // Only import camera frames for this panel
@@ -223,15 +229,72 @@ void CameraSidePanel::setCameraList(const QString& panelUuid, const std::vector<
                 cameraName = QString("Camera %1").arg(cameraIndex);
 
             auto item = new QListWidgetItem(cameraName, listWidget);
+
             // Optionally set icon, color, etc.
+
+            // Create dummy black pixmap as fallback
+            QPixmap dummyPixmap(240, 135);
+            dummyPixmap.fill(Qt::black);
+            item->setIcon(QIcon(dummyPixmap));
+
+            // Check for camera thumbnail image (e.g., based on uuid or image field)
+            QString imagePath = ProjectContext::instance().currentProjectPath() + "/cameras/camera_" + QString::fromStdString(frame.uuid) + ".png";
+            bool request = false;
+            if (QFile::exists(imagePath)) {
+                QImage thumbImage;
+                if (thumbImage.load(imagePath)) {
+                    constexpr int thumbWidth = 1920 / 14;  // 192
+                    constexpr int thumbHeight = 1080 / 14; // 108
+                    QPixmap thumbPixmap = QPixmap::fromImage(thumbImage.scaled(
+                        thumbWidth,
+                        thumbHeight,
+                        Qt::KeepAspectRatio,
+                        Qt::SmoothTransformation
+                        ));
+                    item->setIcon(QIcon(thumbPixmap));
+                }
+            }
+            else
+                request = true;
+
+
             item->setData(Qt::UserRole, QString::fromStdString(frame.uuid)); // 🔑 Store uuid
             listWidget->addItem(item);
 
             frameMap[QString::fromStdString(frame.uuid)] = frame;
+
+            if(request)
+                emit requestCameraThumbnail(frame.uuid.c_str(), false);
         }
     }
+}
 
+void CameraSidePanel::updateCameraThumbnail(const QString& uuid, const QImage& thumbnail)
+{
+    if (uuid.isEmpty() || thumbnail.isNull())
+        return;
 
+    // Iterate through the listWidget items to find the one with matching uuid
+    for (int i = 0; i < listWidget->count(); ++i) {
+        QListWidgetItem* item = listWidget->item(i);
+        if (!item)
+            continue;
+
+        QString itemUuid = item->data(Qt::UserRole).toString();
+        if (itemUuid == uuid) {
+            // Scale the thumbnail to match the icon size set in setCameraList
+            QSize iconSize = listWidget->iconSize();
+            QPixmap scaledThumb = QPixmap::fromImage(
+                thumbnail.scaled(
+                    iconSize,
+                    Qt::KeepAspectRatio,
+                    Qt::SmoothTransformation
+                    )
+                );
+            item->setIcon(QIcon(scaledThumb));
+            return; // Found and updated, stop here
+        }
+    }
 }
 
 void CameraSidePanel::selectPanel(const QString& panelName) {
@@ -309,7 +372,7 @@ void CameraSidePanel::onItemDropped() {
     emit cameraReordered(newOrder);
 }
 
-void CameraSidePanel::updateCameraFrame(const GameFusion::CameraFrame& frame){
+void CameraSidePanel::updateCameraFrame(const GameFusion::CameraFrame& frame, bool isEditing){
     if(!nameEdit){
         populateForm(frame);
         return;

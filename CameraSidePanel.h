@@ -23,9 +23,6 @@ public:
     void setCameraList(const QString& panelUuid, const std::vector<GameFusion::CameraFrame>& frames);
     QString selectedCamera() const;
 
-public slots:
-    void updateCameraFrame(const GameFusion::CameraFrame& frame);
-
 signals:
     void cameraAdded();
     void cameraDeleted(const QString& name);
@@ -33,7 +30,12 @@ signals:
     void cameraRenamed(const QString& oldName, const QString& newName);
     void cameraReordered(const QStringList& newOrder);
     void cameraSelected(const QString& name);
-    void cameraFrameUpdated(const GameFusion::CameraFrame& frame);
+    void cameraFrameUpdated(const GameFusion::CameraFrame& frame, bool isEditing);
+    void requestCameraThumbnail(const QString& uuid, bool isEditing);
+
+public slots:
+    void updateCameraThumbnail(const QString& uuid, const QImage& thumbnail);  // Slot to receive and update thumbnail
+    void updateCameraFrame(const GameFusion::CameraFrame& frame, bool isEditing);
 
 private slots:
     void onAddCamera();
