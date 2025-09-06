@@ -138,7 +138,7 @@ public slots:
     void onCameraFrameAddedFromPaint(const GameFusion::CameraFrame& frame);
     void onCameraFrameAddedFromSidePanel(const GameFusion::CameraFrame& frame);
 
-    void onCameraFrameUpdated(const GameFusion::CameraFrame& frame);
+    void onCameraFrameUpdated(const GameFusion::CameraFrame& frame, bool isEditing);
     void onCameraFrameDeleted(const QString& uuid);
 
     void onLayerSelectionChanged(QListWidgetItem* current, QListWidgetItem* previous);
@@ -172,11 +172,13 @@ public slots:
     void showOptionsDialog();
 
     void exportStoryboardPDF();
+    void exportMovie();
 
     void timelineCameraUpdate(const QString& uuid, long frameOffset, const QString& newPanelUuid);
     void timelineCameraDeleted(const QString& uuid);
 
     void onStrokeSelected(const SelectionFrameUI& selectedStrokes);
+    void onRequestCameraThumbnail(const QString &uuid, bool isEditing);
 
 protected:
 
@@ -223,8 +225,8 @@ protected:
 
     LlamaModel *llamaModel;
 
-    QString currentProjectName;
-    QString currentProjectPath;
+    //QString currentProjectName;
+    //QString currentProjectPath;
 
     TimeLineView* timeLineView;
     TimecodeDuration episodeDuration;
