@@ -260,6 +260,26 @@ struct Shot {
         return false;
     }
 
+    std::string getDialogs() const {
+        std::string result;
+
+        for (const auto& character : characters) {
+            // Assuming dialogNumber is an integer, convert it to string
+            result += std::to_string(character.dialogNumber) + " " + character.name;
+
+            if (character.onScreen)
+                result += "\n";
+            else
+                result += "(OS)\n";
+
+            if (!character.dialogParenthetical.empty())
+                result += character.dialogParenthetical + "\n";
+
+            result += character.dialogue + "\n";
+        }
+
+        return result;
+    }
 };
 
 struct Scene {

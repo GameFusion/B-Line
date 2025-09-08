@@ -24,6 +24,8 @@ class CameraSidePanel;
 class PerfectScriptWidget;
 class AudioMeterWidget;
 
+class QPdfWriter;
+
 namespace Ui {
 	class MainWindowBoarder;
 }
@@ -173,6 +175,9 @@ public slots:
 
     void exportStoryboardPDF();
     void exportMovie();
+    void exportStoryboardPDF2();
+    qreal drawStoryboardHeader(QFont &headerFont, QPainter &painter, int pageNumber, int totalPages);
+    void exportStoryboardPDF3();
 
     void timelineCameraUpdate(const QString& uuid, long frameOffset, const QString& newPanelUuid);
     void timelineCameraDeleted(const QString& uuid);

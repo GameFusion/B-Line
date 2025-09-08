@@ -3568,41 +3568,591 @@ void MainWindow::showOptionsDialog()
 }
 
 #include <QPdfWriter>
+#include <QFont>
+#include <QDateTime>
 
 void MainWindow::exportStoryboardPDF() {
+
+    exportStoryboardPDF2();
+    exportStoryboardPDF3();
+
+    // Configurable panel count (default to 3, mimicking Toon Boom)
+    const int panelsPerRow = 3; // Can be made configurable via UI or project settings
+    const int margin = 20;
+    const int panelWidth = 250; // Base width for single-column panel
+    const int panelHeight = 150; // Base height, adjustable for camera movement
+    const int headerHeight = 40;
+    const int textBlockHeight = 60;
+
+    // Set PDF to landscape mode (e.g., 1080x1920 pixels for HD aspect)
     QPdfWriter pdf(ProjectContext::instance().currentProjectPath() + "/storyboard.pdf");
+    pdf.setPageSize(QPageSize::A4);
+    pdf.setPageOrientation(QPageLayout::Landscape);
+    pdf.setResolution(300); // High resolution for clarity
     QPainter painter(&pdf);
-    int y = 0;
+
+    // Set font for text
+    QFont font("Arial", 10);
+    painter.setFont(font);
+
+    int pageCount = 0;
+    int y = headerHeight + margin;
+    int x = margin;
+    int panelCount = 0;
+    int totalPanels = 0;
+
+    int pageColumn = 0;
+
+    const auto& scenes = scriptBreakdown->getScenes();
+    for (const auto& scene : scenes) {
+        for (const auto& shot : scene.shots) {
+            totalPanels += shot.panels.size();
+        }
+    }
 
     for (const auto& scene : scriptBreakdown->getScenes()) {
         for (const auto& shot : scene.shots) {
             for (const auto& panel : shot.panels) {
-                QImage image(QString::fromStdString(panel.image)); // Load image from string path
-                if (!image.isNull()) {
-                    painter.drawImage(QRect(10, y, 100, 100), image);
-                } else {
-                    painter.drawText(10, y + 50, "[Missing Image]");
+                // Load and determine panel image size based on camera movement
+
+                QString imageRefPath;
+                QImage imageRef;
+                int screenWidth = 1920;
+                int screenHeight = 1080;
+
+                if(!panel.image.empty()){
+                    imageRefPath = ProjectContext::instance().currentProjectPath() + "/movies/" + panel.image.c_str();
+                    imageRef = QImage(imageRefPath);
+
+
                 }
 
-                painter.drawText(120, y + 20, "Action: " + QString::fromStdString(shot.action));
-                if(!shot.cameraFrames.empty()) {
-                    painter.drawText(120, y + 40,
-                                 QString("Camera: Pos(%1,%2) Rot:%3 Scale:%4")
-                                     .arg(shot.cameraFrames[0].x)
-                                     .arg(shot.cameraFrames[0].y)
-                                     .arg(shot.cameraFrames[0].rotation)
-                                     .arg(shot.cameraFrames[0].zoom)
-                                 );
+                int imageWidth = panelWidth;
+                int imageHeight = panelHeight;
+
+
+                if(!imageRef.isNull() && shot.cameraFrames.size() > 1) {
+                    // For camera movement, span two columns and adjust height
+                    imageWidth = panelWidth * 2;
+                    // Assume bounding box height is the max of camera frame heights
+                    qreal maxHeight = 0;
+                    for (const auto& frame : shot.cameraFrames) {
+                        QRect rect(frame.x, frame.y, screenWidth*frame.zoom, screenHeight*frame.zoom);
+                        maxHeight = maxHeight > rect.height() ? maxHeight : rect.height();
+
+
+                        imageHeight = qMin(300, qMax(panelHeight, static_cast<int>(maxHeight * (panelWidth * 2 / rect.width()))));
+                    }
+
                 }
 
-                y += 120;
-                if (y > pdf.height() - 100) {
+                if(shot.cameraFrames.size() > 1)
+                    pageColumn += 2;
+                else
+                    pageColumn ++;
+
+                // New page or row if needed
+                if (x + imageWidth > pdf.width() - margin || panelCount >= panelsPerRow) {
+                    y += (imageHeight + textBlockHeight + margin) * 2;
+                    x = margin;
+                    panelCount = 0;
+                }
+                if (pageColumn >= 3 || y + imageHeight + textBlockHeight > pdf.height() - margin) {
+                    // Add page number and title
+                    QString pageText = QString("Storyboard - Page %1 of %2").arg(++pageCount).arg((totalPanels + panelsPerRow - 1) / panelsPerRow);
+                    painter.drawText(margin, headerHeight / 2, pageText);
                     pdf.newPage();
-                    y = 0;
+                    y = (headerHeight + margin) * 2;
+                    x = margin;
+                    panelCount = 0;
+                    pageColumn = 0;
+                    painter.drawText(margin, headerHeight / 2, pageText);
+                }
+
+                // Draw panel info above image
+                QString panelInfo = QString("Scene %1, Dur TC (Scene): %2s, Panel %3, Dur TC (Panel): %4s")
+                                        .arg(scene.name.c_str())
+                                        .arg(shot.frameCount / 1000.0, 0, 'f', 2)
+                                        .arg(panel.name.c_str())
+                                        .arg(panel.durationTime / 1000.0, 0, 'f', 2);
+                painter.drawText(x, y - 10, panelInfo);
+
+                // Draw image or placeholder
+                if (!imageRef.isNull()) {
+                    painter.drawImage(QRect(x, y, panelWidth, panelHeight), imageRef.scaled(panelWidth, panelHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                } else {
+                    painter.drawText(x, y + imageHeight / 2, "[Missing Image]");
+                }
+
+                // Draw text blocks below image
+                int textY = y + imageHeight + 5;
+                if (!shot.action.empty()) {
+                    painter.drawText(x, textY, QString("Action: %1").arg(QString::fromStdString(shot.action)));
+                    textY += 15 * 2;
+                }
+                for(auto character: shot.characters) {
+                //if (!shot.characters...dialog.empty()) {
+                    painter.drawText(x, textY, QString("Dialog: %1").arg(QString::fromStdString(character.name)));
+                    textY += 15 * 2;
+                    painter.drawText(x, textY, QString("%1").arg(QString::fromStdString(character.dialogue)));
+                    textY += 15 * 2;
+                }
+                if (!shot.cameraFrames.empty()) {
+                    painter.drawText(x, textY, QString("Camera Motion: Pos(%1,%2) Rot:%3 Scale:%4")
+                                         .arg(shot.cameraFrames[0].x)
+                                         .arg(shot.cameraFrames[0].y)
+                                         .arg(shot.cameraFrames[0].rotation)
+                                         .arg(shot.cameraFrames[0].zoom));
+                    textY += 15 * 2;
+                }
+
+                x += imageWidth + margin;
+                panelCount++;
+
+
+            }
+        }
+    }
+
+    // Final page number
+    QString pageText = QString("Storyboard - Page %1 of %2").arg(pageCount).arg((totalPanels + panelsPerRow - 1) / panelsPerRow);
+    painter.drawText(margin, headerHeight / 2, pageText);
+}
+
+#include <QPdfWriter>
+#include <QPageSize>
+#include <QFont>
+#include <QFontMetrics>
+#include <QPainter>
+
+// Function to compute text width and height in pixels and points
+QSize computeTextDimensions(const QString& text, const QFont& font, QPainter& painter, qreal maxWidthPoints = 0.0, int alignment = Qt::AlignLeft) {
+
+    // Initialize QFontMetrics with the device for accurate DPI-based measurements
+    QFontMetricsF fm(font, painter.device());
+
+    // Calculate DPI and pixel-to-point conversion
+    qreal dpi = painter.device()->logicalDpiX(); // Typically 300 for QPdfWriter
+    qreal pixelsToPoints = dpi / 72.0; // e.g., 300 / 72 ≈ 4.1667
+
+    // Convert maxWidthPoints to pixels for boundingRect
+    qreal maxWidthPixels = maxWidthPoints /** pixelsToPoints*/;
+
+    // Compute text dimensions in pixels using QRectF
+    QRectF boundingBox(0, 0, maxWidthPixels > 0 ? maxWidthPixels : INT_MAX, INT_MAX);
+    QRectF textRect = fm.boundingRect(boundingBox, alignment | Qt::TextWordWrap, text);
+
+    // Convert to points
+    qreal widthPoints = textRect.width() ;
+    qreal heightPoints = textRect.height() ;
+
+    return QSize(widthPoints, heightPoints);
+}
+
+void MainWindow::exportStoryboardPDF2() {
+    QString pdfPath = ProjectContext::instance().currentProjectPath() + "/storyboard2.pdf";
+    QPdfWriter pdf(pdfPath);
+    pdf.setPageSize(QPageSize(QPageSize::A4)); // A4 landscape
+    pdf.setPageOrientation(QPageLayout::Landscape);
+    pdf.setResolution(300); // High-quality
+    QPainter painter(&pdf);
+
+    const int panelsPerPage = 3; // Configurable later
+    const int margin = 50;
+    const int panelSpacing = 30;
+    float headerHeight = 80;
+
+    // Set up fonts
+    QFont headerFont("Arial", 14, QFont::Bold);
+    QFont textFont("Arial", 10);
+    QFont textFontSmall("Arial", 8);
+
+    QFontMetrics headerFm(headerFont, &pdf);
+    QFontMetrics textFm(textFont, &pdf);
+    painter.setFont(headerFont);
+
+    // Conversion factor: pixels to points
+    qreal dpi = pdf.resolution(); // 300 DPI
+    qreal pixelsToPoints = dpi / 72.0; // 300 / 72 ≈ 4.1667
+
+    int pageNumber = 1;
+
+    int x = margin;
+    int y = margin + headerHeight;
+
+    // Precompute total pages
+    int totalPanels = 0;
+    for (const auto& scene : scriptBreakdown->getScenes()) {
+        for (const auto& shot : scene.shots) {
+            for (const auto& panel : shot.panels) {
+                bool spansTwoColumns = !shot.cameraFrames.empty() && shot.cameraFrames.size() > 1;
+                totalPanels += spansTwoColumns ? 2 : 1;
+            }
+        }
+    }
+    int totalPages = (totalPanels + panelsPerPage - 1) / panelsPerPage;
+
+    // Draw initial header
+    headerHeight = drawStoryboardHeader(headerFont, painter, pageNumber, totalPages);
+    y = margin + headerHeight * 4; // on first page set defaults
+
+    int panelCountOnPage = 0;
+    bool priorPagePanelSpansTwoColumns = false;
+
+    for (const auto& scene : scriptBreakdown->getScenes()) {
+        for (const auto& shot : scene.shots) {
+            int panelNumber = 0;
+            for (const auto& panel : shot.panels) {
+
+                panelNumber ++;
+                // --- Determine if camera spans two columns ---
+                bool spansTwoColumns = !shot.cameraFrames.empty() && shot.cameraFrames.size() > 1;
+
+                if ((panelCountOnPage+spansTwoColumns) >= panelsPerPage) {
+                    pdf.newPage();
+                    pageNumber++;
+
+                    headerHeight = drawStoryboardHeader(headerFont, painter, pageNumber, totalPages);
+
+                    x = margin;
+                    y = margin + headerHeight * 4;
+                    panelCountOnPage = 0;
+                }
+
+                // Calculate panel dimensions in points
+                int panelWidth = (pdf.width() - (margin * 2) - (panelSpacing * 2)) / panelsPerPage;
+                if (spansTwoColumns)
+                    panelWidth = panelWidth * 2 + panelSpacing;
+                int panelHeight = panelWidth * 9 / 16; // Maintain 16:9
+
+                QRect panelRect(x, y, panelWidth, panelHeight);
+
+                //------
+
+                //qreal panelTimeStart = panelFrameStart * mspf;
+                //qreal panelDuration = panel.durationFrames * mspf;
+
+
+                // todo , first see if thumbnail exists and use this
+                QString thumbnailPath = ProjectContext::instance().currentProjectPath() + "/thumbnails/panel_" + panel.uuid.c_str() + ".png";
+
+                if (!QFile::exists(thumbnailPath)){ // fallback 1
+
+                    qreal panelTimeStart = shot.startTime + panel.startTime;
+                    // Set timeline cursor to panel frame to compute thumnail for panel
+                    timeLineView->setTimeCursor(panelTimeStart);
+                }
+
+                if (!QFile::exists(thumbnailPath)){ // fallback 2
+                    thumbnailPath = ProjectContext::instance().currentProjectPath() + "/movies/" + panel.thumbnail.c_str();
+                }
+
+                //------
+
+                QImage image(thumbnailPath);
+                if (!image.isNull()) {
+                    painter.drawImage(panelRect, image);
+                    // todo draw rect frame in black, make sure it is visible ontop of image
+
+                    // Set a visible pen for the frame
+                    QPen framePen(Qt::black);
+                    framePen.setWidthF(2.0); // thicker line for better visibility
+                    painter.setPen(framePen);
+                    painter.setBrush(Qt::NoBrush); // No fill, only outline
+
+                    // Draw the rectangle frame over the image
+                    painter.drawRect(panelRect);
+                } else {
+                    painter.fillRect(panelRect, Qt::lightGray);
+                    painter.drawText(panelRect, Qt::AlignCenter, "[Missing Image]");
+                }
+
+                // --- Draw Panel Header Text ---
+                painter.setFont(textFont);
+
+                QString scText = QString("SC:  %1").arg(QString::fromStdString(scene.name));
+                QString scTcText = QString("TC: %1").arg("00:00:00:00"); // Placeholder
+                QString pnlText = QString("PNL: %1").arg(QString::number(panelNumber));
+                QString pnlTcText = QString("TC: %1").arg("00:00:01:12"); // Placeholder
+
+                // Left aligned texts
+                QSize scSize = computeTextDimensions(scText, textFont, painter);
+                QSize pnlSize = computeTextDimensions(pnlText, textFont, painter);
+
+                // Timecode texts (should be aligned vertically)
+                QSize scTcSize = computeTextDimensions(scTcText, textFont, painter);
+                QSize pnlTcSize = computeTextDimensions(pnlTcText, textFont, painter);
+
+                // Calculate baseline Y for the two lines
+                int lineSpacing = 4; // space between lines
+                int totalHeight = scSize.height() + lineSpacing + pnlSize.height();
+                int yBase = panelRect.y() - totalHeight - 5 * 2; // 5 px margin above panel
+
+                // X positions
+                int leftX = panelRect.x();
+                int tcAlignedX = panelRect.x() + panelRect.width() * 0.5;
+
+                // Draw first line: SC and SC-TC
+                painter.drawText(leftX, yBase + scSize.height(), scText);
+                painter.drawText(tcAlignedX, yBase + scSize.height(), scTcText);
+
+                // Draw second line: PNL and PNL-TC
+                painter.drawText(leftX, yBase + scSize.height() + lineSpacing + pnlSize.height(), pnlText);
+                painter.drawText(tcAlignedX, yBase + scSize.height() + lineSpacing + pnlSize.height(), pnlTcText);
+
+
+
+                // --- Draw Text Blocks Underneath ---
+
+                painter.setFont(textFontSmall);
+
+                int textY = panelRect.bottom() + 15;
+                if (!shot.action.empty()) {
+                    painter.drawText(x, textY, "Action: " + QString::fromStdString(shot.action));
+                    textY += 15;
+                }
+
+                int yOffset = panelRect.y() + panelRect.height() + margin; // The top of where dialogs start on the PDF
+                int xOffset = panelRect.x();
+
+                std::string dialogues =shot.getDialogs();
+                if (!dialogues.empty()) {
+
+                    for (const auto& character : shot.characters) {
+                        // Build the full text block for this character
+                        QString dialogBlock = QString::fromStdString(std::to_string(character.dialogNumber))
+                                              + " " + QString::fromStdString(character.name)
+                                              + (character.onScreen ? "" : " (OS)") + "\n";
+
+                        if (!character.dialogParenthetical.empty() && character.dialogParenthetical != character.dialogue )
+                            dialogBlock += "("+QString::fromStdString(character.dialogParenthetical) + ")"+"\n";
+
+                        dialogBlock += QString::fromStdString(character.dialogue);
+
+                        // Compute the size this text block will occupy
+                        QSize textSize = computeTextDimensions(dialogBlock, textFontSmall, painter, panelRect.width());
+
+                        // Define a bounding rectangle for this block
+                        QRect textRect(xOffset, yOffset, panelRect.width(), textSize.height());
+
+                        // Draw the text (supports line breaks via Qt::TextWordWrap)
+                        painter.drawText(textRect, Qt::AlignLeft | Qt::TextWordWrap, dialogBlock);
+
+                        // Advance yOffset for next dialog
+                        yOffset += textSize.height() + margin; // Add padding between dialogs
+                    }
+                }
+
+                int sectionSpacing = 8;
+
+                auto joinStrings = [](const std::vector<std::string>& values) -> std::string {
+                    std::string result;
+                    for (size_t i = 0; i < values.size(); ++i) {
+                        result += values[i];
+                        if (i < values.size() - 1)
+                            result += ", "; // or "\n" if you want line breaks
+                    }
+                    return result;
+                };
+
+                auto drawSection = [&](const QString& title, const std::string& value) {
+                    if (value.empty())
+                        return;
+
+                    // --- Draw horizontal divider ---
+                    painter.setPen(QPen(Qt::black, 1));
+                    painter.drawLine(xOffset, yOffset, xOffset + panelRect.width(), yOffset);
+                    yOffset += lineSpacing * 2; // Padding after divider
+
+                    // --- Compose wrapped text ---
+                    QString text = QString("%1: %2").arg(title, QString::fromStdString(value));
+
+                    // Compute text bounding size using word wrap
+                    QRect textRect(xOffset,
+                                   yOffset,
+                                   panelRect.width(),
+                                   painter.fontMetrics().boundingRect(
+                                                            QRect(0, 0, panelRect.width(), INT_MAX),
+                                                            Qt::TextWordWrap,
+                                                            text).height());
+
+                    // --- Draw the text with word wrapping ---
+                    painter.setPen(Qt::black);
+                    painter.drawText(textRect, Qt::AlignLeft | Qt::TextWordWrap, text);
+
+                    // --- Add extra padding after text ---
+                    yOffset += textRect.height() + sectionSpacing;
+                };
+
+                // Append sections conditionally
+                drawSection("Audio SFX", joinStrings(shot.audio.sfx));
+                drawSection("Audio Ambient", shot.audio.ambient);
+                drawSection("Description", shot.description);
+                drawSection("FX", shot.fx);
+                drawSection("Intent", shot.intent);
+                drawSection("Action", shot.action);
+                //drawSection("Notes", shot.notes);
+                drawSection("Time Of Day", shot.timeOfDay);
+                drawSection("Lighting", shot.lighting);
+                drawSection("Transition", shot.transition);
+                drawSection("Type", shot.type);
+
+                // --- Advance column position ---
+                if (spansTwoColumns)
+                    x += panelWidth + panelSpacing; // already spans two columns
+                else
+                    x += panelWidth + panelSpacing;
+
+                panelCountOnPage++;
+
+                if(spansTwoColumns)
+                    panelCountOnPage++;
+
+
+            }
+        }
+    }
+
+    painter.end();
+}
+
+
+void MainWindow::exportStoryboardPDF3() {
+    const QString outputPath = ProjectContext::instance().currentProjectPath() + "/storyboard3.pdf";
+    QPdfWriter pdf(outputPath);
+    pdf.setPageSize(QPageSize(QPageSize::A4)); // A4 landscape
+    pdf.setPageOrientation(QPageLayout::Landscape);
+    pdf.setResolution(300); // High-quality print resolution
+
+    QPainter painter(&pdf);
+    if (!painter.isActive()) {
+        qWarning() << "Failed to open PDF for writing:" << outputPath;
+        return;
+    }
+
+    const int margin = 40;
+    const int pageWidth = pdf.width();
+    const int pageHeight = pdf.height();
+    const int columnWidth = (pageWidth - margin * 2) / 3; // 3 panels per row (Toon Boom default)
+    const int defaultPanelHeight = 300;
+
+    int x = margin;
+    int y = margin;
+    int panelsOnRow = 0;
+
+    int pageNumber = 1;
+    int totalPages = 1; // Optional: can compute in a pre-pass
+
+    for (const auto& scene : scriptBreakdown->getScenes()) {
+        for (const auto& shot : scene.shots) {
+            for (const auto& panel : shot.panels) {
+                // Determine if this panel spans one or two columns
+                bool isDoubleColumn = !shot.cameraFrames.empty(); // or (shot.cameraFrames.size() > 1)
+                int panelWidth = isDoubleColumn ? columnWidth * 2 : columnWidth;
+
+                // Determine panel height based on image aspect ratio or default
+                QImage image(QString::fromStdString(panel.image));
+                int panelHeight = defaultPanelHeight;
+                if (!image.isNull()) {
+                    QSize scaledSize = image.size().scaled(panelWidth, panelHeight, Qt::KeepAspectRatio);
+                    panelHeight = scaledSize.height();
+                }
+
+                // **Handle page break properly**
+                if (y + panelHeight + margin > pageHeight) {
+                    pdf.newPage();
+                    y = margin;
+                    x = margin;
+                    panelsOnRow = 0;
+                    pageNumber++;
+                }
+
+                // Draw the image or placeholder
+                if (!image.isNull()) {
+                    painter.drawImage(QRect(x, y, panelWidth, panelHeight), image);
+                } else {
+                    painter.drawRect(QRect(x, y, panelWidth, panelHeight));
+                    painter.drawText(x + 10, y + panelHeight / 2, "[Missing Image]");
+                }
+
+                // Draw metadata (Scene #, Panel #, Duration, etc.)
+                QString meta = QString("Scene: %1 | Panel: %2")
+                                   .arg(QString::fromStdString(scene.name))
+                                   .arg(QString::fromStdString(panel.uuid));
+                painter.drawText(x, y - 10, meta);
+
+                // Draw text fields (Action, Dialog, Notes)
+                int textY = y + panelHeight + 20;
+                painter.drawText(x, textY, QString::fromStdString(shot.action));
+                textY += 20;
+                painter.drawText(x, textY, QString::fromStdString(shot.getDialogs()));
+
+                // Update X and Y for next panel
+                if (isDoubleColumn) {
+                    x += panelWidth + margin;
+                    panelsOnRow += 2;
+                } else {
+                    x += panelWidth + margin;
+                    panelsOnRow++;
+                }
+
+                // Wrap to next row if three columns filled or double column overflows
+                if (panelsOnRow >= 3 || x + columnWidth > pageWidth - margin) {
+                    x = margin;
+                    y += panelHeight + 100; // Extra space for text
+                    panelsOnRow = 0;
                 }
             }
         }
     }
+
+    painter.end();
+}
+
+qreal MainWindow::drawStoryboardHeader(QFont &headerFont, QPainter &painter, int pageNumber, int totalPages) {
+    //QFont headerFont("Arial", 16, QFont::Bold);
+    painter.setFont(headerFont);
+
+    const int margin = 50;
+    QRect pageRect = painter.viewport(); // Full page dimensions
+    QFontMetrics fm(headerFont);
+
+    int dpi = painter.device()->logicalDpiX(); // typically 300 after setResolution
+    qreal pixelsToPoints =  dpi / 72.0;
+
+    // Left-aligned title
+    // Construct title with project name, date, time, and cool separator
+    QString dateTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm");
+    QString titleText = QString("B-Line Storyboard Export — %1 — %2")
+                            .arg(ProjectContext::instance().currentProjectName(), dateTime);
+
+    QSize titleSize = computeTextDimensions(titleText, headerFont, painter);
+
+    QRect titleRect(pageRect.left() + margin, margin, titleSize.width(), titleSize.height());
+
+    painter.drawText(titleRect.x(), titleRect.y()+titleRect.height(), titleText);
+    //painter.drawRect(titleRect);
+
+    // Right-aligned page number: Page X/Y
+    QString pageText;
+    if (totalPages > 0)
+        pageText = QString("Page %1/%2").arg(pageNumber).arg(totalPages);
+    else
+        pageText = QString("Page %1").arg(pageNumber);
+
+    QSize pageNumberSize = computeTextDimensions(pageText, headerFont, painter);
+
+    QRect pageNumberRect(pageRect.right() - margin - pageNumberSize.width(),
+                         margin,
+                         pageNumberSize.width(),
+                         pageNumberSize.height());
+
+    painter.drawText(pageNumberRect, Qt::AlignRight | Qt::AlignVCenter, pageText);
+    //painter.drawRect(pageNumberRect);
+
+    qreal headerHeight = pageNumberRect.height(); // TODO compute
+
+    return headerHeight;
 }
 
 #include <QProgressDialog>
