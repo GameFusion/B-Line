@@ -22,7 +22,6 @@
 #include <QJsonObject>
 #include <QJsonArray>
 
-
 #include "QtUtils.h"
 
 #include "ShotPanelWidget.h"
@@ -646,6 +645,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(ui->actionExport_as_PDF, &QAction::triggered, this, &MainWindow::exportStoryboardPDF);
     connect(ui->actionExport_Movie, &QAction::triggered, this, &MainWindow::exportMovie);
+    connect(ui->actionExport_EDL, &QAction::triggered, this, &MainWindow::exportEDL);
+
 
 /*
     ShotPanelWidget *shotPanel = new ShotPanelWidget;
@@ -4236,6 +4237,15 @@ void MainWindow::exportMovie() {
     }
 
     progress.setValue(totalFrames);
+
+    // Export Audio
+    QString audioPath = exportDir + "/AudioTrack" + ".wav";
+    TrackItem *track = timeLineView->getTrack(1);
+
+    GameFusion::SoundStream *stream = track->getSoundStream();
+    GameFusion::SoundTrack *atrack = (GameFusion::SoundTrack*)stream; // TODO safe cast and verify not null
+    atrack->saveToFile(audioPath.toUtf8().constData());
+    Log().info() << "Export audio track to << "<<audioPath.toUtf8().constData()<<"\n";
     QMessageBox::information(this, "Success", "Movie exported to: " + exportDir);
 }
 
@@ -4428,4 +4438,149 @@ void MainWindow::onRequestCameraThumbnail(const QString &uuid, bool isEditing)
         QDir().mkpath(QFileInfo(imagePath).absolutePath()); // Ensure the directory exists
         cameraThumbnail.save(imagePath, "PNG");
     }
+}
+
+void MainWindow::exportEDL() {
+    if (!scriptBreakdown) {
+        QMessageBox::warning(this, "Error", "No script loaded. Cannot export EDL.");
+        return;
+    }
+
+    QString outputPath = ProjectContext::instance().currentProjectPath() + "/animatic.edl";
+    QFile file(outputPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, "Error", "Cannot open EDL file for writing: " + outputPath);
+        return;
+    }
+
+    QTextStream out(&file);
+
+    QString projectName = ProjectContext::instance().currentProjectName();
+    out << "TITLE: " << projectName << "\n";
+    out << "FCM: NON-DROP FRAME\n\n";
+
+    float fps = projectJson["fps"].toDouble(25.0);
+    const auto& scenes = scriptBreakdown->getScenes();
+
+    auto msToTimecode = [fps](qint64 ms) -> QString {
+        // Convert milliseconds to total frames
+        qint64 totalFrames = static_cast<qint64>((ms / 1000.0) * fps);
+
+        // Calculate timecode components
+        qint64 framesPerHour = static_cast<qint64>(3600 * fps);
+        qint64 framesPerMinute = static_cast<qint64>(60 * fps);
+
+        int hours = static_cast<int>(totalFrames / framesPerHour);
+        totalFrames %= framesPerHour; // Remaining frames after hours
+        int minutes = static_cast<int>(totalFrames / framesPerMinute);
+        totalFrames %= framesPerMinute; // Remaining frames after minutes
+        int seconds = static_cast<int>(totalFrames / fps);
+        int frames = static_cast<int>(totalFrames % static_cast<qint64>(fps));
+
+        return QString("%1:%2:%3:%4")
+            .arg(hours, 2, 10, QChar('0'))
+            .arg(minutes, 2, 10, QChar('0'))
+            .arg(seconds, 2, 10, QChar('0'))
+            .arg(frames, 2, 10, QChar('0'));
+    };
+
+    // Video edits
+    int editNumber = 1;
+    QString dateStr = QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss");
+    qint64 currentRecordTimeMs = 0;
+    int clipIndex = 0;
+
+    for (const auto& scene : scenes) {
+        for (const auto& shot : scene.shots) {
+            qint64 shotDurationMs = 0;
+            for (const auto& panel : shot.panels) {
+                shotDurationMs += panel.durationTime;
+            }
+            if (shotDurationMs <= 0) continue;
+
+            QString clipName = QString("%1_Animatic_%2-%3.mov")
+                                   .arg(projectName)
+                                   .arg(dateStr)
+                                   .arg(clipIndex, 3, 10, QChar('0'));
+
+            QString sourceIn = "00:00:00:00";
+            QString sourceOut = msToTimecode(shotDurationMs);
+            QString recordIn = msToTimecode(currentRecordTimeMs);
+            QString recordOut = msToTimecode(currentRecordTimeMs + shotDurationMs);
+
+            out << QString("%1    001B V     C        %2 %3 %4 %5  \n")
+                       .arg(editNumber, 3, 10, QChar('0'))
+                       .arg(sourceIn)
+                       .arg(sourceOut)
+                       .arg(recordIn)
+                       .arg(recordOut);
+            out << "* FROM CLIP NAME:  " << clipName << "\n";
+            out << "REEL 001B IS CLIP  " << clipName << "\n\n";
+
+            currentRecordTimeMs += shotDurationMs;
+            editNumber++;
+            clipIndex++;
+        }
+    }
+
+    // Audio edits (assuming timeline audio track has segments)
+    // Reset currentRecordTimeMs if audio is overlaid on the same timeline
+    // Here, we place audio edits after video, using their actual positions from the timeline
+
+    TrackItem* audioTrack = timeLineView->getTrack(1); // Assuming index 1 is audio track
+    if (audioTrack) {
+        // Assuming getSegments() returns std::vector<Segment*>
+        auto segments = audioTrack->segments();
+        for (const auto& seg : segments) {
+            // Assuming dynamic_cast to AudioSegment* if applicable
+            AudioSegment* audioSeg = dynamic_cast<AudioSegment*>(seg);
+            if (!audioSeg) continue;
+
+            qint64 startMs = audioSeg->timePosition();
+            qint64 durationMs = audioSeg->getDuration();
+            if (durationMs <= 0) continue;
+
+            QString clipName = QFileInfo(audioSeg->filePath()).completeBaseName(); // Assuming method exists
+            if (clipName.isEmpty()) {
+                // Generate a name if not available
+                clipName = QString("%1-Dial_%2-XX.wav").arg(projectName).arg(clipIndex, 3, 10, QChar('0'));
+                clipIndex++;
+            }
+
+            QString sourceIn = "00:00:00:00"; // Assuming full clip usage; adjust if trimmed
+            QString sourceOut = msToTimecode(durationMs);
+            QString recordIn = msToTimecode(startMs);
+            QString recordOut = msToTimecode(startMs + durationMs);
+
+            // Main audio channel
+            out << QString("%1    001B A     C        %2 %3 %4 %5  \n")
+                       .arg(editNumber, 3, 10, QChar('0'))
+                       .arg(sourceIn)
+                       .arg(sourceOut)
+                       .arg(recordIn)
+                       .arg(recordOut);
+            out << "* FROM CLIP NAME:  " << clipName << "\n";
+            out << "REEL 001B IS CLIP " << clipName << "\n";
+
+            // Additional channel (e.g., AUD 3) as in example
+            out << QString("%1    001B NONE  C        %2 %3 %4 %5  \n")
+                       .arg(editNumber + 1, 3, 10, QChar('0'))
+                       .arg(sourceIn)
+                       .arg(sourceOut)
+                       .arg(recordIn)
+                       .arg(recordOut);
+            out << "* FROM CLIP NAME:  " << clipName << "\n";
+            out << "REEL 001B IS CLIP " << clipName << "\n";
+            out << "AUD   3\n\n";
+
+            editNumber += 2;
+        }
+    } else {
+        // Fallback if no audio track: perhaps generate from dialogues
+        // For simplicity, skip or add placeholder
+        Log().info() << "No audio track found; skipping audio EDL entries.\n";
+    }
+
+    file.close();
+    QMessageBox::information(this, "Success", "EDL exported to: " + outputPath);
 }

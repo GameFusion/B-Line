@@ -175,6 +175,7 @@ public slots:
 
     void exportStoryboardPDF();
     void exportMovie();
+    void exportEDL();
     void exportStoryboardPDF2();
     qreal drawStoryboardHeader(QFont &headerFont, QPainter &painter, int pageNumber, int totalPages);
     void exportStoryboardPDF3();
