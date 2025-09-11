@@ -23,6 +23,7 @@ StrokeAttributeDockWidget::StrokeAttributeDockWidget(QWidget *parent)
     previewArea = new PaintArea(this);
     previewArea->setFixedHeight(100);
     previewArea->setFpsDisplay(false);
+    previewArea->setPipDisplay(false);
     layout->addWidget(previewArea);
 
     setupPreviewCurve();

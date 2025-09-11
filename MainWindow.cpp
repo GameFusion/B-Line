@@ -4267,11 +4267,21 @@ void MainWindow::timelineCameraUpdate(const QString& uuid, long frameOffset, con
             return;
         }
 
+        // Update panel UUID
+        std::string oldPanelUuid = cameraCtx.camera->panelUuid.c_str();
+        cameraCtx.camera->panelUuid = newPanelUuid.toStdString();
+        markDirty = true; // camera reassignment = dirty
+
         bool shotChanged = (cameraCtx.shot != newCtx.shot);
         bool sceneChanged = (cameraCtx.scene != newCtx.scene);
 
         if (shotChanged) {
             // Remove from old shot
+
+
+
+            //--- make a copy of the camera data that will be deleted (to be able to insert it again)
+            CameraFrame movedCamera = *cameraCtx.camera;
             auto& oldFrames = cameraCtx.shot->cameraFrames;
             oldFrames.erase(
                 std::remove_if(oldFrames.begin(), oldFrames.end(),
@@ -4280,7 +4290,7 @@ void MainWindow::timelineCameraUpdate(const QString& uuid, long frameOffset, con
                 );
 
             // Add to new shot
-            newCtx.shot->cameraFrames.push_back(*cameraCtx.camera);
+            newCtx.shot->cameraFrames.push_back(movedCamera);
             cameraCtx.camera = &newCtx.shot->cameraFrames.back();
             cameraCtx.shot = newCtx.shot;
             cameraCtx.scene = newCtx.scene;
@@ -4290,11 +4300,27 @@ void MainWindow::timelineCameraUpdate(const QString& uuid, long frameOffset, con
             if (sceneChanged) {
                 newCtx.scene->setDirty(true);
             }
-        }
 
-        // Update panel UUID
-        cameraCtx.camera->panelUuid = newPanelUuid.toStdString();
-        markDirty = true; // camera reassignment = dirty
+            // if newPanelUuid == currentPanelUuid
+            if(newPanelUuid.toStdString() == currentPanel->uuid){
+                //--- A CAMERA WAS ADDED TO CURRENT PANEL
+                long panelStartTime = cameraCtx.shot->startTime + currentPanel->startTime;
+                float fps = projectJson["fps"].toDouble();
+                paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, cameraCtx.shot->cameraFrames);
+                cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), cameraCtx.shot->cameraFrames);
+            }
+
+            if(oldPanelUuid == currentPanel->uuid){
+                //--- A CAMERA WAS REMOVED FROM CURRENT PANEL
+                PanelContext panelContext = findPanelByUuid(currentPanel->uuid);
+                if(panelContext.isValid()){
+                    long panelStartTime = panelContext.shot->startTime + currentPanel->startTime;
+                    float fps = projectJson["fps"].toDouble();
+                    paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, panelContext.shot->cameraFrames);
+                    cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), panelContext.shot->cameraFrames);
+                }
+            }
+        }
     }
 
     // 3. Update frame offset if changed
@@ -4312,6 +4338,10 @@ void MainWindow::timelineCameraUpdate(const QString& uuid, long frameOffset, con
     }
 
     // TODO update camera side panel if necessary !!!
+    paint->getPaintArea()->updateCamera(*cameraCtx.camera);
+
+    // TODO trigger camera thumnail update
+    onRequestCameraThumbnail(cameraCtx.camera->uuid.c_str(), false);
 }
 
 void MainWindow::timelineCameraDeleted(const QString& uuid) {
