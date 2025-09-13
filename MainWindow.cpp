@@ -22,6 +22,8 @@
 #include <QJsonObject>
 #include <QJsonArray>
 
+#include <QUndoStack>
+
 #include "QtUtils.h"
 
 #include "ShotPanelWidget.h"
@@ -64,7 +66,183 @@ using namespace GameFusion;
 
 //#include "TimeLineWidget.h"
 
+#include <QUndoCommand>
 
+class AddShotCommand : public QUndoCommand {
+public:
+    AddShotCommand(GameFusion::ScriptBreakdown* breakdown, GameFusion::Scene& scene, const GameFusion::Shot& shot, size_t insertIndex, TimeLineView* view, TrackItem* track)
+        : breakdown_(breakdown), scene_(scene), shot_(shot), insertIndex_(insertIndex), view_(view), track_(track){
+        setText("Add Shot");
+    }
+    void undo() override {
+        scene_.shots.erase(scene_.shots.begin() + insertIndex_);
+        breakdown_->updateShotTimings(scene_);
+        track_->deleteSegment(QString(shot_.uuid.c_str()));
+        // todo delete sound segment
+    }
+    void redo() override {
+        scene_.shots.insert(scene_.shots.begin() + insertIndex_, shot_);
+        breakdown_->updateShotTimings(scene_);
+
+        QGraphicsScene *gfxscene = view_->scene();
+        ShotSegment* segment = new ShotSegment(gfxscene, shot_.startTime, shot_.endTime - shot_.startTime);
+        segment->setUuid(shot_.uuid.c_str());
+
+        track_->insertSegmentAtIndex(insertIndex_, segment);
+        // todo add sound segment
+    }
+private:
+    GameFusion::ScriptBreakdown* breakdown_;
+    GameFusion::Scene scene_;
+    GameFusion::Shot shot_;
+    size_t insertIndex_;
+    TimeLineView* view_;
+    TrackItem* track_;
+};
+/*
+class DeleteSegmentCommand : public QUndoCommand {
+public:
+    DeleteSegmentCommand(TimeLineView* view, TrackItem* track, const QString& segmentUuid, int segmentIndex, ScriptBreakdown* breakdown, GameFusion::Scene& scene, GameFusion::Shot& shot)
+        : view_(view), track_(track), segmentUuid_(segmentUuid), segmentIndex_(segmentIndex), breakdown_(breakdown), scene_(scene), shot_(shot) {
+        setText("Delete Shot Segment");
+
+        // Save segment state for undo
+
+    }
+
+    ~DeleteSegmentCommand() {
+        //delete savedSegment_;
+    }
+
+    void undo() override {
+        // Reinsert segment
+        QGraphicsScene *gfxscene = view_->scene();
+        ShotSegment* segment = new ShotSegment(gfxscene, shot_.startTime, shot_.endTime - shot_.startTime);
+        segment->setUuid(segmentUuid_);
+
+        track_->insertSegmentAtIndex(segmentIndex_, segment);
+
+        // Reinsert shot
+        auto& shots = scene_.shots;
+        shots.insert(shots.begin() + segmentIndex_, shot_);
+        breakdown_->updateShotTimings(scene_);
+        //scene_.scene()->update();
+    }
+
+    void redo() override {
+        track_->deleteSegment(segmentUuid_);
+
+        auto& shots = scene_.shots;
+        auto it = std::find_if(shots.begin(), shots.end(),
+                               [&](const GameFusion::Shot& s) { return s.uuid == segmentUuid_.toStdString(); });
+        if (it != shots.end()) {
+            shots.erase(it);
+        }
+
+        breakdown_->updateShotTimings(scene_);
+        scene_.setDirty(true);
+    }
+
+private:
+    TimeLineView* view_;
+    TrackItem* track_;
+    QString segmentUuid_;
+    ScriptBreakdown* breakdown_;
+    GameFusion::Scene scene_;
+    GameFusion::Shot shot_;
+    //ShotSegment* savedSegment_ = nullptr;
+    GameFusion::Shot savedShot_;
+    int segmentIndex_ = -1;
+
+};
+*/
+
+class InsertSegmentCommand : public QUndoCommand {
+public:
+    InsertSegmentCommand(MainWindow* mainWindow, int shotIndex, const GameFusion::Shot& shot, const GameFusion::Scene& scene, const QString& sceneUuid, double cursorTime)
+        : mainWindow_(mainWindow), shot_(shot), sceneUuid_(sceneUuid), cursorTime_(cursorTime), scene_(scene) {
+        setText("Insert Shot Segment");
+    }
+
+    void undo() override {
+        ShotContext shotContext = mainWindow_->findShotByUuid(shot_.uuid);
+        if(shotContext.isValid()) {
+            mainWindow_->deleteShotSegment(shotContext, cursorTime_);
+        }
+    }
+
+    void redo() override {
+        GameFusion::Scene* scene = mainWindow_->findSceneByUuid(sceneUuid_.toStdString());
+        if(scene)
+            scene_ = *scene;
+        /*
+         * int insertIndex = 0;
+        if (scene_) {
+            auto& shots = scene->shots;
+            auto it = std::find_if(shots.begin(), shots.end(),
+                                   [&](const GameFusion::Shot& s) { return s.startTime > shot_.startTime; });
+            shotIndex_ = (it == shots.end()) ? shots.size() : (it - shots.begin());
+        }
+        */
+        CursorItem* sceneMarker=nullptr;
+        // Todo check if we need to create a scene marker
+        mainWindow_->insertShotSegment(shot_, shotIndices_, scene_, cursorTime_);
+    }
+
+private:
+    MainWindow* mainWindow_;
+    GameFusion::Shot shot_; // shot for restore
+    GameFusion::Scene scene_; // state of scene for restore
+    QString sceneUuid_;
+    double cursorTime_;
+    ShotIndices shotIndices_;
+};
+
+// NEW
+class DeleteSegmentCommand : public QUndoCommand {
+public:
+    DeleteSegmentCommand(MainWindow* mainWindow, const GameFusion::Shot& shot, const QString& sceneUuid, const double cursorTime)
+        : mainWindow_(mainWindow), shot_(shot), sceneUuid_(sceneUuid), cursorTime_(cursorTime) {
+        setText("Delete Shot Segment");
+    }
+
+    void undo() override {
+        // Find insert index for restoring the shot
+        // ShotContext shotContext = mainWindow_->findShotByUuid(shot_.uuid); // shot_.uuid will not exist because it has been deleted, we first need to insert it
+        /*
+        GameFusion::Scene* scene = mainWindow_->findSceneByUuid(sceneUuid_.toStdString());
+
+        int insertIndex = 0;
+        if (scene) {
+            auto& shots = scene->shots;
+            auto it = std::find_if(shots.begin(), shots.end(),
+                                   [&](const GameFusion::Shot& s) { return s.startTime > shot_.startTime; });
+            insertIndex = (it == shots.end()) ? shots.size() : (it - shots.begin());
+        }
+        */
+        CursorItem* sceneMarker=nullptr;
+        // Todo check if we need to create a scene marker
+        mainWindow_->insertShotSegment(shot_, shotIndices_, scene_, cursorTime_);
+
+    }
+
+    void redo() override {
+        //GameFusion::Scene* scene = mainWindow_->findSceneByUuid(sceneUuid_.toStdString());
+        ShotContext shotContext = mainWindow_->findShotByUuid(shot_.uuid);
+        if(shotContext.isValid()){
+            scene_ = *shotContext.scene;
+            shotIndices_ = mainWindow_->deleteShotSegment(shotContext, cursorTime_);
+        }
+    }
+
+private:
+    MainWindow* mainWindow_;
+    GameFusion::Shot shot_; // shot for restore
+    GameFusion::Scene scene_; // state of scene for restore
+    QString sceneUuid_;
+    double cursorTime_;
+    ShotIndices shotIndices_;
+};
 
 class FontAwesomeViewer : public QWidget
 {
@@ -547,7 +725,22 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindowBoarder), llamaModel(nullptr), scriptBreakdown(nullptr), logger(new PromptLogger())
 {
+    undoStack = new QUndoStack(this); // Initialize undo stack
+
     ui->setupUi(this);
+
+    // Undo & Redo actions, menu system
+
+    // Create Edit menu
+    QMenu* editMenu = menuBar()->addMenu(tr("Edit"));
+    undoAction = undoStack->createUndoAction(this, tr("Undo"));
+    redoAction = undoStack->createRedoAction(this, tr("Redo"));
+    undoAction->setShortcut(QKeySequence::Undo); // Ctrl+Z
+    redoAction->setShortcut(QKeySequence::Redo); // Ctrl+Y
+    editMenu->addAction(undoAction);
+    editMenu->addAction(redoAction);
+
+    // Import actions
 
     QAction *importScriptAction = ui->menuFile->addAction(tr("&Import Script"));
     connect(importScriptAction, &QAction::triggered, this, &MainWindow::importScript);
@@ -577,6 +770,7 @@ MainWindow::MainWindow(QWidget *parent)
     //
     QMenu* storyboardMenu = menuBar()->addMenu(tr("&Storyboard"));
 
+    /*
     // Add Camera
     QAction* actionAddCamera = new QAction(tr("Add Camera"), this);
     actionAddCamera->setShortcut(QKeySequence("Ctrl+Shift+C"));
@@ -597,12 +791,53 @@ MainWindow::MainWindow(QWidget *parent)
     QAction* actionRenameCamera = new QAction(tr("Rename Camera"), this);
     connect(actionRenameCamera, &QAction::triggered, this, &MainWindow::onRenameCamera);
     storyboardMenu->addAction(actionRenameCamera);
+    */
+
+    // Scene submenu
+    QMenu *sceneMenu = storyboardMenu->addMenu(tr("Scene"));
+    QAction *newSceneAct = sceneMenu->addAction(tr("New Scene"));
+    QAction *deleteSceneAct = sceneMenu->addAction(tr("Delete Scene"));
+    QAction *renameSceneAct = sceneMenu->addAction(tr("Rename Scene"));
+    QAction *duplicateSceneAct = sceneMenu->addAction(tr("Duplicate Scene"));
+
+    // Shot submenu
+    QMenu *shotMenu = storyboardMenu->addMenu(tr("Shot"));
+    QAction *newShotAct = shotMenu->addAction(tr("New Shot"));
+    QAction *deleteShotAct = shotMenu->addAction(tr("Delete Shot"));
+    QAction *renameShotAct = shotMenu->addAction(tr("Rename Shot"));
+    QAction *duplicateShotAct = shotMenu->addAction(tr("Duplicate Shot"));
+
+    // Existing camera actions
+    QMenu *cameraMenu = storyboardMenu->addMenu(tr("Camera"));
+    QAction *addCameraAct = cameraMenu->addAction(tr("Add Camera"));
+    QAction *duplicateCameraAct = cameraMenu->addAction(tr("Duplicate Camera"));
+    QAction *deleteCameraAct = cameraMenu->addAction(tr("Delete Camera"));
+    QAction *renameCameraAct = cameraMenu->addAction(tr("Rename Camera"));
+
+    //
+    // Storyboard menu actions
+    //
+
+    connect(newSceneAct, &QAction::triggered, this, &MainWindow::onNewScene);
+    connect(deleteSceneAct, &QAction::triggered, this, &MainWindow::onDeleteScene);
+    connect(renameSceneAct, &QAction::triggered, this, &MainWindow::onRenameScene);
+    connect(duplicateSceneAct, &QAction::triggered, this, &MainWindow::onDuplicateScene);
+
+    connect(newShotAct, &QAction::triggered, this, &MainWindow::onNewShot);
+    connect(deleteShotAct, &QAction::triggered, this, &MainWindow::onDeleteShot);
+    connect(renameShotAct, &QAction::triggered, this, &MainWindow::onRenameShot);
+    connect(duplicateShotAct, &QAction::triggered, this, &MainWindow::onDuplicateShot);
+
+    connect(addCameraAct, &QAction::triggered, this, &MainWindow::onAddCamera);
+    connect(duplicateCameraAct, &QAction::triggered, this, &MainWindow::onDuplicateCamera);
+    connect(deleteCameraAct, &QAction::triggered, this, &MainWindow::onDeleteCamera);
+    connect(renameCameraAct, &QAction::triggered, this, &MainWindow::onRenameCamera);
 
     //
     // Camera Global Shortcuts
     //
 
-    actionAddCamera->setShortcut(QKeySequence("Ctrl+Shift+C"));
+    addCameraAct->setShortcut(QKeySequence("Ctrl+Shift+C"));
 
     //
     // Camera Side Panel
@@ -1401,6 +1636,273 @@ void MainWindow::updateScenes(){
     ui->shotsTreeWidget->expandAll();
 }
 
+//
+
+// In MainWindow.cpp
+ShotSegment* MainWindow::createShotSegment(GameFusion::Shot& shot, GameFusion::Scene& scene, CursorItem* sceneMarker) {
+    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal mspf = 1000.0f / fps;
+
+    // Calculate shot timing
+    qreal shotTimeStart = shot.startTime == -1 ? 0 : shot.startTime;
+    qreal shotDuration = shot.endTime == -1 ? shot.frameCount * mspf : shot.endTime - shotTimeStart;
+
+    // Create ShotSegment
+    ShotSegment* segment = new ShotSegment(timeLineView->scene(), shotTimeStart, shotDuration);
+    segment->setUuid(shot.uuid.c_str());
+    if (sceneMarker) {
+        segment->setSceneMarker(sceneMarker);
+        //sceneMarker->setTimePosition(shotTimeStart); // Sync scene marker position
+    }
+
+    // Set callbacks
+    segment->setSegmentUpdateCallback([this, mspf](Segment* segment) {
+        ShotContext shotContext = findShotByUuid(segment->getUuid().toStdString());
+        if (shotContext.isValid()) {
+            shotContext.scene->dirty = true;
+            updateWindowTitle(true);
+            shotContext.shot->startTime = segment->timePosition();
+            shotContext.shot->endTime = segment->timePosition() + segment->getDuration();
+            shotContext.shot->frameCount = segment->getDuration() / mspf;
+            GameFusion::Log().info() << "Updated shot " << shotContext.shot->name.c_str()
+                                     << " with UUID: " << shotContext.shot->uuid.c_str()
+                                     << ", new start time: " << shotContext.shot->startTime
+                                     << ", new end time: " << shotContext.shot->endTime << "\n";
+            ShotSegment* shotSegment = dynamic_cast<ShotSegment*>(segment);
+            if (shotSegment) {
+                CursorItem *sceneMarker = shotSegment->getSceneMarkerPointer();
+                if (sceneMarker)
+                    sceneMarker->setTimePosition(segment->timePosition());
+            }
+        } else {
+            GameFusion::Log().info() << "Shot not found for UUID: " << segment->getUuid().toUtf8().constData() << "\n";
+        }
+    });
+
+    segment->setMarkerUpdateCallback([this](const QString& uuid, float newStartTime, float newDuration) {
+        PanelContext panelContext = findPanelByUuid(uuid.toStdString());
+        if (panelContext.isValid()) {
+            panelContext.scene->dirty = true;
+            updateWindowTitle(true);
+            panelContext.panel->startTime = newStartTime;
+            panelContext.panel->durationTime = newDuration;
+            GameFusion::Log().info() << "Updated panel with UUID: " << uuid.toUtf8().constData()
+                                     << ", new start time: " << newStartTime
+                                     << ", new duration: " << newDuration << "\n";
+        } else {
+            GameFusion::Log().info() << "Panel not found for UUID: " << uuid.toUtf8().constData() << "\n";
+        }
+    });
+
+    Log().info() << "  Shot Start Frame: " << shot.name.c_str() << " " << (int)(shot.startTime/mspf)
+                 << " ms start: " << (float)shot.startTime << "\n";
+
+    // Set shot and panel labels
+    segment->marker()->setShotLabel(shot.name.c_str());
+    segment->marker()->setPanelName(shot.name.c_str());
+
+    // Handle panels
+    int panelIndex = 0;
+    for (const auto& panel : shot.panels) {
+        QString thumbnailPath = ProjectContext::instance().currentProjectPath() + "/thumbnails/panel_" + panel.uuid.c_str() + ".png";
+        if (!QFile::exists(thumbnailPath)) {
+            thumbnailPath = ProjectContext::instance().currentProjectPath() + "/movies/" + panel.thumbnail.c_str();
+        }
+
+        PanelMarker* panelMarker = (panelIndex == 0) ? segment->marker() : new PanelMarker(0, 30, 0, 220, segment, panel.name.c_str(), "", "");
+        panelMarker->setPanelName(QString::fromStdString(panel.name));
+        panelMarker->loadThumbnail(thumbnailPath);
+        panelMarker->setUuid(panel.uuid.c_str());
+        panelMarker->setStartTimePos(panel.startTime);
+        panelIndex++;
+    }
+
+    // Update markers
+    segment->updateMarkersEndTime();
+
+    return segment;
+}
+
+void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices shotIndices, const GameFusion::Scene sceneRef, double cursorTime) {
+    GameFusion::Scene* scene = findSceneByUuid(sceneRef.uuid);
+    //int insertIndex = 0;
+
+    bool createSceneMarker = false;
+
+    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal mspf = 1000.0f / fps;
+
+    // TODO if scene does not exist then we need to create it
+    if(!scene){
+        GameFusion::Scene newScene;
+        newScene.uuid = sceneRef.uuid;
+        newScene.name = sceneRef.name;
+        scriptBreakdown->getScenes().push_back(newScene);
+        scene = &scriptBreakdown->getScenes().back();
+        GameFusion::Log().info() << "Created new scene with UUID " << scene->uuid.c_str() << "\n";
+
+        createSceneMarker = true;
+    }
+
+    if (scene) {
+        auto& shots = scene->shots;
+
+        // Insert shot into scene
+        shots.insert(shots.begin() + shotIndices.shotIndex, shot);
+        GameFusion::Shot &insertedShot = shots.at(shotIndices.shotIndex);
+
+        // Update scene state
+        scene->dirty = true;
+        //scriptBreakdown->updateShotTimings(*scene);
+
+        // Create scene marker if this is the first and only shot in a new scene
+        CursorItem *sceneMarker = nullptr;
+        if(createSceneMarker) {
+            sceneMarker = timeLineView->addSceneMarker(shot.startTime, scene->name.c_str());
+            sceneMarker->setUuid(scene->uuid.c_str());
+            GameFusion::Log().debug() << "Created scene marker for UUID " << scene->uuid.c_str() << "\n";
+        }
+
+        // Create and insert ShotSegment
+        ShotSegment* shotSegment = createShotSegment(insertedShot, *scene, sceneMarker);
+        TrackItem* track = timeLineView->getTrack(0);
+        track->insertSegmentAtIndex(shotIndices.segmentIndex, shotSegment);
+
+
+
+        // Shift camera keyframes for subsequent shots
+        long shotDuration = insertedShot.endTime - insertedShot.startTime;
+        // Shift camera keyframes for subsequent shots
+        for (auto& allScene : scriptBreakdown->getScenes()) {
+            for (auto& allShot : allScene.shots) {
+                if (allShot.startTime >= insertedShot.endTime) {
+                    for (auto& camera : allShot.cameraFrames) {
+                        CameraKeyFrame *cameraKeyFrame = timeLineView->getCameraKeyFrame(camera.uuid.c_str());
+                        long oldTime = cameraKeyFrame->timeMs;
+                        cameraKeyFrame->timeMs += shotDuration;
+                        //timeLineView->cameraKeyFrameUpdated(camera.uuid.c_str(), cameraKeyFrame->timeMs-shotDuration, camera.panelUuid.c_str());
+                        GameFusion::Log().debug() << "Shifted camera keyframe " << camera.uuid.c_str() << " to time from " << oldTime << " to " << cameraKeyFrame->timeMs << "\n";
+                    }
+                }
+            }
+        }
+
+        // TODO: Add camera keyframes
+        //addCameraKeyFrames(insertedShot);
+        for(auto &camera: insertedShot.cameraFrames) {
+            QString panelUuid = camera.panelUuid.c_str();
+            long timeMs = -1;
+            for (const auto& panel : insertedShot.panels) {
+                if (panel.uuid == camera.panelUuid) {
+                    timeMs = insertedShot.startTime + panel.startTime + camera.frameOffset * mspf;
+                    GameFusion::Log().debug() << "Found parent panel start time " << panel.startTime;
+                    break;
+                }
+            }
+            if (timeMs != -1) {
+                timeLineView->addCameraKeyFrame(camera.uuid.c_str(), timeMs, panelUuid);
+                GameFusion::Log().debug() << "Adding camera at " << timeMs << " " << camera.uuid.c_str();
+            }
+        }
+
+        // update the scene list widget
+        updateScenes();
+
+        // force update and timeline to postion
+        timeLineView->setTimeCursor(cursorTime);
+
+        GameFusion::Log().info() << "Inserted shot " << shot.uuid.c_str() << " at segment index " << shotIndices.segmentIndex << "\n";
+    }
+}
+
+ShotIndices MainWindow::deleteShotSegment(ShotContext &shotContext, double currentTime) {
+    if(!shotContext.isValid()){
+        GameFusion::Log().warning() << "Invalid ShotContext provided";
+        return {-1, -1};
+    }
+
+    GameFusion::Shot toDelete = *shotContext.shot;
+    double shotDuration = toDelete.endTime - toDelete.startTime; // Store duration for shifting
+
+    // Remove from Scene.shots
+    auto& shots = shotContext.scene->shots;
+    auto it = std::find_if(shots.begin(), shots.end(),
+                           [&](const GameFusion::Shot& s) { return s.uuid == shotContext.shot->uuid; });
+
+    // compute the index value
+    int shotIndex = -1;
+    if (it != shots.end()) {
+        // Compute the index
+        shotIndex = static_cast<int>(std::distance(shots.begin(), it));
+
+        // Remove camera keyframes
+        for (const auto& camera : it->cameraFrames) {
+            timeLineView->removeCameraKeyFrame(camera.uuid.c_str());
+            GameFusion::Log().debug() << "Removed camera keyframe " << camera.uuid.c_str();
+        }
+
+        shots.erase(it);
+        GameFusion::Log().info() << "Removed Shot " << shotContext.shot->uuid.c_str() << " from Scene";
+    } else {
+        GameFusion::Log().warning() << "Shot with UUID " << shotContext.shot->uuid.c_str() << " not found in Scene";
+        return {-1, -1};
+    }
+
+    TrackItem* track = timeLineView->getTrack(0);
+    int segmentIndex = track->deleteSegment(toDelete.uuid.c_str());
+
+    // Shift camera keyframes for subsequent shots
+    for (auto& scene : scriptBreakdown->getScenes()) {
+        for (auto& shot : scene.shots) {
+            if (shot.startTime >= toDelete.startTime) {
+                for (auto& camera : shot.cameraFrames) {
+                    CameraKeyFrame *cameraKeyFrame = timeLineView->getCameraKeyFrame(camera.uuid.c_str());
+                    long oldTime = cameraKeyFrame->timeMs;
+                    cameraKeyFrame->timeMs -= shotDuration;
+                    //timeLineView->cameraKeyFrameUpdated(camera.uuid.c_str(), cameraKeyFrame->timeMs-shotDuration, camera.panelUuid.c_str());
+                    GameFusion::Log().debug() << "Shifted camera keyframe " << camera.uuid.c_str() << " to time from " << oldTime << " to " << cameraKeyFrame->timeMs << "\n";
+                }
+            }
+        }
+    }
+
+    // Update ScriptBreakdown
+    //scriptBreakdown->updateShotTimings(*shotContext.scene);
+    shotContext.scene->dirty = true;
+
+    // Update UI and set timeline cursor
+    updateScenes();
+    timeLineView->setTimeCursor(currentTime);
+    timeLineView->update();
+
+    return {shotIndex, segmentIndex};
+}
+
+// In MainWindow.cpp
+void MainWindow::addTimelineKeyFrames(const GameFusion::Shot& shot) {
+    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal mspf = 1000.0f / fps;
+
+    for (const auto& camera : shot.cameraFrames) {
+        GameFusion::Log().debug() << "Processing camera for shot " << shot.startTime;
+        QString panelUuid = camera.panelUuid.c_str();
+        long timeMs = -1;
+        for (const auto& panel : shot.panels) {
+            if (panel.uuid == camera.panelUuid) {
+                timeMs = shot.startTime + panel.startTime + camera.frameOffset * mspf;
+                GameFusion::Log().debug() << "Found parent panel start time " << panel.startTime;
+                break;
+            }
+        }
+        if (timeMs != -1) {
+            timeLineView->addCameraKeyFrame(camera.uuid.c_str(), timeMs, panelUuid);
+            GameFusion::Log().debug() << "Adding camera at " << timeMs << " " << camera.uuid.c_str();
+        } else {
+            GameFusion::Log().warning() << "No panel found for camera UUID " << camera.uuid.c_str();
+        }
+    }
+}
+
 void MainWindow::updateTimeline(){
 
     auto& scenes = scriptBreakdown->getScenes();
@@ -1426,149 +1928,13 @@ void MainWindow::updateTimeline(){
         sceneMarker->setUuid(scene.uuid.c_str());
 
         for (auto& shot : scene.shots) {
-
-            //long shotFrameStart = startTimeFrame;  // place shot at current frame
-            qreal shotTimeStart = shot.startTime == -1 ? startTime : shot.startTime;
-            qreal shotTimeEnd = shot.endTime == -1 ? shotTimeStart + shot.frameCount * mspf : shot.endTime;
-            qreal shotDuration = shotTimeEnd - shotTimeStart;
-
-            ShotSegment* segment = new ShotSegment(gfxscene, shotTimeStart, shotDuration);
-            segment->setUuid(shot.uuid.c_str());
-
-            if(sceneMarker) {
-                // here we are at the
-                segment->setSceneMarker(sceneMarker);
-                //
-
-                // TODO create a function to set (link) the sceneMarker (or uuid) to ShotSegment
-                // we want this link for the start of a scene !
-
-            /*
-             * TODO, add sceneMarker uuid to ShotSegment !!!!
-             *
-             *
-             *
-             */
-                sceneMarker = null;
-            }
-
-            segment->setSegmentUpdateCallback([this, mspf](Segment *segment) {
-                ShotContext shotContext = findShotByUuid(segment->getUuid().toUtf8().constData());
-                if (shotContext.isValid()) {
-                    shotContext.scene->dirty = true;
-                    updateWindowTitle(true);
-                    Shot *shot = shotContext.shot;
-
-                    //shot->startTime = newStartTime;
-                    //shot->endTime = newStartTime + newDuration;
-
-
-                    shot->startTime = segment->timePosition();
-                    shot->endTime = segment->timePosition() + segment->getDuration();
-
-                    shot->frameCount = segment->getDuration() / mspf;
-
-                    Log().info() << "Updated shot "<< shot->name.c_str() <<"with UUID: " << shot->uuid.c_str()
-                                 << ", new start time: " << shot->startTime
-                                << ", new end time: " << shot->endTime <<
-                        "\n";
-
-                    ShotSegment *shotSegment = dynamic_cast<ShotSegment*>(segment);
-                    if (shotSegment) {
-                        CursorItem *sceneMarker = shotSegment->getSceneMarkerPointer();
-                        if (sceneMarker)
-                            sceneMarker->setTimePosition(segment->timePosition());
-                    }
-
-                } else {
-                    Log().info() << "Shot not found for UUID: " << segment->getUuid().toUtf8().constData() << "\n";
-                }
-            });
-
-
-
-            segment->setMarkerUpdateCallback([this](const QString& uuid, float newStartTime, float newDuration) {
-                PanelContext panelContext = findPanelByUuid(uuid.toStdString());
-                if (panelContext.isValid()) {
-
-                    panelContext.scene->dirty = true;
-                    updateWindowTitle(true);
-
-                    Panel *panel = panelContext.panel;
-                    panel->startTime = newStartTime;
-                    panel->durationTime = newDuration;
-                    Log().info() << "Updated panel with UUID: " << uuid.toUtf8().constData()
-                                 << ", new start time: " << panel->startTime
-                                 << ", new duration: " << panel->durationTime <<
-                        "\n";
-                } else {
-                    Log().info() << "Panel not found for UUID: " << uuid.toUtf8().constData() << "\n";
-                }
-            });
-
-            if(shot.startTime ==-1){
-                shot.startTime = shotTimeStart;
-                shot.endTime = shotTimeStart + shotDuration;
-
-            }
-
-            Log().info() << "  Shot Start Frame: " << shot.name.c_str() << " " << (int)(startTime/mspf)
-                         << " ms start: " << (float)shotTimeStart << "\n";
-
-            segment->marker()->setShotLabel(shot.name.c_str());
-            segment->marker()->setPanelName(shot.name.c_str());
-
-            int pannelIndex(0);
-
-            for (const auto& panel : shot.panels) {
-                qreal panelTimeStart = startTime + panel.startTime;
-                //qreal panelTimeStart = panelFrameStart * mspf;
-                //qreal panelDuration = panel.durationFrames * mspf;
-
-
-                // todo , first see if thumbnail exists and use this
-                QString thumbnailPath = ProjectContext::instance().currentProjectPath() + "/thumbnails/panel_" + panel.uuid.c_str() + ".png";
-
-                if (!QFile::exists(thumbnailPath)) // fallback
-                    thumbnailPath = ProjectContext::instance().currentProjectPath() + "/movies/" + panel.thumbnail.c_str();
-
-                // by default reference image if it exists had one initial panel
-                PanelMarker *panelMarker = pannelIndex == 0 ? segment->marker() : new PanelMarker(0, 30, 0, 220, segment, panel.name.c_str(), "", "");
-
-                panelMarker->setPanelName(QString::fromStdString(panel.name));
-                panelMarker->loadThumbnail(thumbnailPath);
-                panelMarker->setUuid(panel.uuid.c_str());
-                panelMarker->setStartTimePos(panel.startTime);
-
-
-                pannelIndex ++;
-            }
-
-            segment->updateMarkersEndTime();
-
+            ShotSegment* segment = createShotSegment(shot, scene, sceneMarker);
             track->addSegment(segment);
 
-            // Add cameras to timeline
-            for(auto camera: shot.cameraFrames){
-                Log().debug() << "Processing cameras for shot "<<shot.startTime<<"\n";
-                QString panelUuid = camera.panelUuid.c_str();
-                int frameOffset = camera.frameOffset;
-                Panel *panelPtr = nullptr;
-                long timeMs = -1;
-                for (auto& panel : shot.panels)
-                    if(panel.uuid == camera.panelUuid){
-                        panelPtr = &panel;
-                        timeMs = shot.startTime + panel.startTime + camera.frameOffset * mspf;
-                        Log().debug() << "Found parent panel start time "<< panel.startTime<<"\n";
-                        break;
-                    }
-                timeLineView->addCameraKeyFrame(camera.uuid.c_str(), timeMs, panelUuid);
+            addTimelineKeyFrames(shot);
 
-                Log().debug() << "Adding camera at "<< timeMs<<" " <<camera.uuid.c_str()<<"\n";
-            }
-
-            // Advance frame cursor by shot's frame count
             startTime = shot.endTime;
+            sceneMarker = nullptr; // Only link first shot to scene marker
         }
 
         // After each scene, update the global episode duration
@@ -1759,6 +2125,9 @@ void MainWindow::loadProject() {
 }
 
 void MainWindow::loadProject(QString projectDir){
+
+    // Clear the undo stack
+    undoStack->clear();
 
     currentPanelUuid.clear();
 
@@ -2122,6 +2491,18 @@ ShotContext MainWindow::findSceneByPanel(const std::string& panelUuid) {
     return {};
 }
 
+// In MainWindow.cpp
+GameFusion::Scene* MainWindow::findSceneByUuid(const std::string& uuid) {
+    auto& scenes = scriptBreakdown->getScenes();
+    for (auto& scene : scenes) {
+        if (scene.uuid == uuid) {
+            return &scene;
+        }
+    }
+    GameFusion::Log().warning() << "Scene with UUID " << uuid.c_str() << " not found";
+    return nullptr;
+}
+
 void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     QVariant uuidData = item->data(0, Qt::UserRole);
     if (!uuidData.isValid())
@@ -2165,7 +2546,7 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
 
     // set time cursor to panel start time
     populateLayerList(panel);
-    timeLineView->setTimeCursor(shot->startTime + panel->startTime);
+    timeLineView->setTimeCursor((long)(shot->startTime + panel->startTime));
 
     // Update the panel UI
     float fps = projectJson["fps"].toDouble();
@@ -4211,7 +4592,7 @@ void MainWindow::exportMovie() {
         }
 
         // Set timeline cursor to current frame
-        timeLineView->setTimeCursor(currentTimeMs);
+        timeLineView->setTimeCursor((long)currentTimeMs);
 
         // Render and save frame (assuming renderFrameToImage exists in PaintArea)
         QImage frameImage(1920, 1080, QImage::Format_ARGB32_Premultiplied);
@@ -4405,13 +4786,6 @@ void MainWindow::timelineCameraDeleted(const QString& uuid) {
             << "Scene " << cameraCtx.scene->uuid.c_str()
             << " marked dirty after camera deletion.\n";
     }
-
-    // 4. Optional: update UI or notify other subsystems if needed
-    //emit cameraRemoved(uuid); // if such signal exists
-
-    // TODO update camera side panel if necessary !!!
-
-    //cameraSidePanel->setCameraList(panelUuid, cameraCtx.shot->cameraFrames);
 }
 
 
@@ -4614,3 +4988,101 @@ void MainWindow::exportEDL() {
     file.close();
     QMessageBox::information(this, "Success", "EDL exported to: " + outputPath);
 }
+
+void MainWindow::onNewScene() {
+    // Add new Scene with one blank Shot/Panel
+    // Example: scriptBreakdown->addScene();
+    // Update Timeline view and project data
+}
+void MainWindow::onDeleteScene() {
+    // Delete selected Scene
+}
+void MainWindow::onRenameScene() {
+    // Open dialog to rename selected Scene
+}
+void MainWindow::onDuplicateScene() {
+    // Duplicate selected Scene
+}
+void MainWindow::onNewShot() {
+    if(!scriptBreakdown)
+        return;
+
+    // Add new Shot to current Scene
+    double currentTime = timeLineView->getCursorTime();  // Playhead time
+    ShotContext currentCtx = findShotForTime(currentTime);  // Custom helper
+    if (!currentCtx.isValid())
+        return;
+
+    qreal fps = 25;
+    fps = projectJson["fps"].toDouble();
+
+    // Create new Shot
+    GameFusion::Shot newShot;
+    newShot.name = "SHOT_" + QString::number(scriptBreakdown->getShots().size() * 10).toStdString();
+    newShot.frameCount = fps*2;  // Default 2 sec at 24fps
+    newShot.startTime = currentCtx.shot->endTime;
+    newShot.endTime = newShot.startTime + newShot.frameCount * (1000.0 / fps);
+    // Add default Panel
+    //float fps = projectJson["fps"].toDouble(25.0);
+    //GameFusion::Panel defaultPanel("Panel_1", "", 0, newShot.frameCount * (1000.0 / fps));
+    //newShot.panels.push_back(defaultPanel);
+
+    // Insert into Scene.shots
+    auto& shots = currentCtx.scene->shots;
+    auto it = std::find_if(shots.begin(), shots.end(),
+                           [&](const GameFusion::Shot& s) { return s.uuid == currentCtx.shot->uuid; });
+    size_t insertIndex = (it == shots.end()) ? shots.size() : (it - shots.begin() + 1);
+    shots.insert(shots.begin() + insertIndex, newShot);
+
+    // Update timings (loop through subsequent shots to shift start/end)
+    scriptBreakdown->updateShotTimings(*currentCtx.scene);
+
+    /// Create ShotSegment and insert
+    TrackItem* track = timeLineView->getTrack(0);
+    insertShotSegment(newShot, insertIndex, *currentCtx.scene, currentTime);
+
+
+    currentCtx.scene->setDirty(true);
+    // Refresh UI: timeline, side panels, etc.
+
+    // Push to undo stack
+    undoStack->push(new InsertSegmentCommand(this, insertIndex, newShot, *currentCtx.scene, currentCtx.scene->uuid.c_str(), currentTime));
+
+    // Refresh UI
+    //cameraSidePanel->setCameraList("", currentCtx.scene->shots);
+    //paint->getPaintArea()->update();
+}
+
+void MainWindow::onDeleteShot() {
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available";
+        return;
+    }
+
+    double currentTime = timeLineView->getCursorTime();
+    ShotContext currentCtx = findShotByUuid(timeLineView->getTrack(0)->findSegmentForTime(currentTime)->getUuid().toStdString());
+    if (!currentCtx.isValid()) {
+        QMessageBox::warning(this, "Error", "No valid shot selected. Please select a time in the timeline.");
+        return;
+    }
+
+    QString sceneUuid = QString::fromStdString(currentCtx.scene->uuid);
+    GameFusion::Shot shotCopy = *currentCtx.shot; // Store shot data for undo
+
+    // Push to undo stack
+    undoStack->push(new DeleteSegmentCommand(this, shotCopy, sceneUuid, currentTime));
+
+    // Refresh UI is done in DeleteSegmentCommand->redo()
+
+}
+
+void MainWindow::onRenameShot() {
+    // Open dialog to rename selected Shot
+}
+
+void MainWindow::onDuplicateShot() {
+    // Duplicate selected Shot
+}
+
+
+

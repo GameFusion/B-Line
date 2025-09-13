@@ -339,6 +339,8 @@ public:
     bool updateCameraFrame(const CameraFrame& frame);
     bool deleteCameraFrame(const std::string& uuid);
 
+    void updateShotTimings(GameFusion::Scene& scene);
+
 private:
     bool initializeLlamaClient(LlamaClient* client, const std::string& modelPath, const std::string& backend);
     bool processScenes(BreakdownMode mode);

@@ -23,8 +23,11 @@ class ShotPanelWidget;
 class CameraSidePanel;
 class PerfectScriptWidget;
 class AudioMeterWidget;
+class ShotSegment;
+class CursorItem;
 
 class QPdfWriter;
+class QUndoStack;
 
 namespace Ui {
 	class MainWindowBoarder;
@@ -79,6 +82,19 @@ struct CameraContext {
     }
 };
 
+struct SceneContext {
+    GameFusion::Scene* scene;
+    SceneContext(GameFusion::Scene* s = nullptr) : scene(s) {}
+    bool isValid() const { return scene != nullptr; }
+};
+
+struct ShotIndices {
+    int shotIndex;    // Index of the deleted shot in Scene.shots
+    int segmentIndex; // Index of the deleted segment in TrackItem::mySegments
+    ShotIndices(int shotIdx = -1, int segIdx = -1) : shotIndex(shotIdx), segmentIndex(segIdx) {}
+    bool isValid() const { return shotIndex >= 0 && segmentIndex >= 0; }
+};
+
 class MainWindow : public QMainWindow
 {
 	Q_OBJECT
@@ -94,6 +110,21 @@ public:
     void updateCharacters();
     void loadProject(QString projectDir);
     void syncPanelDurations(Segment* segment, GameFusion::Shot* shot);
+
+    ShotSegment* createShotSegment(GameFusion::Shot& shot, GameFusion::Scene& scene, CursorItem* sceneMarker);
+    void insertShotSegment(const GameFusion::Shot& shot, ShotIndices shotIndices, const GameFusion::Scene sceneRef, double cursorTime);
+    ShotIndices deleteShotSegment(ShotContext &shotContext, double cursorTime);
+    void addTimelineKeyFrames(const GameFusion::Shot& shot);
+
+    // Todo : Possably move the find objects to ScriptBreakdown - there is redundancy
+    ShotContext   findShotByUuid(const std::string& uuid);
+    PanelContext  findPanelByUuid(const std::string& uuid);
+    PanelContext  findPanelForTime(double currentTime, double threshold = 0.05);
+    ShotContext   findShotForTime(double time/*, double buffer*/);
+    LayerContext  findLayerByUuid(const std::string& uuid);
+    CameraContext findCameraByUuid(const std::string& uuid);
+    ShotContext   findSceneByPanel(const std::string& panelUuid);
+    GameFusion::Scene  *findSceneByUuid(const std::string& uuid);
 
 public slots:
 
@@ -131,6 +162,16 @@ public slots:
     void prevShot();
     void prevScene();
     void onPlaybackTick();
+
+    void onNewScene();
+    void onDeleteScene();
+    void onRenameScene();
+    void onDuplicateScene();
+
+    void onNewShot();
+    void onDeleteShot();
+    void onRenameShot();
+    void onDuplicateShot();
 
     void onAddCamera();
     void onDuplicateCamera();
@@ -196,13 +237,7 @@ protected:
     bool initializeLlamaClient();
     void updateTimeline();
 
-    ShotContext   findShotByUuid(const std::string& uuid);
-    PanelContext  findPanelByUuid(const std::string& uuid);
-    PanelContext  findPanelForTime(double currentTime, double threshold = 0.05);
-    ShotContext   findShotForTime(double time/*, double buffer*/);
-    LayerContext  findLayerByUuid(const std::string& uuid);
-    CameraContext findCameraByUuid(const std::string& uuid);
-    ShotContext   findSceneByPanel(const std::string& panelUuid);
+
 
     void populateLayerList(GameFusion::Panel* panel);
 
@@ -268,6 +303,10 @@ protected:
     //AudioMeterWidget *audioMeter = nullptr;
 
     StrokeAttributeDockWidget *strokeDock;
+
+    QUndoStack* undoStack; // Add undo stack member
+    QAction* undoAction;
+    QAction* redoAction;
 };
 
 
