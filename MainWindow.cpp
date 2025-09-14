@@ -15,6 +15,7 @@
 #include <QFileDialog>
 #include <QThread>
 #include <QButtonGroup>
+#include <QInputDialog>
 
 #include <QFile>
 #include <QDir>
@@ -179,6 +180,31 @@ private:
     GameFusion::Shot oldShot_;
     GameFusion::Shot newShot_;
     double cursorTime_;
+};
+
+class RenameShotCommand : public QUndoCommand {
+public:
+    RenameShotCommand(MainWindow* mainWindow, const QString& shotUuid, const QString& sceneUuid,
+                      const QString& oldName, const QString& newName)
+        : mainWindow_(mainWindow), shotUuid_(shotUuid), sceneUuid_(sceneUuid),
+        oldName_(oldName), newName_(newName)
+    {
+        setText("Rename Shot");
+    }
+    void undo() override{
+        mainWindow_->renameShotSegment(shotUuid_, oldName_);
+    }
+
+    void redo() override{
+        mainWindow_->renameShotSegment(shotUuid_, newName_);
+    }
+
+private:
+    MainWindow* mainWindow_;
+    QString shotUuid_;
+    QString sceneUuid_;
+    QString oldName_;
+    QString newName_;
 };
 
 class FontAwesomeViewer : public QWidget
@@ -738,12 +764,17 @@ MainWindow::MainWindow(QWidget *parent)
     QAction *duplicateSceneAct = sceneMenu->addAction(tr("Duplicate Scene"));
 
     // Shot submenu
-    QMenu *shotMenu = storyboardMenu->addMenu(tr("Shot"));
-    QAction *newShotAct = shotMenu->addAction(tr("New Shot"));
-    QAction *editShotAct = shotMenu->addAction(tr("Edit Shot"));
-    QAction *deleteShotAct = shotMenu->addAction(tr("Delete Shot"));
-    QAction *renameShotAct = shotMenu->addAction(tr("Rename Shot"));
-    QAction *duplicateShotAct = shotMenu->addAction(tr("Duplicate Shot"));
+    shotMenu = storyboardMenu->addMenu(tr("Shot"));
+    newShotAct = shotMenu->addAction(tr("New Shot"));
+    editShotAct = shotMenu->addAction(tr("Edit Shot"));
+    renameShotAct = shotMenu->addAction(tr("Rename Shot"));
+    duplicateShotAct = shotMenu->addAction(tr("Duplicate Shot"));
+    deleteShotAct = shotMenu->addAction(tr("Delete Shot"));
+
+    editShotAct->setEnabled(false);
+    renameShotAct->setEnabled(false);
+    duplicateShotAct->setEnabled(false);
+    deleteShotAct->setEnabled(false);
 
     // Existing camera actions
     QMenu *cameraMenu = storyboardMenu->addMenu(tr("Camera"));
@@ -1638,7 +1669,7 @@ ShotSegment* MainWindow::createShotSegment(GameFusion::Shot& shot, GameFusion::S
 
     // Set shot and panel labels
     segment->marker()->setShotLabel(shot.name.c_str());
-    segment->marker()->setPanelName(shot.name.c_str());
+    //segment->marker()->setPanelName(shot.name.c_str());
 
     // Handle panels
     int panelIndex = 0;
@@ -3143,6 +3174,11 @@ void MainWindow::onTimeCursorMoved(double time)
      *           └─ Panels (each has startTime, endTime, imagePath or image)
      */
 
+    editShotAct->setEnabled(false);
+    renameShotAct->setEnabled(false);
+    duplicateShotAct->setEnabled(false);
+    deleteShotAct->setEnabled(false);
+
     Panel* newPanel = nullptr;
 
     long timeCounter = 0;
@@ -3190,6 +3226,12 @@ void MainWindow::onTimeCursorMoved(double time)
         if(newPanel)
             break;
     }
+
+    // enable context menues base on selection
+    editShotAct->setEnabled(theShot);
+    renameShotAct->setEnabled(theShot);
+    duplicateShotAct->setEnabled(theShot);
+    deleteShotAct->setEnabled(theShot);
 
     //--- If no panel found, show white image
     if (!newPanel) {
@@ -5121,6 +5163,43 @@ void MainWindow::onDeleteShot() {
 
 void MainWindow::onRenameShot() {
     // Open dialog to rename selected Shot
+
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available";
+        QMessageBox::warning(this, "Error", "No ScriptBreakdown available.");
+        return;
+    }
+
+    double currentTime = timeLineView->getCursorTime();
+    ShotContext currentCtx = findShotForTime(currentTime);
+    if (!currentCtx.isValid()) {
+        QMessageBox::warning(this, "Error", "No valid shot selected. Please select a time in the timeline.");
+        return;
+    }
+
+    bool ok;
+    QString newName = QInputDialog::getText(this, tr("Rename Shot"),
+                                            tr("Enter new shot name:"),
+                                            QLineEdit::Normal,
+                                            QString::fromStdString(currentCtx.shot->name),
+                                            &ok);
+    if (!ok || newName.isEmpty()) {
+        return;
+    }
+
+    // Validate shot name
+    QRegularExpression validNameRegex("[^a-zA-Z0-9_\\-]");
+    if (newName.contains(validNameRegex)) {
+        QMessageBox::warning(this, "Error", "Shot name contains invalid characters. Use letters, numbers, underscores, or hyphens.");
+        return;
+    }
+
+    // Push rename command to undo stack
+    undoStack->push(new RenameShotCommand(this, QString::fromStdString(currentCtx.shot->uuid),
+                                          QString::fromStdString(currentCtx.scene->uuid),
+                                          QString::fromStdString(currentCtx.shot->name),
+                                          newName));
+
 }
 
 void MainWindow::onDuplicateShot() {
@@ -5204,6 +5283,27 @@ void MainWindow::editShotSegment(const GameFusion::Shot &editShot, double cursor
 
     ShotIndices shotIndecies = deleteShotSegment(shotContext, cursorTime);
     insertShotSegment(editShot, shotIndecies, *shotContext.scene, cursorTime);
+}
+
+void MainWindow::renameShotSegment(const QString &shotUuid, QString newName){
+
+    ShotContext shotContext = findShotByUuid(shotUuid.toStdString());
+    if(!shotContext.isValid())
+        return;
+
+
+    shotContext.shot->name = newName.toStdString();
+    shotContext.scene->setDirty(true);
+
+    TrackItem* track = timeLineView->getTrack(0);
+    ShotSegment* segment = (ShotSegment*) track->getSegmentByUuid(shotUuid);
+    if (segment) {
+        segment->setName(newName);
+        GameFusion::Log().info() << "Renamed shot to " << newName.toUtf8().constData() << "\n";
+    } else {
+        GameFusion::Log().warning() << "Shot segment not found for UUID " << shotUuid.toUtf8().constData() << "\n";
+    }
+
 }
 
 
