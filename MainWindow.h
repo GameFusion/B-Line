@@ -122,6 +122,7 @@ public:
     ShotContext   findShotByUuid(const std::string& uuid);
     PanelContext  findPanelByUuid(const std::string& uuid);
     PanelContext  findPanelForTime(double currentTime, double threshold = 0.05);
+    int           findPanelIndex(const PanelContext& ctx);
     ShotContext   findShotForTime(double time);
     ShotContext   findPreviousShot(const GameFusion::Shot& shot);
     LayerContext  findLayerByUuid(const std::string& uuid);
@@ -176,6 +177,16 @@ public slots:
     void onEditShot();
     void onRenameShot();
     void onDuplicateShot();
+
+    void onAddPanel();
+    void onEditPanel();
+    void onRenamePanel();
+    void onDuplicatePanel();
+    void onCopyPanel();
+    void onCutPanel();
+    void onPastePanel();
+    void onClearPanel();
+    void onDeletePanel();
 
     void onAddCamera();
     void onDuplicateCamera();
@@ -318,6 +329,8 @@ protected:
     QAction *deleteShotAct;
     QAction *renameShotAct;
     QAction *duplicateShotAct;
+
+    GameFusion::Panel clipboardPanel; // Clipboard for copy/cut/paste
 };
 
 
