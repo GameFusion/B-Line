@@ -120,7 +120,8 @@ public:
     ShotContext   findShotByUuid(const std::string& uuid);
     PanelContext  findPanelByUuid(const std::string& uuid);
     PanelContext  findPanelForTime(double currentTime, double threshold = 0.05);
-    ShotContext   findShotForTime(double time/*, double buffer*/);
+    ShotContext   findShotForTime(double time);
+    ShotContext   findPreviousShot(const GameFusion::Shot& shot);
     LayerContext  findLayerByUuid(const std::string& uuid);
     CameraContext findCameraByUuid(const std::string& uuid);
     ShotContext   findSceneByPanel(const std::string& panelUuid);

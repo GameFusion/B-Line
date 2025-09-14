@@ -37,6 +37,7 @@
 #include "PerfectScriptWidget.h"
 #include "OptionsDialog.h"
 #include "ProjectContext.h"
+#include "NewShotDialog.h"
 
 #include "GameCore.h" // for GameContext->gameTime()
 #include "SoundServer.h"
@@ -159,8 +160,8 @@ private:
 
 class InsertSegmentCommand : public QUndoCommand {
 public:
-    InsertSegmentCommand(MainWindow* mainWindow, int shotIndex, const GameFusion::Shot& shot, const GameFusion::Scene& scene, const QString& sceneUuid, double cursorTime)
-        : mainWindow_(mainWindow), shot_(shot), sceneUuid_(sceneUuid), cursorTime_(cursorTime), scene_(scene) {
+    InsertSegmentCommand(MainWindow* mainWindow, ShotIndices shotIndices, const GameFusion::Shot& shot, const GameFusion::Scene& scene, const QString& sceneUuid, double cursorTime)
+        : mainWindow_(mainWindow), shot_(shot), sceneUuid_(sceneUuid), cursorTime_(cursorTime), scene_(scene), shotIndices_(shotIndices) {
         setText("Insert Shot Segment");
     }
 
@@ -172,9 +173,9 @@ public:
     }
 
     void redo() override {
-        GameFusion::Scene* scene = mainWindow_->findSceneByUuid(sceneUuid_.toStdString());
-        if(scene)
-            scene_ = *scene;
+        //GameFusion::Scene* scene = mainWindow_->findSceneByUuid(sceneUuid_.toStdString());
+        //if(scene)
+        //    scene_ = *scene;
         /*
          * int insertIndex = 0;
         if (scene_) {
@@ -1766,7 +1767,7 @@ void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices sho
         // Create and insert ShotSegment
         ShotSegment* shotSegment = createShotSegment(insertedShot, *scene, sceneMarker);
         TrackItem* track = timeLineView->getTrack(0);
-        track->insertSegmentAtIndex(shotIndices.segmentIndex, shotSegment);
+        int segmentIndex = track->insertSegmentAtIndex(shotIndices.segmentIndex, shotSegment);
 
 
 
@@ -1778,10 +1779,15 @@ void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices sho
                 if (allShot.startTime >= insertedShot.endTime) {
                     for (auto& camera : allShot.cameraFrames) {
                         CameraKeyFrame *cameraKeyFrame = timeLineView->getCameraKeyFrame(camera.uuid.c_str());
-                        long oldTime = cameraKeyFrame->timeMs;
-                        cameraKeyFrame->timeMs += shotDuration;
-                        //timeLineView->cameraKeyFrameUpdated(camera.uuid.c_str(), cameraKeyFrame->timeMs-shotDuration, camera.panelUuid.c_str());
-                        GameFusion::Log().debug() << "Shifted camera keyframe " << camera.uuid.c_str() << " to time from " << oldTime << " to " << cameraKeyFrame->timeMs << "\n";
+                        if(cameraKeyFrame){
+                            long oldTime = cameraKeyFrame->timeMs;
+                            cameraKeyFrame->timeMs += shotDuration;
+                            //timeLineView->cameraKeyFrameUpdated(camera.uuid.c_str(), cameraKeyFrame->timeMs-shotDuration, camera.panelUuid.c_str());
+                            GameFusion::Log().debug() << "Shifted camera keyframe " << camera.uuid.c_str() << " to time from " << oldTime << " to " << cameraKeyFrame->timeMs << "\n";
+                        }
+                        else{
+                            GameFusion::Log().debug() << "Shifted camera errer, not found in timeline " << camera.uuid.c_str() << "\n";
+                        }
                     }
                 }
             }
@@ -1812,7 +1818,11 @@ void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices sho
         timeLineView->setTimeCursor(cursorTime);
 
         GameFusion::Log().info() << "Inserted shot " << shot.uuid.c_str() << " at segment index " << shotIndices.segmentIndex << "\n";
+
+        return;
     }
+
+    return;
 }
 
 ShotIndices MainWindow::deleteShotSegment(ShotContext &shotContext, double currentTime) {
@@ -1857,10 +1867,17 @@ ShotIndices MainWindow::deleteShotSegment(ShotContext &shotContext, double curre
             if (shot.startTime >= toDelete.startTime) {
                 for (auto& camera : shot.cameraFrames) {
                     CameraKeyFrame *cameraKeyFrame = timeLineView->getCameraKeyFrame(camera.uuid.c_str());
-                    long oldTime = cameraKeyFrame->timeMs;
-                    cameraKeyFrame->timeMs -= shotDuration;
-                    //timeLineView->cameraKeyFrameUpdated(camera.uuid.c_str(), cameraKeyFrame->timeMs-shotDuration, camera.panelUuid.c_str());
-                    GameFusion::Log().debug() << "Shifted camera keyframe " << camera.uuid.c_str() << " to time from " << oldTime << " to " << cameraKeyFrame->timeMs << "\n";
+                    if(cameraKeyFrame){
+                        long oldTime = cameraKeyFrame->timeMs;
+                        cameraKeyFrame->timeMs -= shotDuration;
+                        //timeLineView->cameraKeyFrameUpdated(camera.uuid.c_str(), cameraKeyFrame->timeMs-shotDuration, camera.panelUuid.c_str());
+
+                        GameFusion::Log().debug() << "Shifted camera keyframe " << camera.uuid.c_str() << " to time from " << oldTime << " to " << cameraKeyFrame->timeMs << "\n";
+                    }
+                    else {
+                        GameFusion::Log().debug() << "Shifted camera failed, camera not found in timeline " << camera.uuid.c_str() << "\n";
+
+                    }
                 }
             }
         }
@@ -2443,15 +2460,50 @@ ShotContext MainWindow::findShotForTime(double time/*, double buffer*/) {
                 }
             }
         }
-
-        // 3. After the last shot in the scene
-        if (!scene.shots.empty() && time >= scene.shots.back().endTime) {
-            Log().info() << "Time is after last shot in Scene " << scene.name.c_str() << "\n";
-            return { &scene, nullptr }; // new shot can be appended
-        }
     }
 
     Log().info() << "No suitable scene found for time " << (float)time << "\n";
+    return {};
+}
+
+
+ShotContext MainWindow::findPreviousShot(const GameFusion::Shot& shot)
+{
+    if (!scriptBreakdown)
+        return {};
+
+    // Iterate through all scenes to find the previous shot
+    auto& scenes = scriptBreakdown->getScenes();
+    GameFusion::Shot* prevShot = nullptr;
+    GameFusion::Scene* prevScene = nullptr;
+
+    for (auto sceneIt = scenes.begin(); sceneIt != scenes.end(); ++sceneIt) {
+        auto& shots = sceneIt->shots;
+        for (auto shotIt = shots.begin(); shotIt != shots.end(); ++shotIt) {
+            if (shotIt->uuid == shot.uuid) {
+                // Found the target shot
+                if (shotIt != shots.begin()) {
+                    // Previous shot is in the same scene
+                    prevShot = &(*(shotIt - 1));
+                    prevScene = &(*sceneIt);
+                    return {prevScene, prevShot};
+                } else if (sceneIt != scenes.begin()) {
+                    // Previous shot is the last shot of the previous scene
+                    auto prevSceneIt = sceneIt - 1;
+                    if (!prevSceneIt->shots.empty()) {
+                        prevShot = &prevSceneIt->shots.back();
+                        prevScene = &(*prevSceneIt);
+                        return {prevScene, prevShot};
+                    }
+                }
+                // No previous shot (target is first shot in first scene)
+                return {};
+            }
+        }
+    }
+
+    // Should not reach here if findShotByUuid worked, but return empty for safety
+    GameFusion::Log().warning() << "Shot with UUID " << shot.uuid.c_str() << " not found in scenes";
     return {};
 }
 
@@ -5003,54 +5055,107 @@ void MainWindow::onRenameScene() {
 void MainWindow::onDuplicateScene() {
     // Duplicate selected Scene
 }
-void MainWindow::onNewShot() {
-    if(!scriptBreakdown)
+
+void MainWindow::onNewShot()
+{
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available";
+        QMessageBox::warning(this, "Error", "No ScriptBreakdown available.");
         return;
+    }
 
-    // Add new Shot to current Scene
-    double currentTime = timeLineView->getCursorTime();  // Playhead time
-    ShotContext currentCtx = findShotForTime(currentTime);  // Custom helper
-    if (!currentCtx.isValid())
+    // Get current time and shot context
+    double currentTime = timeLineView->getCursorTime();
+    ShotContext currentCtx = findShotForTime(currentTime);
+    if (!currentCtx.isValid()) {
+        QMessageBox::warning(this, "Error", "No valid shot selected. Please select a time in the timeline.");
         return;
+    }
 
-    qreal fps = 25;
-    fps = projectJson["fps"].toDouble();
+    // Show dialog to get user input
+    QString shotName = "SHOT_" + QString::number(currentCtx.scene->shots.size() * 10);
+    qreal fps = projectJson["fps"].toDouble(24.0);
+    NewShotDialog dialog(fps, shotName, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return; // User canceled
+    }
 
-    // Create new Shot
+    double durationMs = dialog.getDurationMs();
+    bool insertBefore = dialog.isInsertBefore();
+    shotName = dialog.getShotName();
+    int panelCount = dialog.getPanelCount();
+
+    // Create new shot
     GameFusion::Shot newShot;
-    newShot.name = "SHOT_" + QString::number(scriptBreakdown->getShots().size() * 10).toStdString();
-    newShot.frameCount = fps*2;  // Default 2 sec at 24fps
-    newShot.startTime = currentCtx.shot->endTime;
-    newShot.endTime = newShot.startTime + newShot.frameCount * (1000.0 / fps);
-    // Add default Panel
-    //float fps = projectJson["fps"].toDouble(25.0);
-    //GameFusion::Panel defaultPanel("Panel_1", "", 0, newShot.frameCount * (1000.0 / fps));
-    //newShot.panels.push_back(defaultPanel);
+    newShot.name = shotName.toStdString();
+    newShot.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    newShot.frameCount = qRound(durationMs * fps / 1000.0);
+    newShot.startTime = insertBefore ? currentCtx.shot->startTime : currentCtx.shot->endTime;
+    newShot.endTime = newShot.startTime + durationMs;
 
-    // Insert into Scene.shots
-    auto& shots = currentCtx.scene->shots;
-    auto it = std::find_if(shots.begin(), shots.end(),
-                           [&](const GameFusion::Shot& s) { return s.uuid == currentCtx.shot->uuid; });
-    size_t insertIndex = (it == shots.end()) ? shots.size() : (it - shots.begin() + 1);
-    shots.insert(shots.begin() + insertIndex, newShot);
+    // Create panels
+    double panelDuration = durationMs / panelCount; // Evenly distribute duration
+    for (int i = 0; i < panelCount; ++i) {
+        GameFusion::Panel panel;
+        panel.name = QString("%1_PANEL_%2").arg(shotName).arg(i + 1, 3, 10, QChar('0')).toStdString();
+        //panel.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+        panel.startTime = i * panelDuration;
+        panel.durationTime = panelDuration;
+        GameFusion::Layer bg;
+        bg.name = "BG";
+        GameFusion::Layer l1;
+        l1.name = "Layer 1";
+        panel.layers.push_back(l1);
+        panel.layers.push_back(bg);
+        newShot.panels.push_back(panel);
+    }
 
-    // Update timings (loop through subsequent shots to shift start/end)
-    scriptBreakdown->updateShotTimings(*currentCtx.scene);
-
-    /// Create ShotSegment and insert
+    size_t shotIndex = -1;
+    int segmentIndex = -1;
     TrackItem* track = timeLineView->getTrack(0);
-    insertShotSegment(newShot, insertIndex, *currentCtx.scene, currentTime);
 
+    ShotContext prevCtx;
 
-    currentCtx.scene->setDirty(true);
-    // Refresh UI: timeline, side panels, etc.
+    // Determine shot index
+    if (!insertBefore) {
+        if(currentCtx.isValid()){
+            auto& shots = currentCtx.scene->shots;
+            auto it = std::find_if(shots.begin(), shots.end(),
+                           [&](const GameFusion::Shot& s) { return s.uuid == currentCtx.shot->uuid; });
+            shotIndex = (it == shots.end()) ? shots.size() : (it - shots.begin())+1;
+            segmentIndex = track->getSegmentIndexByUuid(QString::fromStdString(currentCtx.shot->uuid))+1;
+        }
+        else{
+            shotIndex = 0;
+            segmentIndex = 0;
+        }
+    }
+    else {
+        if(currentCtx.isValid()){
+            auto& shots = currentCtx.scene->shots;
+            auto it = std::find_if(shots.begin(), shots.end(),
+                                   [&](const GameFusion::Shot& s) { return s.uuid == currentCtx.shot->uuid; });
+            shotIndex = (it == shots.end()) ? shots.size() : (it - shots.begin());
+            segmentIndex = track->getSegmentIndexByUuid(QString::fromStdString(currentCtx.shot->uuid));
+        }
+        else{
+            shotIndex = 0;
+            segmentIndex = 0;
+        }
+    }
+
+    // Create ShotIndices
+    ShotIndices shotIndices;
+    shotIndices.shotIndex = static_cast<int>(shotIndex);
+    shotIndices.segmentIndex = segmentIndex;
 
     // Push to undo stack
-    undoStack->push(new InsertSegmentCommand(this, insertIndex, newShot, *currentCtx.scene, currentCtx.scene->uuid.c_str(), currentTime));
+    if (!insertBefore)
+        undoStack->push(new InsertSegmentCommand(this, shotIndices, newShot, *currentCtx.scene, QString::fromStdString(currentCtx.scene->uuid), currentTime));
+    else
+        undoStack->push(new InsertSegmentCommand(this, shotIndices, newShot, *currentCtx.scene, QString::fromStdString(currentCtx.scene->uuid), currentTime));
 
-    // Refresh UI
-    //cameraSidePanel->setCameraList("", currentCtx.scene->shots);
-    //paint->getPaintArea()->update();
+    // UI updates handled by InsertSegmentCommand::redo()
 }
 
 void MainWindow::onDeleteShot() {

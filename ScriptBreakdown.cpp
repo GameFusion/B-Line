@@ -1073,49 +1073,48 @@ bool ScriptBreakdown::deleteCameraFrame(const std::string& uuid) {
     return false;
 }
 
-void ScriptBreakdown::updateShotTimings(GameFusion::Scene& scene) {
+void ScriptBreakdown::updateShotTimings(GameFusion::Scene& fromScene) {
     Log().info() << "ScriptBreakdown::updateShotTimings DANGER !!!\n";
 
-    if (scene.shots.empty()) {
-        scene.setDirty(false); // No changes needed
-        return;
-    }
 
     qint64 currentTime = 0; // Start at 0 ms
     float mspf = fps > 0 ? 1000.0 / fps : 1.0; // Milliseconds per frame
 
+    // TODO we need to runnup and compute timing
+    for(auto& scene: this->scenes) {
 
-    for (auto& shot : scene.shots) {
-        // Calculate Shot duration from Panels
-        qint64 shotDuration = 0;
-        if (!shot.panels.empty()) {
-            for (const auto& panel : shot.panels) {
-                shotDuration += panel.durationTime;
+        for (auto& shot : scene.shots) {
+            // Calculate Shot duration from Panels
+            qint64 shotDuration = 0;
+            if (!shot.panels.empty()) {
+                for (const auto& panel : shot.panels) {
+                    shotDuration += panel.durationTime;
+                }
+            } else {
+                // Fallback: Use frameCount if no Panels
+                shotDuration = static_cast<qint64>(shot.frameCount * mspf);
             }
-        } else {
-            // Fallback: Use frameCount if no Panels
-            shotDuration = static_cast<qint64>(shot.frameCount * mspf);
+
+            // Update Shot timings
+            shot.startTime = currentTime;
+            shot.endTime = currentTime + shotDuration;
+
+            // Update Panel startTimes within the Shot
+            qint64 panelTime = 0;
+            for (auto& panel : shot.panels) {
+                panel.startTime = panelTime;
+                panelTime += panel.durationTime;
+            }
+
+            // Move currentTime to the end of this Shot
+            currentTime += shotDuration;
+
+            // Log for debugging
+            Log().info() << "Updated Shot " << shot.name.c_str()
+                         << ": startTime=" << shot.startTime
+                         << ", endTime=" << shot.endTime
+                         << ", duration=" << (int)shotDuration << " ms\n";
         }
-
-        // Update Shot timings
-        shot.startTime = currentTime;
-        shot.endTime = currentTime + shotDuration;
-
-        // Update Panel startTimes within the Shot
-        qint64 panelTime = 0;
-        for (auto& panel : shot.panels) {
-            panel.startTime = panelTime;
-            panelTime += panel.durationTime;
-        }
-
-        // Move currentTime to the end of this Shot
-        currentTime += shotDuration;
-
-        // Log for debugging
-        Log().info() << "Updated Shot " << shot.name.c_str()
-                     << ": startTime=" << shot.startTime
-                     << ", endTime=" << shot.endTime
-                     << ", duration=" << (int)shotDuration << " ms\n";
     }
 
     // Mark Scene as dirty for saving

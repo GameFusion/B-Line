@@ -219,6 +219,9 @@ HEADERS += ../BezierCurve.h ../StrokeProperties.h
 SOURCES += ../OptionsDialog.cpp
 HEADERS += ../OptionsDialog.h
 
+SOURCES += ../NewShotDialog.cpp
+HEADERS += ../NewShotDialog.h
+
 HEADERS += ../ProjectContext.h
 
 # Input source files
