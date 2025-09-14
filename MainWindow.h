@@ -109,6 +109,7 @@ public:
 
     ShotSegment* createShotSegment(GameFusion::Shot& shot, GameFusion::Scene& scene, CursorItem* sceneMarker);
     void insertShotSegment(const GameFusion::Shot& shot, ShotIndices shotIndices, const GameFusion::Scene sceneRef, double cursorTime);
+    void editShotSegment(const GameFusion::Shot &editShot, double cursorTime);
     ShotIndices deleteShotSegment(ShotContext &shotContext, double cursorTime);
     void addTimelineKeyFrames(const GameFusion::Shot& shot);
 
@@ -167,6 +168,7 @@ public slots:
 
     void onNewShot();
     void onDeleteShot();
+    void onEditShot();
     void onRenameShot();
     void onDuplicateShot();
 
