@@ -182,6 +182,39 @@ private:
     double cursorTime_;
 };
 
+class DuplicateShotCommand : public QUndoCommand {
+public:
+    DuplicateShotCommand(MainWindow* mainWindow, const GameFusion::Shot& shot, ShotIndices shotIndices,
+                         const GameFusion::Scene& scene, double cursorTime)
+        : mainWindow_(mainWindow), shot_(shot), shotIndices_(shotIndices), scene_(scene),
+        cursorTime_(cursorTime)
+    {
+        setText("Duplicate Shot");
+    }
+    void undo() override {
+        ShotContext shotContext = mainWindow_->findShotByUuid(shot_.uuid);
+        if (shotContext.isValid()) {
+            mainWindow_->deleteShotSegment(shotContext, cursorTime_);
+            GameFusion::Log().info() << "Undid duplicate of shot " << shot_.uuid.c_str();
+        } else {
+            GameFusion::Log().warning() << "Shot not found for UUID " << shot_.uuid.c_str();
+        }
+    }
+
+    void redo() override {
+        mainWindow_->insertShotSegment(shot_, shotIndices_, scene_, cursorTime_);
+        GameFusion::Log().info() << "Duplicated shot " << shot_.uuid.c_str() << " at segment index " << shotIndices_.segmentIndex;
+    }
+
+private:
+    MainWindow* mainWindow_;
+    GameFusion::Shot shot_;
+    ShotIndices shotIndices_;
+    GameFusion::Scene scene_;
+    double cursorTime_;
+};
+
+
 class RenameShotCommand : public QUndoCommand {
 public:
     RenameShotCommand(MainWindow* mainWindow, const QString& shotUuid, const QString& sceneUuid,
@@ -768,7 +801,9 @@ MainWindow::MainWindow(QWidget *parent)
     newShotAct = shotMenu->addAction(tr("New Shot"));
     editShotAct = shotMenu->addAction(tr("Edit Shot"));
     renameShotAct = shotMenu->addAction(tr("Rename Shot"));
+    shotMenu->addSeparator();
     duplicateShotAct = shotMenu->addAction(tr("Duplicate Shot"));
+    shotMenu->addSeparator();
     deleteShotAct = shotMenu->addAction(tr("Delete Shot"));
 
     editShotAct->setEnabled(false);
@@ -5203,7 +5238,64 @@ void MainWindow::onRenameShot() {
 }
 
 void MainWindow::onDuplicateShot() {
+
     // Duplicate selected Shot
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available";
+        QMessageBox::warning(this, "Error", "No ScriptBreakdown available.");
+        return;
+    }
+
+    double currentTime = timeLineView->getCursorTime();
+    ShotContext currentCtx = findShotForTime(currentTime);
+    if (!currentCtx.isValid()) {
+        QMessageBox::warning(this, "Error", "No valid shot selected. Please select a time in the timeline.");
+        return;
+    }
+
+    // Create duplicated shot
+    GameFusion::Shot dupShot = *currentCtx.shot;
+    dupShot.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    dupShot.name = QString("%1_copy").arg(QString::fromStdString(currentCtx.shot->name)).toStdString();
+    dupShot.startTime = currentCtx.shot->endTime;
+    dupShot.endTime = dupShot.startTime + (currentCtx.shot->endTime - currentCtx.shot->startTime);
+
+
+    // Update panel UUIDs to ensure uniqueness
+    for (auto& panel : dupShot.panels) {
+        std::string oldPanelUuid = panel.uuid;
+        panel.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+
+        // Update camera frame UUIDs
+        for (auto& camera : dupShot.cameraFrames) {
+            // update camera panel uuid
+            if(camera.panelUuid == oldPanelUuid){
+                camera.panelUuid = panel.uuid;
+                camera.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+            }
+            camera.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+        }
+
+        for (auto& layer : panel.layers) {
+
+            layer.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+        }
+    }
+
+    // Determine insertion point (immediately after the original shot)
+    TrackItem* track = timeLineView->getTrack(0);
+    auto& shots = currentCtx.scene->shots;
+    auto it = std::find_if(shots.begin(), shots.end(),
+                           [&](const GameFusion::Shot& s) { return s.uuid == currentCtx.shot->uuid; });
+    int shotIndex = (it == shots.end()) ? shots.size() : (it - shots.begin()) + 1;
+    int segmentIndex = track->getSegmentIndexByUuid(QString::fromStdString(currentCtx.shot->uuid)) + 1;
+
+    ShotIndices shotIndices;
+    shotIndices.shotIndex = shotIndex;
+    shotIndices.segmentIndex = segmentIndex;
+
+    // Push duplicate command to undo stack
+    undoStack->push(new DuplicateShotCommand(this, dupShot, shotIndices, *currentCtx.scene, currentTime));
 }
 
 void MainWindow::onEditShot()
