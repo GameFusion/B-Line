@@ -330,7 +330,18 @@ protected:
     QAction *renameShotAct;
     QAction *duplicateShotAct;
 
+    QAction *addPanelAct;
+    QAction *editPanelAct;
+    QAction *renamePanelAct;
+    QAction *duplicatePanelAct;
+    QAction *copyPanelAct;
+    QAction *cutPanelAct;
+    QAction *pastePanelAct;
+    QAction *clearPanelAct;
+    QAction *deletePanelAct;
+
     GameFusion::Panel clipboardPanel; // Clipboard for copy/cut/paste
+    bool hasClipboardPanel = false;
 };
 
 

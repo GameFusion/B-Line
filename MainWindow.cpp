@@ -878,15 +878,30 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Add Panel menu
     QMenu *panelMenu = storyboardMenu->addMenu(tr("Panel"));
-    QAction *addPanelAct = panelMenu->addAction(tr("Add Panel"));
-    QAction *editPanelAct = panelMenu->addAction(tr("Edit Panel"));
-    QAction *renamePanelAct = panelMenu->addAction(tr("Rename Panel"));
-    QAction *duplicatePanelAct = panelMenu->addAction(tr("Duplicate Panel"));
-    QAction *copyPanelAct = panelMenu->addAction(tr("Copy Panel"));
-    QAction *cutPanelAct = panelMenu->addAction(tr("Cut Panel"));
-    QAction *pastePanelAct = panelMenu->addAction(tr("Paste Panel"));
-    QAction *clearPanelAct = panelMenu->addAction(tr("Clear Panel"));
-    QAction *deletePanelAct = panelMenu->addAction(tr("Delete Panel"));
+    addPanelAct = panelMenu->addAction(tr("Add Panel"));
+    editPanelAct = panelMenu->addAction(tr("Edit Panel"));
+    renamePanelAct = panelMenu->addAction(tr("Rename Panel"));
+    duplicatePanelAct = panelMenu->addAction(tr("Duplicate Panel"));
+    panelMenu->addSeparator();
+    copyPanelAct = panelMenu->addAction(tr("Copy Panel"));
+    cutPanelAct = panelMenu->addAction(tr("Cut Panel"));
+    pastePanelAct = panelMenu->addAction(tr("Paste Panel"));
+    panelMenu->addSeparator();
+    clearPanelAct = panelMenu->addAction(tr("Clear Panel"));
+    panelMenu->addSeparator();
+    deletePanelAct = panelMenu->addAction(tr("Delete Panel"));
+
+
+
+    addPanelAct->setEnabled(false);
+    editPanelAct->setEnabled(false);
+    renamePanelAct->setEnabled(false);
+    duplicatePanelAct->setEnabled(false);
+    copyPanelAct->setEnabled(false);
+    cutPanelAct->setEnabled(false);
+    pastePanelAct->setEnabled(false);
+    clearPanelAct->setEnabled(false);
+    deletePanelAct->setEnabled(false);
 
     // Existing camera actions
     QMenu *cameraMenu = storyboardMenu->addMenu(tr("Camera"));
@@ -3323,6 +3338,17 @@ void MainWindow::onTimeCursorMoved(double time)
     duplicateShotAct->setEnabled(false);
     deleteShotAct->setEnabled(false);
 
+    addPanelAct->setEnabled(false);
+    editPanelAct->setEnabled(false);
+    renamePanelAct->setEnabled(false);
+    duplicatePanelAct->setEnabled(false);
+    copyPanelAct->setEnabled(false);
+    cutPanelAct->setEnabled(false);
+    pastePanelAct->setEnabled(false);
+    clearPanelAct->setEnabled(false);
+    deletePanelAct->setEnabled(false);
+
+
     Panel* newPanel = nullptr;
 
     long timeCounter = 0;
@@ -3376,6 +3402,17 @@ void MainWindow::onTimeCursorMoved(double time)
     renameShotAct->setEnabled(theShot);
     duplicateShotAct->setEnabled(theShot);
     deleteShotAct->setEnabled(theShot);
+
+    addPanelAct->setEnabled(theShot);
+    editPanelAct->setEnabled(theShot);
+    renamePanelAct->setEnabled(theShot);
+    duplicatePanelAct->setEnabled(theShot);
+    copyPanelAct->setEnabled(theShot);
+    cutPanelAct->setEnabled(theShot);
+    if(hasClipboardPanel)
+        pastePanelAct->setEnabled(theShot);
+    clearPanelAct->setEnabled(theShot);
+    deletePanelAct->setEnabled(theShot);
 
     //--- If no panel found, show white image
     if (!newPanel) {
@@ -5727,13 +5764,21 @@ void MainWindow::onCopyPanel()
     }
 
     double currentTime = timeLineView->getCursorTime();
-    ShotContext ctx = findShotForTime(currentTime);
+    PanelContext ctx = findPanelForTime(currentTime);
     if (!ctx.isValid() || ctx.shot->panels.empty()) {
-        QMessageBox::warning(this, "Error", "No valid panel selected. Please select a time in a shot with panels.");
+        QMessageBox::warning(this, "Error", "No valid panel selected. Please select a time within a panel.");
         return;
     }
 
-    //undoStack->push(new CopyPanelCommand(this, ctx.shot->panels.back()));
+    int panelIndex = findPanelIndex(ctx);
+    if (panelIndex < 0) {
+        QMessageBox::warning(this, "Error", "No valid panel selected. Please select a time within a panel.");
+        return;
+    }
+
+    clipboardPanel = ctx.shot->panels[panelIndex];
+    hasClipboardPanel = true;
+    GameFusion::Log().info() << "Copied panel " << clipboardPanel.uuid.c_str();
 }
 
 void MainWindow::onCutPanel()
@@ -5745,39 +5790,103 @@ void MainWindow::onCutPanel()
     }
 
     double currentTime = timeLineView->getCursorTime();
-    ShotContext ctx = findShotForTime(currentTime);
+    PanelContext ctx = findPanelForTime(currentTime);
     if (!ctx.isValid() || ctx.shot->panels.empty()) {
-        QMessageBox::warning(this, "Error", "No valid panel selected. Please select a time in a shot with panels.");
+        QMessageBox::warning(this, "Error", "No valid panel selected. Please select a time within a panel.");
         return;
     }
 
-    GameFusion::Panel panel = ctx.shot->panels.back();
-    int panelIndex = ctx.shot->panels.size() - 1;
-    //undoStack->push(new CutPanelCommand(this, *ctx.shot, panel, panelIndex, currentTime));
+    int panelIndex = findPanelIndex(ctx);
+    if (panelIndex < 0 || ctx.shot->panels.size() <= 1) {
+        QMessageBox::warning(this, "Error", ctx.shot->panels.size() <= 1 ?
+            "Cannot cut the last panel in the shot." : "No valid panel selected. Please select a time within a panel.");
+        return;
+    }
+
+    clipboardPanel = ctx.shot->panels[panelIndex];
+    hasClipboardPanel = true;
+
+    GameFusion::Shot originalShot = *ctx.shot;
+    GameFusion::Shot updatedShot = originalShot;
+    double deletedDuration = updatedShot.panels[panelIndex].durationTime;
+    updatedShot.panels.erase(updatedShot.panels.begin() + panelIndex);
+    for (size_t i = panelIndex; i < updatedShot.panels.size(); ++i) {
+        updatedShot.panels[i].startTime -= deletedDuration;
+    }
+    updatedShot.endTime = updatedShot.startTime + (updatedShot.panels.empty() ? 0.0 :
+        updatedShot.panels.back().startTime + updatedShot.panels.back().durationTime);
+    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * projectJson["fps"].toDouble(24.0) / 1000.0);
+
+    undoStack->push(new PanelCommand(this, originalShot, updatedShot, currentTime, "Cut Panel"));
+    GameFusion::Log().info() << "Cut panel " << clipboardPanel.uuid.c_str();
 }
 
 void MainWindow::onPastePanel()
 {
-    if (!scriptBreakdown) {
-        GameFusion::Log().error() << "No ScriptBreakdown available";
-        QMessageBox::warning(this, "Error", "No ScriptBreakdown available.");
+    if (!scriptBreakdown || !hasClipboardPanel) {
+        GameFusion::Log().error() << "No ScriptBreakdown or clipboard panel available";
+        QMessageBox::warning(this, "Error", !scriptBreakdown ? "No ScriptBreakdown available." :
+            "No panel in clipboard. Copy or cut a panel first.");
         return;
     }
 
     double currentTime = timeLineView->getCursorTime();
-    ShotContext ctx = findShotForTime(currentTime);
-    if (!ctx.isValid() || clipboardPanel.uuid.empty()) {
-        QMessageBox::warning(this, "Error", "No valid shot selected or no panel in clipboard.");
+    PanelContext ctx = findPanelForTime(currentTime);
+    if (!ctx.isValid()) {
+        QMessageBox::warning(this, "Error", "No valid shot selected. Please select a time in the timeline.");
         return;
     }
 
+    GameFusion::Shot originalShot = *ctx.shot;
+    GameFusion::Shot updatedShot = originalShot;
     GameFusion::Panel pastePanel = clipboardPanel;
+
+
     pastePanel.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+
     for (auto& layer : pastePanel.layers) {
-        layer.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+            layer.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+        }
+
+    for (auto& cameraFrame : updatedShot.cameraFrames) {
+        if(cameraFrame.panelUuid == ctx.panel->uuid){
+            //cameraFrame.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+            cameraFrame.panelUuid = pastePanel.uuid;
+        }
     }
-    int panelIndex = ctx.shot->panels.size();
-    //undoStack->push(new PastePanelCommand(this, *ctx.shot, pastePanel, panelIndex, currentTime));
+
+    int panelIndex = findPanelIndex(ctx);
+    bool pastOverwrite = true;
+
+    if(pastOverwrite){
+        // Overwrite the selected panel
+            double oldDuration = updatedShot.panels[panelIndex].durationTime;
+            pastePanel.startTime = updatedShot.panels[panelIndex].startTime;
+            updatedShot.panels[panelIndex] = pastePanel;
+            double durationDelta = pastePanel.durationTime - oldDuration;
+            for (size_t i = panelIndex + 1; i < updatedShot.panels.size(); ++i) {
+                updatedShot.panels[i].startTime += durationDelta;
+            }
+    }
+    else{
+        if (panelIndex >= 0) {
+            pastePanel.startTime = originalShot.panels[panelIndex].startTime + originalShot.panels[panelIndex].durationTime;
+            updatedShot.panels.insert(updatedShot.panels.begin() + panelIndex + 1, pastePanel);
+            for (size_t i = panelIndex + 2; i < updatedShot.panels.size(); ++i)
+                updatedShot.panels[i].startTime += pastePanel.durationTime;
+        }
+        else {
+            pastePanel.startTime = originalShot.panels.empty() ? 0.0 : originalShot.panels.back().startTime + originalShot.panels.back().durationTime;
+            updatedShot.panels.push_back(pastePanel);
+        }
+    }
+
+    updatedShot.endTime = updatedShot.startTime + (updatedShot.panels.empty() ? 0.0 :
+        updatedShot.panels.back().startTime + updatedShot.panels.back().durationTime);
+    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * projectJson["fps"].toDouble(24.0) / 1000.0);
+
+    undoStack->push(new PanelCommand(this, originalShot, updatedShot, currentTime, "Paste Panel"));
+    GameFusion::Log().info() << "Pasted panel " << pastePanel.uuid.c_str();
 }
 
 void MainWindow::onClearPanel()
