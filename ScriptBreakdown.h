@@ -235,6 +235,8 @@ struct Shot {
     std::string fx;
     std::string action; // TODO Use this
     std::string notes;
+    std::string tags;
+    std::string slugline;
     std::string intent;       // Narrative/emotional purpose
     std::vector<CharacterDialog> characters;
     std::vector<Panel> panels;
@@ -289,6 +291,8 @@ struct Scene {
     std::string description;
     std::vector<Shot> shots;
     std::string uuid;
+    std::string tags;
+    std::string notes;
 
     std::string filename; // File this scene was loaded from or will be saved to
     bool dirty = false;   // Set to true when scene is edited and needs saving
@@ -340,6 +344,10 @@ public:
     bool deleteCameraFrame(const std::string& uuid);
 
     void updateShotTimings(GameFusion::Scene& scene);
+
+    bool setScene(GameFusion::Scene& scene, const std::string& uuid);
+    GameFusion::Scene* getPreviousScene(GameFusion::Scene& refScene);
+    GameFusion::Scene* getNextScene(GameFusion::Scene& refScene);
 
 private:
     bool initializeLlamaClient(LlamaClient* client, const std::string& modelPath, const std::string& backend);

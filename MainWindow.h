@@ -66,6 +66,8 @@ struct LayerContext {
 struct ShotContext {
     GameFusion::Scene* scene = nullptr;
     GameFusion::Shot* shot = nullptr;
+    int sceneIndex=-1;
+    int shotIndex=-1;
 
     bool isValid() const {
         return scene && shot;
@@ -111,8 +113,12 @@ public:
     void loadProject(QString projectDir);
     void syncPanelDurations(Segment* segment, GameFusion::Shot* shot);
 
+    void editScene(GameFusion::Scene& oldScene, GameFusion::Scene& newScene);
+    void insertScene(GameFusion::Scene& newScene, QString sceneRefUuid, bool insertAfter, double cursorTime);
+    void deleteScene(const std::string &uuid, double cursorTime);
+
     ShotSegment* createShotSegment(GameFusion::Shot& shot, GameFusion::Scene& scene, CursorItem* sceneMarker);
-    void insertShotSegment(const GameFusion::Shot& shot, ShotIndices shotIndices, const GameFusion::Scene sceneRef, double cursorTime);
+    void insertShotSegment(const GameFusion::Shot& shot, ShotIndices shotIndices, const GameFusion::Scene sceneRef, double cursorTime, CursorItem *sceneMarker);
     void editShotSegment(const GameFusion::Shot &editShot, double cursorTime);
     void renameShotSegment(const QString &shotUuid, QString newName);
     ShotIndices deleteShotSegment(ShotContext &shotContext, double cursorTime);
@@ -129,6 +135,8 @@ public:
     CameraContext findCameraByUuid(const std::string& uuid);
     ShotContext   findSceneByPanel(const std::string& panelUuid);
     GameFusion::Scene  *findSceneByUuid(const std::string& uuid);
+    int           findSceneIndex(const std::string& uuid);
+    int           findShotIndex(ShotContext shotContext);
 
 public slots:
 

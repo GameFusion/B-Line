@@ -1124,4 +1124,34 @@ void ScriptBreakdown::updateShotTimings(GameFusion::Scene& fromScene) {
     // timeLineView->updateShotSegments(scene); // Update timeline segments
 }
 
+bool ScriptBreakdown::setScene(GameFusion::Scene& sceneUpdate, const std::string& uuid){
+    for(auto& scene: this->scenes) {
+        if(scene.uuid == uuid){
+            scene =sceneUpdate;
+            return true;
+        }
+    }
+    return false;
+}
+
+GameFusion::Scene* ScriptBreakdown::getPreviousScene(GameFusion::Scene& refScene)
+{
+    for (size_t i = 0; i < scenes.size(); ++i) {
+        if (&scenes[i] == &refScene) {
+            return (i > 0) ? &scenes[i - 1] : nullptr;
+        }
+    }
+    return nullptr; // not found
+}
+
+GameFusion::Scene* ScriptBreakdown::getNextScene(GameFusion::Scene& refScene)
+{
+    for (size_t i = 0; i < scenes.size(); ++i) {
+        if (&scenes[i] == &refScene) {
+            return (i + 1 < scenes.size()) ? &scenes[i + 1] : nullptr;
+        }
+    }
+    return nullptr; // not found
+}
+
 }

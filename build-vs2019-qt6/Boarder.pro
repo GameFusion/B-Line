@@ -225,6 +225,9 @@ HEADERS += ../NewShotDialog.h
 SOURCES += ../NewPanelDialog.cpp
 HEADERS += ../NewPanelDialog.h
 
+SOURCES += ../NewSceneDialog.cpp
+HEADERS += ../NewSceneDialog.h
+
 HEADERS += ../ProjectContext.h
 
 # Input source files

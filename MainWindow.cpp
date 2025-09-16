@@ -40,6 +40,7 @@
 #include "ProjectContext.h"
 #include "NewShotDialog.h"
 #include "NewPanelDialog.h"
+#include "NewSceneDialog.h"
 
 #include "GameCore.h" // for GameContext->gameTime()
 #include "SoundServer.h"
@@ -71,37 +72,6 @@ using namespace GameFusion;
 
 #include <QUndoCommand>
 
-class AddShotCommand : public QUndoCommand {
-public:
-    AddShotCommand(GameFusion::ScriptBreakdown* breakdown, GameFusion::Scene& scene, const GameFusion::Shot& shot, size_t insertIndex, TimeLineView* view, TrackItem* track)
-        : breakdown_(breakdown), scene_(scene), shot_(shot), insertIndex_(insertIndex), view_(view), track_(track){
-        setText("Add Shot");
-    }
-    void undo() override {
-        scene_.shots.erase(scene_.shots.begin() + insertIndex_);
-        breakdown_->updateShotTimings(scene_);
-        track_->deleteSegment(QString(shot_.uuid.c_str()));
-        // todo delete sound segment
-    }
-    void redo() override {
-        scene_.shots.insert(scene_.shots.begin() + insertIndex_, shot_);
-        breakdown_->updateShotTimings(scene_);
-
-        QGraphicsScene *gfxscene = view_->scene();
-        ShotSegment* segment = new ShotSegment(gfxscene, shot_.startTime, shot_.endTime - shot_.startTime);
-        segment->setUuid(shot_.uuid.c_str());
-
-        track_->insertSegmentAtIndex(insertIndex_, segment);
-        // todo add sound segment
-    }
-private:
-    GameFusion::ScriptBreakdown* breakdown_;
-    GameFusion::Scene scene_;
-    GameFusion::Shot shot_;
-    size_t insertIndex_;
-    TimeLineView* view_;
-    TrackItem* track_;
-};
 
 class InsertSegmentCommand : public QUndoCommand {
 public:
@@ -119,7 +89,7 @@ public:
 
     void redo() override {
         CursorItem* sceneMarker=nullptr;
-        mainWindow_->insertShotSegment(shot_, shotIndices_, scene_, cursorTime_);
+        mainWindow_->insertShotSegment(shot_, shotIndices_, scene_, cursorTime_, sceneMarker);
     }
 
 private:
@@ -140,7 +110,7 @@ public:
 
     void undo() override {
         CursorItem* sceneMarker=nullptr;
-        mainWindow_->insertShotSegment(shot_, shotIndices_, scene_, cursorTime_);
+        mainWindow_->insertShotSegment(shot_, shotIndices_, scene_, cursorTime_, sceneMarker);
     }
 
     void redo() override {
@@ -202,7 +172,8 @@ public:
     }
 
     void redo() override {
-        mainWindow_->insertShotSegment(shot_, shotIndices_, scene_, cursorTime_);
+        CursorItem *sceneMarker = nullptr;
+        mainWindow_->insertShotSegment(shot_, shotIndices_, scene_, cursorTime_, sceneMarker);
         GameFusion::Log().info() << "Duplicated shot " << shot_.uuid.c_str() << " at segment index " << shotIndices_.segmentIndex;
     }
 
@@ -238,6 +209,7 @@ private:
     QString sceneUuid_;
     QString oldName_;
     QString newName_;
+    double cursorTime_;
 };
 
 class PanelCommand : public QUndoCommand {
@@ -266,40 +238,65 @@ private:
     double cursorTime_;
 };
 
-
-class CopyPanelCommand : public QUndoCommand {
+class InsertSceneCommand : public QUndoCommand {
 public:
-    CopyPanelCommand(MainWindow* mainWindow, const GameFusion::Panel& panel);
-    void undo() override;
-    void redo() override;
+    InsertSceneCommand(MainWindow* mainWindow, GameFusion::Scene& newScene,
+                 const QString sceneRefUuid, bool insertAfter, double cursorTime, const QString& commandName)
+        : mainWindow_(mainWindow), newScene_(newScene), sceneRefUuid_(sceneRefUuid), insertAfter_(insertAfter), cursorTime_(cursorTime){
+        setText(commandName);
+    }
+    void undo() override {
+        mainWindow_->deleteScene(newScene_.uuid.c_str(), cursorTime_);
+    }
+    void redo() override {
+        mainWindow_->insertScene(newScene_, sceneRefUuid_, insertAfter_, cursorTime_);
+    }
+
 private:
     MainWindow* mainWindow_;
-    GameFusion::Panel panel_;
-};
-
-class CutPanelCommand : public QUndoCommand {
-public:
-    CutPanelCommand(MainWindow* mainWindow, const GameFusion::Shot& shot, const GameFusion::Panel& panel, int panelIndex, double cursorTime);
-    void undo() override;
-    void redo() override;
-private:
-    MainWindow* mainWindow_;
-    GameFusion::Shot shot_;
-    GameFusion::Panel panel_;
-    int panelIndex_;
+    GameFusion::Scene newScene_;
+    QString sceneRefUuid_;
+    bool insertAfter_;
     double cursorTime_;
 };
 
-class PastePanelCommand : public QUndoCommand {
+class DeleteSceneCommand : public QUndoCommand {
 public:
-    PastePanelCommand(MainWindow* mainWindow, const GameFusion::Shot& shot, const GameFusion::Panel& panel, int panelIndex, double cursorTime);
-    void undo() override;
-    void redo() override;
+    DeleteSceneCommand(MainWindow* mainWindow, GameFusion::Scene& deleteScene,
+                 const QString sceneRefUuid, bool insertAfter, double cursorTime, const QString& commandName)
+        : mainWindow_(mainWindow), deleteScene_(deleteScene), sceneRefUuid_(sceneRefUuid), insertAfter_(insertAfter), cursorTime_(cursorTime)
+    {
+        setText(commandName);
+    }
+    void undo() override {
+        mainWindow_->insertScene(deleteScene_, sceneRefUuid_, insertAfter_, cursorTime_);
+    }
+    void redo() override {
+
+
+        mainWindow_->deleteScene(deleteScene_.uuid.c_str(), cursorTime_);
+    }
+
 private:
     MainWindow* mainWindow_;
-    GameFusion::Shot shot_;
-    GameFusion::Panel panel_;
-    int panelIndex_;
+    GameFusion::Scene deleteScene_;
+    QString sceneRefUuid_;
+    bool insertAfter_;
+    double cursorTime_;
+};
+
+class SceneCommand : public QUndoCommand {
+public:
+    SceneCommand(MainWindow* mainWindow, const std::vector<GameFusion::Scene>& oldScenes,
+                 const std::vector<GameFusion::Scene>& newScenes, const QString& commandName);
+    void undo() override;
+    void redo() override;
+
+private:
+    MainWindow* mainWindow_;
+    GameFusion::Scene oldScenes_;
+    GameFusion::Scene newScenes_;
+    bool insertAfter_;
     double cursorTime_;
 };
 
@@ -1834,7 +1831,7 @@ ShotSegment* MainWindow::createShotSegment(GameFusion::Shot& shot, GameFusion::S
     return segment;
 }
 
-void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices shotIndices, const GameFusion::Scene sceneRef, double cursorTime) {
+void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices shotIndices, const GameFusion::Scene sceneRef, double cursorTime, CursorItem *sceneMarker) {
     GameFusion::Scene* scene = findSceneByUuid(sceneRef.uuid);
     //int insertIndex = 0;
 
@@ -1843,7 +1840,8 @@ void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices sho
     qreal fps = projectJson["fps"].toDouble(24.0);
     qreal mspf = 1000.0f / fps;
 
-    // TODO if scene does not exist then we need to create it
+    // TODO if scene does not exist then we need to create it - not sure about this
+    /*
     if(!scene){
         GameFusion::Scene newScene;
         newScene.uuid = sceneRef.uuid;
@@ -1854,6 +1852,7 @@ void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices sho
 
         createSceneMarker = true;
     }
+    */
 
     if (scene) {
         auto& shots = scene->shots;
@@ -1867,12 +1866,14 @@ void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices sho
         //scriptBreakdown->updateShotTimings(*scene);
 
         // Create scene marker if this is the first and only shot in a new scene
-        CursorItem *sceneMarker = nullptr;
+        //CursorItem *sceneMarker = nullptr;
+        /*
         if(createSceneMarker) {
             sceneMarker = timeLineView->addSceneMarker(shot.startTime, scene->name.c_str());
             sceneMarker->setUuid(scene->uuid.c_str());
             GameFusion::Log().debug() << "Created scene marker for UUID " << scene->uuid.c_str() << "\n";
         }
+        */
 
         // Create and insert ShotSegment
         ShotSegment* shotSegment = createShotSegment(insertedShot, *scene, sceneMarker);
@@ -2471,11 +2472,16 @@ void MainWindow::loadScript() {
 
 ShotContext MainWindow::findShotByUuid(const std::string& uuid) {
 
+    int sceneIndex = -1;
+
     auto& scenes = scriptBreakdown->getScenes();
     for (auto& scene : scenes) {
+        sceneIndex++;
+        int shotIndex = -1;
         for (auto& shot : scene.shots) {
+            shotIndex++;
             if (shot.uuid == uuid)
-                    return { &scene, &shot };
+                    return { &scene, &shot, sceneIndex, shotIndex };
         }
     }
 
@@ -2567,14 +2573,16 @@ ShotContext MainWindow::findShotForTime(double time/*, double buffer*/) {
         return {};
     }
 
+    int sceneIndex = -1;
     auto& scenes = scriptBreakdown->getScenes();
     for (auto& scene : scenes) {
+        sceneIndex ++;
         for (size_t i = 0; i < scene.shots.size(); ++i) {
             auto& shot = scene.shots[i];
 
             // 1. Direct match inside this shot
             if (time >= shot.startTime && time < shot.endTime) {
-                return { &scene, &shot };
+                return { &scene, &shot, sceneIndex, (int)i};
             }
 
             // 2. Between this shot and the next
@@ -2584,7 +2592,7 @@ ShotContext MainWindow::findShotForTime(double time/*, double buffer*/) {
                     // Optional: insert logic could go here
                     Log().info() << "Time is between Shot " << shot.name.c_str()
                                  << " and Shot " << nextShot.name.c_str() << "\n";
-                    return { &scene, nullptr }; // indicates an insert opportunity
+                    return { &scene, nullptr, sceneIndex, -1 }; // indicates an insert opportunity
                 }
             }
         }
@@ -2681,6 +2689,19 @@ GameFusion::Scene* MainWindow::findSceneByUuid(const std::string& uuid) {
     }
     GameFusion::Log().warning() << "Scene with UUID " << uuid.c_str() << " not found";
     return nullptr;
+}
+
+int MainWindow::findSceneIndex(const std::string& uuid) {
+    auto& scenes = scriptBreakdown->getScenes();
+    int index = -1;
+    for (auto& scene : scenes) {
+        index++;
+        if (scene.uuid == uuid) {
+            return index;
+        }
+    }
+    GameFusion::Log().warning() << "Scene with UUID " << uuid.c_str() << " not found";
+    return index;
 }
 
 void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
@@ -5202,13 +5223,192 @@ void MainWindow::exportEDL() {
     QMessageBox::information(this, "Success", "EDL exported to: " + outputPath);
 }
 
-void MainWindow::onNewScene() {
-    // Add new Scene with one blank Shot/Panel
-    // Example: scriptBreakdown->addScene();
-    // Update Timeline view and project data
+void MainWindow::onNewScene()
+{
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available";
+        QMessageBox::warning(this, "Error", "No ScriptBreakdown available.");
+        return;
+    }
+
+    double currentTime = timeLineView->getCursorTime();
+    qreal fps = projectJson["fps"].toDouble(24.0);
+    NewSceneDialog dialog(fps, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    QString sceneName = dialog.getSceneName();
+    double durationMs = dialog.getDurationMs();
+    int shotCount = dialog.getShotCount();
+    bool after = dialog.getInsertMode() == NewSceneDialog::InsertMode::InsertAfter;
+    GameFusion::Scene newScene;
+    newScene.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    newScene.name = sceneName.toStdString();
+
+    newScene.notes = dialog.getSlugline().toStdString();
+    newScene.description = dialog.getDescription().toStdString();
+    newScene.tags = dialog.getTags().toStdString();
+
+    // Create shots and panels
+    double shotDuration = durationMs / shotCount;
+    for (int i = 0; i < shotCount; ++i) {
+        GameFusion::Shot shot;
+        shot.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+        shot.name = QString("Shot %1").arg(i + 1).toStdString();
+        shot.startTime = i * shotDuration; // Relative to scene, adjusted later
+        shot.endTime = (i + 1) * shotDuration;
+        shot.frameCount = qRound(shotDuration * fps / 1000.0);
+
+        GameFusion::Panel panel;
+        panel.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+        panel.name = "Panel 1";
+        panel.startTime = 0.0; // Relative to shot
+        panel.durationTime = shotDuration;
+        GameFusion::Layer bg;
+        bg.name = "BG";
+        bg.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+        GameFusion::Layer l1;
+        l1.name = "Layer 1";
+        l1.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+        panel.layers.push_back(l1);
+        panel.layers.push_back(bg);
+        shot.panels.push_back(panel);
+
+        shot.slugline = dialog.getSlugline().toStdString();
+        shot.description = dialog.getDescription().toStdString();
+        shot.tags = dialog.getTags().toStdString();
+        shot.notes = dialog.getNotes().toStdString();
+
+        newScene.shots.push_back(shot);
+    }
+
+    ShotContext shotContext = this->findShotForTime(currentTime);
+
+    if(!shotContext.isValid()){
+        return;
+    }
+    //int sceneIndex = findSceneIndex(shotContext.scene->uuid);
+
+    //std::vector<GameFusion::Scene> &scenes = scriptBreakdown->getScenes();
+    //scenes.insert(scenes.begin() + sceneIndex, newScene);
+
+    bool insertAtPanel=false;
+    /***
+    if (insertAtPanel) {
+        PanelContext ctx = findPanelForTime(currentTime);
+        if (!ctx.isValid() || !ctx.shot) {
+            QMessageBox::warning(this, "Error", "No valid panel selected for insertion. Appending scene instead.");
+            insertAtPanel = false;
+        } else {
+            // Find the scene containing the current panel
+            int sceneIndex = -1;
+            for (size_t i = 0; i < newScenes.size(); ++i) {
+                for (const auto& shot : newScenes[i].shots) {
+                    if (shot.uuid == ctx.shot->uuid) {
+                        sceneIndex = i;
+                        break;
+                    }
+                }
+                if (sceneIndex >= 0) break;
+            }
+
+            if (sceneIndex < 0) {
+                QMessageBox::warning(this, "Error", "Could not find scene for current panel. Appending scene instead.");
+                insertAtPanel = false;
+            } else {
+                // Split the current scene at the panel's absolute start time
+                GameFusion::Scene originalScene = newScenes[sceneIndex];
+                GameFusion::Scene firstHalf = originalScene;
+                GameFusion::Scene secondHalf;
+                secondHalf.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+                secondHalf.name = originalScene.name + "_split";
+                firstHalf.shots.clear();
+                secondHalf.shots.clear();
+
+                double splitTime = ctx.shot->startTime + ctx.panel->startTime; // Absolute time
+                for (const auto& shot : originalScene.shots) {
+                    if (shot.startTime < splitTime) {
+                        firstHalf.shots.push_back(shot);
+                    } else {
+                        secondHalf.shots.push_back(shot);
+                    }
+                }
+
+                // Adjust second half shot timings
+                if (!secondHalf.shots.empty()) {
+                    double shift = secondHalf.shots.front().startTime - splitTime;
+                    for (auto& shot : secondHalf.shots) {
+                        shot.startTime -= shift;
+                        shot.endTime -= shift;
+                    }
+                }
+
+                // Insert new scene after first half
+                newScenes[sceneIndex] = firstHalf;
+                double newSceneStart = firstHalf.shots.empty() ? 0.0 : firstHalf.shots.back().endTime;
+                for (auto& shot : newScene.shots) {
+                    shot.startTime += newSceneStart;
+                    shot.endTime += newSceneStart;
+                }
+                newScenes.insert(newScenes.begin() + sceneIndex + 1, newScene);
+                newScenes.insert(newScenes.begin() + sceneIndex + 2, secondHalf);
+
+                // Adjust second half start times
+                double secondHalfStart = newScene.shots.empty() ? newSceneStart : newScene.shots.back().endTime;
+                for (auto& shot : secondHalf.shots) {
+                    shot.startTime += secondHalfStart;
+                    shot.endTime += secondHalfStart;
+                }
+            }
+        }
+    }
+
+
+    if (!insertAtPanel) {
+        // Append new scene
+        double lastSceneEnd = newScenes.empty() ? 0.0 :
+            (newScenes.back().shots.empty() ? 0.0 : newScenes.back().shots.back().endTime);
+        for (auto& shot : newScene.shots) {
+            shot.startTime += lastSceneEnd;
+            shot.endTime += lastSceneEnd;
+        }
+        newScenes.push_back(newScene);
+    }
+    ***/
+
+    //GameFusion::Scene *scene = this->find
+
+    undoStack->push(new InsertSceneCommand(this, newScene, shotContext.scene->uuid.c_str(), after, currentTime, "New Scene"));
+    GameFusion::Log().info() << "Created new scene " << newScene.uuid.c_str();
 }
+
 void MainWindow::onDeleteScene() {
     // Delete selected Scene
+
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available";
+        QMessageBox::warning(this, "Error", "No ScriptBreakdown available.");
+        return;
+    }
+
+    double currentTime = timeLineView->getCursorTime();
+
+    ShotContext shotContext = findShotForTime(currentTime);
+    if(!shotContext.isValid())
+        return;
+
+    std::vector<GameFusion::Scene> &scenes = scriptBreakdown->getScenes();
+
+    GameFusion::Scene* prev = scriptBreakdown->getPreviousScene(*shotContext.scene);
+    GameFusion::Scene* next = scriptBreakdown->getNextScene(*shotContext.scene);
+
+    if(prev)
+        undoStack->push(new DeleteSceneCommand(this, *shotContext.scene, prev->uuid.c_str(), true, currentTime, "Delete Scene"));
+    else if(next)
+        undoStack->push(new DeleteSceneCommand(this, *shotContext.scene, next->uuid.c_str(), false, currentTime, "Delete Scene"));
+    else
+        undoStack->push(new DeleteSceneCommand(this, *shotContext.scene, "", false, currentTime, "Delete Scene"));
 }
 void MainWindow::onRenameScene() {
     // Open dialog to rename selected Scene
@@ -5520,7 +5720,8 @@ void MainWindow::editShotSegment(const GameFusion::Shot &editShot, double cursor
         return;
 
     ShotIndices shotIndecies = deleteShotSegment(shotContext, cursorTime);
-    insertShotSegment(editShot, shotIndecies, *shotContext.scene, cursorTime);
+    CursorItem *sceneMarker = nullptr;
+    insertShotSegment(editShot, shotIndecies, *shotContext.scene, cursorTime, sceneMarker);
 }
 
 void MainWindow::renameShotSegment(const QString &shotUuid, QString newName){
@@ -5960,4 +6161,149 @@ void MainWindow::onDeletePanel()
 
     undoStack->push(new PanelCommand(this, originalShot, updatedShot, currentTime, "Delete Panel"));
     GameFusion::Log().info() << "Deleted panel at index " << panelIndex;
+}
+
+void MainWindow::editScene(GameFusion::Scene& oldScene, GameFusion::Scene& newScene)
+{
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available";
+        return;
+    }
+
+    // Update ScriptBreakdown
+    //GameFusion::Scene *ctx = findSceneByUuid(oldScene.uuid);
+
+
+
+    // Update timeline
+
+    int segmentIndex = -1;
+
+    double currentTime = timeLineView->getCursorTime();
+    for (const auto& shot : oldScene.shots) {
+        ShotContext shotContext = findShotByUuid(shot.uuid);
+
+        ShotIndices indices = deleteShotSegment(shotContext, shot.startTime);
+
+        //determin segment insertion point
+        if(segmentIndex == -1)
+            segmentIndex = indices.segmentIndex;
+        //ShotIndices indices = { /* compute indices as needed */ };
+        //insertShotSegment(shot, indices, scene, currentTime);
+    }
+
+    scriptBreakdown->setScene(newScene, newScene.uuid);
+
+    for (const auto& shot : newScene.shots) {
+        ShotContext shotContext = findShotByUuid(shot.uuid);
+
+        ShotIndices indices = {shotContext.shotIndex, segmentIndex};
+        CursorItem *sceneMarker = nullptr;
+        insertShotSegment(shot, indices, newScene, shot.startTime, sceneMarker);
+
+        segmentIndex ++;
+    }
+
+}
+
+void MainWindow::deleteScene(const std::string &uuid, double cursorTime) {
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available";
+        return;
+    }
+
+    GameFusion::Scene *toDelete = this->findSceneByUuid(uuid);
+
+    GameFusion::Scene sceneCopy = *toDelete;
+
+    // delete scene marker
+
+    if(timeLineView->deleteSceneMarker(uuid.c_str()))
+    {
+        Log().info() << "Deleted scene marker: " << uuid.c_str() << "\n";
+    } else {
+        Log().info() << "Marker not found for scene " << uuid.c_str() << "\n";
+    }
+    // delete scene shots
+
+    for(auto shot: sceneCopy.shots){
+        ShotContext shotContext = this->findShotByUuid(shot.uuid);
+        if(!shotContext.isValid()){
+            continue;
+        }
+        deleteShotSegment(shotContext, cursorTime);
+    }
+}
+void MainWindow::insertScene(GameFusion::Scene &newSceneInput, QString sceneRefUuid, bool insertAfter, double cursorTime){
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available";
+        return;
+    }
+
+    GameFusion::Scene &newScene = newSceneInput;
+
+    GameFusion::Scene *sceneRef = this->findSceneByUuid(sceneRefUuid.toStdString());
+    int sceneRefIndex = findSceneIndex(sceneRefUuid.toStdString());
+    // Get reference to the inserted scene
+    GameFusion::Shot *firstShot=&sceneRef->shots.front();
+    GameFusion::Shot *lastShot=&sceneRef->shots.back();
+
+    TrackItem* track = timeLineView->getTrack(0);
+
+    ShotIndices shotIndices;
+    long timeStart = 0;
+
+    if(insertAfter){
+        timeStart = lastShot->endTime;
+        ShotContext shotContext = findShotByUuid(lastShot->uuid);
+        if(!shotContext.isValid())
+            return;
+
+        shotIndices.shotIndex = 0;
+        shotIndices.segmentIndex = track->getSegmentIndexByUuid(lastShot->uuid.c_str())+1;
+    }else{
+        timeStart = firstShot->startTime;
+
+        ShotContext shotContext = findShotByUuid(lastShot->uuid);
+        if(!shotContext.isValid())
+            return;
+        shotIndices.shotIndex = 0;
+        shotIndices.segmentIndex = track->getSegmentIndexByUuid(lastShot->uuid.c_str())-1;
+    }
+
+    if(!shotIndices.isValid())
+    {
+        return;
+    }
+
+    GameFusion::Scene emptyScene = newScene;
+    emptyScene.shots.clear();
+
+    std::vector<GameFusion::Scene> &scenes = scriptBreakdown->getScenes();
+    scenes.insert(scenes.begin() + sceneRefIndex+1, emptyScene);
+
+    //GameFusion::Scene insertScene = newScene;
+
+
+    // Add a scene marker
+    CursorItem *sceneMarker = timeLineView->addSceneMarker(timeStart, emptyScene.name.c_str());
+    sceneMarker->setUuid(emptyScene.uuid.c_str());
+    //segment->setSceneMarker(sceneMarker);
+
+    for(auto &shot: newScene.shots){
+
+
+        long shotDuration = shot.endTime - shot.startTime;
+        shot.startTime = timeStart;
+        shot.endTime = timeStart + shotDuration;
+        timeStart += shotDuration;
+
+        insertShotSegment(shot, shotIndices, emptyScene, shot.startTime, sceneMarker);
+
+        sceneMarker = nullptr;
+
+        shotIndices.shotIndex ++;
+        shotIndices.segmentIndex ++;
+    }
+
 }
