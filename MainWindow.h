@@ -116,6 +116,7 @@ public:
     void editScene(GameFusion::Scene& oldScene, GameFusion::Scene& newScene);
     void insertScene(GameFusion::Scene& newScene, QString sceneRefUuid, bool insertAfter, double cursorTime);
     void deleteScene(const std::string &uuid, double cursorTime);
+    void renameScene(QString uuid, QString oldName, QString newName, double cursorTime);
 
     ShotSegment* createShotSegment(GameFusion::Shot& shot, GameFusion::Scene& scene, CursorItem* sceneMarker);
     void insertShotSegment(const GameFusion::Shot& shot, ShotIndices shotIndices, const GameFusion::Scene sceneRef, double cursorTime, CursorItem *sceneMarker);

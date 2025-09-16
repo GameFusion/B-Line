@@ -296,12 +296,14 @@ struct Scene {
 
     std::string filename; // File this scene was loaded from or will be saved to
     bool dirty = false;   // Set to true when scene is edited and needs saving
+    bool markedForDeletion = false; // new flag for deletion
 
     Scene() {
         uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
     }
 
     void setDirty(bool d){dirty=d;}
+    void markDeleted(bool d = true) { markedForDeletion = d; dirty = true; }
 };
 
 struct Sequence {

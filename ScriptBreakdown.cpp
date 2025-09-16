@@ -873,6 +873,18 @@ void ScriptBreakdown::loadScene(const QString& sceneName, const QJsonObject &sce
 
 void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
     for (Scene& scene : scenes) {
+        if (scene.markedForDeletion) {
+            // Move file to trash directory
+            QString src = projectPath + "/scenes/" + scene.filename.c_str();
+            QString dst = projectPath + "/trash/" + scene.filename.c_str();
+            QDir().mkpath(projectPath + "/trash"); // ensure trash dir exists
+            if (QFile::exists(src)) {
+                QFile::rename(src, dst);
+                Log().info() << "Moved scene to trash: " << dst.toUtf8().constData() << "\n";
+            }
+            continue; // skip saving
+        }
+
         if (scene.dirty && !scene.filename.empty()) {
             QJsonArray shotsArray;
 
@@ -1022,6 +1034,13 @@ void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
             }
         }
     }
+
+    // --- delete scenes marked for deletion
+    scenes.erase(
+        std::remove_if(scenes.begin(), scenes.end(),
+                       [](const Scene& scene) { return scene.markedForDeletion; }),
+        scenes.end()
+        );
 }
 
 void ScriptBreakdown::addCameraFrame(const CameraFrame& frame) {

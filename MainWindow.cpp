@@ -285,6 +285,30 @@ private:
     double cursorTime_;
 };
 
+class RenameSceneCommand : public QUndoCommand {
+public:
+    RenameSceneCommand(MainWindow* mainWindow, QString uuid, QString oldName, QString newName, double cursorTime, QString commandName="Rename Scene")
+        : mainWindow_(mainWindow), uuid_(uuid), oldName_(oldName), newName_(newName), cursorTime_(cursorTime)
+    {
+        setText(commandName);
+    }
+    void undo() override {
+        mainWindow_->renameScene(uuid_, newName_, oldName_, cursorTime_);
+    }
+    void redo() override {
+
+
+        mainWindow_->renameScene(uuid_, oldName_, newName_, cursorTime_);
+    }
+
+private:
+    MainWindow* mainWindow_;
+    QString uuid_;
+    QString oldName_;
+    QString newName_;
+    double cursorTime_;
+};
+
 class SceneCommand : public QUndoCommand {
 public:
     SceneCommand(MainWindow* mainWindow, const std::vector<GameFusion::Scene>& oldScenes,
@@ -5410,11 +5434,53 @@ void MainWindow::onDeleteScene() {
     else
         undoStack->push(new DeleteSceneCommand(this, *shotContext.scene, "", false, currentTime, "Delete Scene"));
 }
+
 void MainWindow::onRenameScene() {
     // Open dialog to rename selected Scene
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available";
+        QMessageBox::warning(this, "Error", "No ScriptBreakdown available.");
+        return;
+    }
+
+    double currentTime = timeLineView->getCursorTime();
+    ShotContext currentCtx = findShotForTime(currentTime);
+    if (!currentCtx.isValid()) {
+        QMessageBox::warning(this, "Error", "No valid shot selected. Please select a time in the timeline.");
+        return;
+    }
+
+    // display qt dialog box with old scene name and prompt for new scene
+    // Show dialog with old scene name as default
+    bool ok = false;
+    QString oldName = currentCtx.scene->name.c_str();
+    QString newName = QInputDialog::getText(
+        this,
+        tr("Rename Scene"),
+        tr("Enter new name for the scene:"),
+        QLineEdit::Normal,
+        oldName,
+        &ok
+    );
+
+    if (!ok || newName.trimmed().isEmpty()) {
+        // User cancelled or entered nothing
+        return;
+    }
+
+    undoStack->push(new RenameSceneCommand(this, currentCtx.scene->uuid.c_str(), oldName, newName, currentTime, "Rename Scene"));
+
+
 }
+
 void MainWindow::onDuplicateScene() {
     // Duplicate selected Scene
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available";
+        QMessageBox::warning(this, "Error", "No ScriptBreakdown available.");
+        return;
+    }
+
 }
 
 void MainWindow::onNewShot()
@@ -6233,7 +6299,29 @@ void MainWindow::deleteScene(const std::string &uuid, double cursorTime) {
         }
         deleteShotSegment(shotContext, cursorTime);
     }
+
+    toDelete->markDeleted(true);
 }
+
+void MainWindow::renameScene(QString uuid, QString oldName, QString newName, double cursorTime) {
+    // Update scene object
+    GameFusion::Scene *scene = findSceneByUuid(uuid.toStdString());
+    if(!scene)
+        return;
+
+    CursorItem *sceneMarker = timeLineView->getSceneMarkerFromUuid(scene->uuid.c_str());
+    if(!sceneMarker){
+        GameFusion::Log().error() << "Scene not found in timeline";
+        return;
+    }
+
+    scene->name = newName.toStdString();
+    scene->dirty = true;
+    sceneMarker->setLabel(newName);
+    //sceneMarker->update();
+    timeLineView->update();
+}
+
 void MainWindow::insertScene(GameFusion::Scene &newSceneInput, QString sceneRefUuid, bool insertAfter, double cursorTime){
     if (!scriptBreakdown) {
         GameFusion::Log().error() << "No ScriptBreakdown available";
@@ -6278,6 +6366,7 @@ void MainWindow::insertScene(GameFusion::Scene &newSceneInput, QString sceneRefU
 
     GameFusion::Scene emptyScene = newScene;
     emptyScene.shots.clear();
+    emptyScene.dirty = true;
 
     std::vector<GameFusion::Scene> &scenes = scriptBreakdown->getScenes();
     scenes.insert(scenes.begin() + sceneRefIndex+1, emptyScene);
