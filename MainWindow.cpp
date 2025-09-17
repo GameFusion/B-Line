@@ -376,6 +376,70 @@ private:
     double cursorTime_;
 };
 
+class RenameCameraCommand : public QUndoCommand {
+public:
+    RenameCameraCommand(MainWindow* mainWindow, const QString& cameraUuid,
+                       const QString& oldName, const QString& newName, double cursorTime,
+                       const QString& commandName = "Rename Camera")
+        : mainWindow_(mainWindow), cameraUuid_(cameraUuid),
+          oldName_(oldName), newName_(newName), cursorTime_(cursorTime) {
+        setText(commandName);
+    }
+
+    void redo() override {
+        mainWindow_->renameCamera(cameraUuid_, newName_, cursorTime_);
+    }
+
+    void undo() override {
+        mainWindow_->renameCamera(cameraUuid_, oldName_, cursorTime_);
+    }
+
+private:
+    MainWindow* mainWindow_;
+    QString cameraUuid_;
+    QString oldName_;
+    QString newName_;
+    double cursorTime_;
+};
+
+class SplitSceneCommand : public QUndoCommand {
+public:
+    SplitSceneCommand(MainWindow* mainWindow, const QString& sceneUuid,
+                      const QString& shotUuid, bool splitBefore,
+                      const QString& newSceneName, GameFusion::Scene mergedScene, double cursorTime)
+        : mainWindow_(mainWindow),
+          sceneUuid_(sceneUuid),
+          shotUuid_(shotUuid),
+          splitBefore_(splitBefore),
+          newSceneName_(newSceneName),
+          mergedScene_(mergedScene),
+          cursorTime_(cursorTime)
+    {
+        setText("Split Scene");
+    }
+
+    void undo() override {
+        // Merge scenes back together
+        mainWindow_->mergeScenes(sceneUuid_, newSceneUuid_, splitBefore_, mergedScene_, cursorTime_);
+    }
+
+    void redo() override {
+        // Actually perform the split
+        newSceneUuid_ = mainWindow_->splitScene(sceneUuid_, shotUuid_, splitBefore_, newSceneName_, cursorTime_);
+    }
+
+private:
+    MainWindow* mainWindow_;
+    QString sceneUuid_;
+    QString shotUuid_;
+    bool splitBefore_;
+    QString newSceneName_;
+    GameFusion::Scene mergedScene_;
+    double cursorTime_;
+
+    QString newSceneUuid_; // stored for undo
+};
+
 class FontAwesomeViewer : public QWidget
 {
 public:
@@ -907,10 +971,17 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Scene submenu
     QMenu *sceneMenu = storyboardMenu->addMenu(tr("Scene"));
-    QAction *newSceneAct = sceneMenu->addAction(tr("New Scene"));
-    QAction *deleteSceneAct = sceneMenu->addAction(tr("Delete Scene"));
-    QAction *renameSceneAct = sceneMenu->addAction(tr("Rename Scene"));
-    QAction *duplicateSceneAct = sceneMenu->addAction(tr("Duplicate Scene"));
+    newSceneAct = sceneMenu->addAction(tr("New Scene..."));
+    splitSceneAct = sceneMenu->addAction(tr("Split Scene..."));
+    renameSceneAct = sceneMenu->addAction(tr("Rename Scene..."));
+    duplicateSceneAct = sceneMenu->addAction(tr("Duplicate Scene"));
+    sceneMenu->addSeparator();
+    deleteSceneAct = sceneMenu->addAction(tr("Delete Scene"));
+
+    splitSceneAct->setEnabled(false);
+    renameSceneAct->setEnabled(false);
+    duplicateSceneAct->setEnabled(false);
+    deleteSceneAct->setEnabled(false);
 
     // Shot submenu
     shotMenu = storyboardMenu->addMenu(tr("Shot"));
@@ -957,9 +1028,13 @@ MainWindow::MainWindow(QWidget *parent)
     // Existing camera actions
     QMenu *cameraMenu = storyboardMenu->addMenu(tr("Camera"));
     QAction *addCameraAct = cameraMenu->addAction(tr("Add Camera"));
-    QAction *duplicateCameraAct = cameraMenu->addAction(tr("Duplicate Camera"));
-    QAction *deleteCameraAct = cameraMenu->addAction(tr("Delete Camera"));
     QAction *renameCameraAct = cameraMenu->addAction(tr("Rename Camera"));
+    QAction *duplicateCameraAct = cameraMenu->addAction(tr("Duplicate Camera"));
+    cameraMenu->addSeparator();
+    QAction *copyCameraAct = cameraMenu->addAction(tr("Copy Camera"));
+    QAction *pastCameraAct = cameraMenu->addAction(tr("Past Camera"));
+    cameraMenu->addSeparator();
+    QAction *deleteCameraAct = cameraMenu->addAction(tr("Delete Camera"));
 
     //
     // Storyboard menu actions
@@ -967,9 +1042,12 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Connect scene actions
     connect(newSceneAct, &QAction::triggered, this, &MainWindow::onNewScene);
-    connect(deleteSceneAct, &QAction::triggered, this, &MainWindow::onDeleteScene);
+    connect(splitSceneAct, &QAction::triggered, this, &MainWindow::onSplitScene);
     connect(renameSceneAct, &QAction::triggered, this, &MainWindow::onRenameScene);
     connect(duplicateSceneAct, &QAction::triggered, this, &MainWindow::onDuplicateScene);
+    connect(deleteSceneAct, &QAction::triggered, this, &MainWindow::onDeleteScene);
+
+    duplicateSceneAct->setEnabled(false);
 
     // Connect shot actions
     connect(newShotAct, &QAction::triggered, this, &MainWindow::onNewShot);
@@ -991,6 +1069,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Connect camera actions
     connect(addCameraAct, &QAction::triggered, this, &MainWindow::onAddCamera);
+    connect(copyCameraAct, &QAction::triggered, this, &MainWindow::onCopyCamera);
+    connect(pastCameraAct, &QAction::triggered, this, &MainWindow::onPastCamera);
     connect(duplicateCameraAct, &QAction::triggered, this, &MainWindow::onDuplicateCamera);
     connect(deleteCameraAct, &QAction::triggered, this, &MainWindow::onDeleteCamera);
     connect(renameCameraAct, &QAction::triggered, this, &MainWindow::onRenameCamera);
@@ -1720,6 +1800,8 @@ void MainWindow::importScript()
         } else {
             const auto& scenes = scriptBreakdown->getScenes();
             for (const auto& scene : scenes) {
+                if(scene.markedForDeletion)
+                    continue;
                 QTreeWidgetItem* sceneItem = new QTreeWidgetItem(ui->shotsTreeWidget);
                 sceneItem->setText(0, QString::fromStdString(scene.name));
                 sceneItem->setIcon(1, QIcon("scene_icon.png"));
@@ -1786,6 +1868,8 @@ void MainWindow::updateScenes(){
 
     const auto& scenes = scriptBreakdown->getScenes();
     for (const auto& scene : scenes) {
+        if(scene.markedForDeletion)
+            continue;
         QTreeWidgetItem* sceneItem = new QTreeWidgetItem(ui->shotsTreeWidget);
         sceneItem->setText(0, QString::fromStdString(scene.name));
         sceneItem->setIcon(1, QIcon("scene_icon.png"));
@@ -2736,17 +2820,22 @@ CameraContext MainWindow::findCameraForTime(double time) {
         return {};
     }
 
-    long sceneTime = panelContext.scene->shots.front().startTime;
+
     std::vector<CameraFrame> sortedFrames = panelContext.shot->cameraFrames;
     std::sort(sortedFrames.begin(), sortedFrames.end(), [](const CameraFrame& a, const CameraFrame& b) {
-        return a.time < b.time;
+        return a.frameOffset < b.frameOffset;
     });
+
+    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal mspf = 1000.0f / fps;
 
     GameFusion::CameraFrame *currentCamera = nullptr;
     for(auto &camera: panelContext.shot->cameraFrames){
-        if(sceneTime + camera.time <= time)
+        double shotTime = panelContext.shot->startTime;
+        double cameraTime = shotTime + camera.frameOffset * mspf;
+        if(cameraTime <= time)
             currentCamera = &camera;
-        if(sceneTime + camera.time > time)
+        if(cameraTime > time)
             break;
     }
 
@@ -3466,6 +3555,11 @@ void MainWindow::onTimeCursorMoved(double time)
      *           └─ Panels (each has startTime, endTime, imagePath or image)
      */
 
+    splitSceneAct->setEnabled(false);
+    renameSceneAct->setEnabled(false);
+    duplicateSceneAct->setEnabled(false);
+    deleteSceneAct->setEnabled(false);
+
     editShotAct->setEnabled(false);
     renameShotAct->setEnabled(false);
     duplicateShotAct->setEnabled(false);
@@ -3530,7 +3624,12 @@ void MainWindow::onTimeCursorMoved(double time)
             break;
     }
 
-    // enable context menues base on selection
+    // --- enable context menues base on selection
+    splitSceneAct->setEnabled(theShot);
+    renameSceneAct->setEnabled(theShot);
+    duplicateSceneAct->setEnabled(theShot);
+    deleteSceneAct->setEnabled(theShot);
+
     editShotAct->setEnabled(theShot);
     renameShotAct->setEnabled(theShot);
     duplicateShotAct->setEnabled(theShot);
@@ -4179,7 +4278,86 @@ void MainWindow::onDeleteCamera() {
 }
 
 void MainWindow::onRenameCamera() {
-    paint->renameActiveCamera();
+
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available\n";
+        QMessageBox::warning(this, "Error", "No ScriptBreakdown available.");
+        return;
+    }
+
+    double currentTime = timeLineView->getCursorTime();
+    CameraContext cameraContext = findCameraForTime(currentTime);
+    if (!cameraContext.isValid()) {
+        GameFusion::Log().error() << "No valid camera selected at time " << (int)currentTime << "\n";
+        QMessageBox::warning(this, "Error", "No valid camera selected. Please select a time with a camera.");
+        return;
+    }
+
+    QString oldName = QString::fromStdString(cameraContext.camera->name);
+    bool ok;
+    QString newName = QInputDialog::getText(this, tr("Rename Camera"),
+                                            tr("Enter new camera name:"),
+                                            QLineEdit::Normal, oldName, &ok);
+    if (!ok || newName.isEmpty()) {
+        GameFusion::Log().info() << "Camera rename cancelled for UUID " << cameraContext.camera->uuid.c_str() << "\n";
+        return;
+    }
+
+    undoStack->push(new RenameCameraCommand(this,
+                                           QString::fromStdString(cameraContext.camera->uuid),
+                                           oldName, newName, currentTime));
+
+    //paint->renameActiveCamera();
+}
+
+
+void MainWindow::renameCamera(const QString& uuid, const QString& newName, double cursorTime) {
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available";
+        return;
+    }
+
+    CameraContext cameraContext = findCameraByUuid(uuid.toStdString());
+    if (!cameraContext.isValid()) {
+        GameFusion::Log().error() << "Camera with UUID " << uuid.toUtf8().constData() << " not found\n";
+        return;
+    }
+
+    // Update CameraFrame name
+    std::string oldName = cameraContext.camera->name;
+    cameraContext.camera->name = newName.toStdString();
+    cameraContext.scene->dirty = true;
+
+    // Update timeline visualization
+    CameraTrack* cameraTrack = timeLineView->getCameraTrack();
+    if (cameraTrack) {
+        CameraKeyFrame* keyFrame = cameraTrack->getKeyFrame(uuid);
+        if (keyFrame) {
+            keyFrame->name = newName; // Assumes setLabel exists
+            cameraTrack->update();
+        }
+    }
+
+    // Update paint area
+    PanelContext panelContext = findPanelByUuid(cameraContext.camera->panelUuid);
+    if (panelContext.isValid()) {
+        long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
+        qreal fps = projectJson["fps"].toDouble();
+        paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraFrames);
+    }
+
+    // Update side panel
+    cameraSidePanel->setCameraList(QString::fromStdString(cameraContext.camera->panelUuid),
+                                   cameraContext.shot->cameraFrames);
+
+    // Update timeline cursor and scene
+    timeLineView->setTimeCursor(cursorTime);
+    timeLineView->scene()->update(timeLineView->scene()->sceneRect());
+    timeLineView->viewport()->update();
+    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+
+    GameFusion::Log().info() << "Renamed camera UUID " << uuid.toUtf8().constData()
+                             << " from " << oldName.c_str() << " to " << newName.toUtf8().constData() << "\n";
 }
 
 void MainWindow::onCameraFrameAddedFromPaint(const GameFusion::CameraFrame& frame) {
@@ -4424,12 +4602,16 @@ void MainWindow::exportStoryboardPDF() {
 
     const auto& scenes = scriptBreakdown->getScenes();
     for (const auto& scene : scenes) {
+        if(scene.markedForDeletion)
+            continue;
         for (const auto& shot : scene.shots) {
             totalPanels += shot.panels.size();
         }
     }
 
     for (const auto& scene : scriptBreakdown->getScenes()) {
+        if(scene.markedForDeletion)
+                    continue;
         for (const auto& shot : scene.shots) {
             for (const auto& panel : shot.panels) {
                 // Load and determine panel image size based on camera movement
@@ -4602,6 +4784,8 @@ void MainWindow::exportStoryboardPDF2() {
     // Precompute total pages
     int totalPanels = 0;
     for (const auto& scene : scriptBreakdown->getScenes()) {
+        if(scene.markedForDeletion)
+                    continue;
         for (const auto& shot : scene.shots) {
             for (const auto& panel : shot.panels) {
                 bool spansTwoColumns = !shot.cameraFrames.empty() && shot.cameraFrames.size() > 1;
@@ -4619,6 +4803,8 @@ void MainWindow::exportStoryboardPDF2() {
     bool priorPagePanelSpansTwoColumns = false;
 
     for (const auto& scene : scriptBreakdown->getScenes()) {
+        if(scene.markedForDeletion)
+                    continue;
         for (const auto& shot : scene.shots) {
             int panelNumber = 0;
             for (const auto& panel : shot.panels) {
@@ -4863,6 +5049,8 @@ void MainWindow::exportStoryboardPDF3() {
     int totalPages = 1; // Optional: can compute in a pre-pass
 
     for (const auto& scene : scriptBreakdown->getScenes()) {
+        if(scene.markedForDeletion)
+                    continue;
         for (const auto& shot : scene.shots) {
             for (const auto& panel : shot.panels) {
                 // Determine if this panel spans one or two columns
@@ -4993,6 +5181,8 @@ void MainWindow::exportMovie() {
     float fps = projectJson["fps"].toDouble(25.0);  // Default to 25 if not set
     const auto& scenes = scriptBreakdown->getScenes();
     for (const auto& scene : scenes) {
+        if(scene.markedForDeletion)
+            continue;
         for (const auto& shot : scene.shots) {
             for (const auto& panel : shot.panels) {
                 totalDurationMs += panel.durationTime;
@@ -5332,6 +5522,8 @@ void MainWindow::exportEDL() {
     int clipIndex = 0;
 
     for (const auto& scene : scenes) {
+        if(scene.markedForDeletion)
+            continue;
         for (const auto& shot : scene.shots) {
             qint64 shotDurationMs = 0;
             for (const auto& panel : shot.panels) {
@@ -5491,99 +5683,164 @@ void MainWindow::onNewScene()
     if(!shotContext.isValid()){
         return;
     }
-    //int sceneIndex = findSceneIndex(shotContext.scene->uuid);
-
-    //std::vector<GameFusion::Scene> &scenes = scriptBreakdown->getScenes();
-    //scenes.insert(scenes.begin() + sceneIndex, newScene);
-
-    bool insertAtPanel=false;
-    /***
-    if (insertAtPanel) {
-        PanelContext ctx = findPanelForTime(currentTime);
-        if (!ctx.isValid() || !ctx.shot) {
-            QMessageBox::warning(this, "Error", "No valid panel selected for insertion. Appending scene instead.");
-            insertAtPanel = false;
-        } else {
-            // Find the scene containing the current panel
-            int sceneIndex = -1;
-            for (size_t i = 0; i < newScenes.size(); ++i) {
-                for (const auto& shot : newScenes[i].shots) {
-                    if (shot.uuid == ctx.shot->uuid) {
-                        sceneIndex = i;
-                        break;
-                    }
-                }
-                if (sceneIndex >= 0) break;
-            }
-
-            if (sceneIndex < 0) {
-                QMessageBox::warning(this, "Error", "Could not find scene for current panel. Appending scene instead.");
-                insertAtPanel = false;
-            } else {
-                // Split the current scene at the panel's absolute start time
-                GameFusion::Scene originalScene = newScenes[sceneIndex];
-                GameFusion::Scene firstHalf = originalScene;
-                GameFusion::Scene secondHalf;
-                secondHalf.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
-                secondHalf.name = originalScene.name + "_split";
-                firstHalf.shots.clear();
-                secondHalf.shots.clear();
-
-                double splitTime = ctx.shot->startTime + ctx.panel->startTime; // Absolute time
-                for (const auto& shot : originalScene.shots) {
-                    if (shot.startTime < splitTime) {
-                        firstHalf.shots.push_back(shot);
-                    } else {
-                        secondHalf.shots.push_back(shot);
-                    }
-                }
-
-                // Adjust second half shot timings
-                if (!secondHalf.shots.empty()) {
-                    double shift = secondHalf.shots.front().startTime - splitTime;
-                    for (auto& shot : secondHalf.shots) {
-                        shot.startTime -= shift;
-                        shot.endTime -= shift;
-                    }
-                }
-
-                // Insert new scene after first half
-                newScenes[sceneIndex] = firstHalf;
-                double newSceneStart = firstHalf.shots.empty() ? 0.0 : firstHalf.shots.back().endTime;
-                for (auto& shot : newScene.shots) {
-                    shot.startTime += newSceneStart;
-                    shot.endTime += newSceneStart;
-                }
-                newScenes.insert(newScenes.begin() + sceneIndex + 1, newScene);
-                newScenes.insert(newScenes.begin() + sceneIndex + 2, secondHalf);
-
-                // Adjust second half start times
-                double secondHalfStart = newScene.shots.empty() ? newSceneStart : newScene.shots.back().endTime;
-                for (auto& shot : secondHalf.shots) {
-                    shot.startTime += secondHalfStart;
-                    shot.endTime += secondHalfStart;
-                }
-            }
-        }
-    }
-
-
-    if (!insertAtPanel) {
-        // Append new scene
-        double lastSceneEnd = newScenes.empty() ? 0.0 :
-            (newScenes.back().shots.empty() ? 0.0 : newScenes.back().shots.back().endTime);
-        for (auto& shot : newScene.shots) {
-            shot.startTime += lastSceneEnd;
-            shot.endTime += lastSceneEnd;
-        }
-        newScenes.push_back(newScene);
-    }
-    ***/
-
-    //GameFusion::Scene *scene = this->find
 
     undoStack->push(new InsertSceneCommand(this, newScene, shotContext.scene->uuid.c_str(), after, currentTime, "New Scene"));
     GameFusion::Log().info() << "Created new scene " << newScene.uuid.c_str();
+}
+
+
+void MainWindow::onSplitScene() {
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available";
+        QMessageBox::warning(this, "Error", "No ScriptBreakdown available.");
+        return;
+    }
+
+    double currentTime = timeLineView->getCursorTime();
+    ShotContext currentCtx = findShotForTime(currentTime);
+    if (!currentCtx.isValid()) {
+        QMessageBox::warning(this, "Error", "No valid shot selected. Please select a time in the timeline.");
+        return;
+    }
+
+    // Ask user: split before or after
+    QMessageBox::StandardButton choice = QMessageBox::question(
+        this, "Split Scene",
+        QString("Do you want to split the scene \"%1\" before or after shot \"%2\"?")
+            .arg(QString::fromStdString(currentCtx.scene->name))
+            .arg(QString::fromStdString(currentCtx.shot->name)),
+        QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel,
+        QMessageBox::Yes
+    );
+
+    if (choice == QMessageBox::Cancel)
+        return;
+
+    bool splitBefore = (choice == QMessageBox::Yes); // Yes = before, No = after
+
+    // Propose name for new scene
+    QString proposedName = QString::fromStdString(currentCtx.scene->name) +
+                           (splitBefore ? "_A" : "_B");
+    bool ok;
+    QString newSceneName = QInputDialog::getText(
+        this, "New Scene Name",
+        "Enter name for new split scene:",
+        QLineEdit::Normal, proposedName, &ok
+    );
+    if (!ok || newSceneName.isEmpty())
+        return;
+
+    // Push split command to undo stack
+    undoStack->push(new SplitSceneCommand(
+        this,
+        QString::fromStdString(currentCtx.scene->uuid),
+        QString::fromStdString(currentCtx.shot->uuid),
+        splitBefore,
+        newSceneName,
+        *currentCtx.scene,
+        currentTime
+    ));
+}
+
+QString MainWindow::splitScene(const QString& sceneUuid, const QString& shotUuid,
+                               bool splitBefore, const QString& newSceneName,
+                               double cursorTime) {
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available\n";
+        QMessageBox::warning(this, "Error", "No ScriptBreakdown available.");
+        return {};
+    }
+
+    // 1. Find scene + shot
+    Scene* scene = findSceneByUuid(sceneUuid.toStdString());
+    if (!scene) return {};
+
+    auto it = std::find_if(scene->shots.begin(), scene->shots.end(),
+        [&](const Shot& s){ return s.uuid == shotUuid.toStdString(); });
+    if (it == scene->shots.end()) return {};
+
+    // 2. Decide split point
+    auto splitIt = splitBefore ? it : std::next(it);
+    if (splitIt == scene->shots.end()) return {};
+
+    // 3. Create new scene
+    Scene newScene;
+    newScene.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    newScene.name = newSceneName.toStdString();
+
+    // 4. Move shots into new scene
+    newScene.shots.insert(newScene.shots.end(), splitIt, scene->shots.end());
+    scene->shots.erase(splitIt, scene->shots.end());
+
+    // insert scene before or after current scene
+    std::vector <GameFusion::Scene> &scenes = scriptBreakdown->getScenes();
+    auto sceneIt = std::find_if(scenes.begin(), scenes.end(),
+            [&](const GameFusion::Scene& s){ return s.uuid == sceneUuid.toStdString(); });
+
+        if (sceneIt != scenes.end()) {
+            //if (splitBefore)
+            //    scenes.insert(sceneIt, newScene); // insert before
+            //else
+                scenes.insert(sceneIt + 1, newScene); // insert after
+        }
+
+    // 6. Insert new scene after current one
+    // here we can simplify and simply create a new scene marker on the timeline
+    CursorItem *sceneMarker = timeLineView->addSceneMarker(newScene.shots.front().startTime, newScene.name.c_str());
+    sceneMarker->setUuid(newScene.uuid.c_str());
+
+    TrackItem *storyboardTrack = timeLineView->getTrack(0);
+    ShotSegment *shotSegment = (ShotSegment*)storyboardTrack->getSegmentByUuid(newScene.shots.front().uuid.c_str());
+    shotSegment->setSceneMarker(sceneMarker);
+
+    timeLineView->scene()->update(timeLineView->scene()->sceneRect());
+    timeLineView->viewport()->update();
+    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+
+    updateScenes();
+    timeLineView->setTimeCursor(cursorTime);
+
+    return QString::fromStdString(newScene.uuid);
+}
+
+void MainWindow::mergeScenes(const QString& originalUuid,
+                             const QString& newUuid,
+                             bool splitBefore,
+                             const GameFusion::Scene &originalScene,
+                             double cursorTime) {
+    // Restore by re-attaching shots from newUuid scene into originalUuid
+    // and then delete the split scene.
+    // (You can mirror logic from splitScene, but reversed)
+    //deleteScene(newUuid, cursorTime);
+
+    // we will simplify here
+    GameFusion::Scene *scene = findSceneByUuid(originalUuid.toUtf8().constData());
+    *scene = originalScene;
+    scene->dirty = true;
+
+    GameFusion::Scene *toDelete = findSceneByUuid(newUuid.toUtf8().constData());
+    toDelete->markDeleted(true);
+
+
+    TrackItem *track = timeLineView->getTrack(0);
+
+    QList<Segment*> & segments = track->segments();
+    for(auto segment : segments){
+        ShotSegment *shotSegment = (ShotSegment*)segment;
+        CursorItem *sceneMarker = shotSegment->getSceneMarkerPointer();
+        if (sceneMarker && sceneMarker->getUuid() == newUuid){
+            shotSegment->setSceneMarker(nullptr);
+            break;
+        }
+    }
+    timeLineView->deleteSceneMarker(newUuid);
+
+    timeLineView->scene()->update(timeLineView->scene()->sceneRect());
+    timeLineView->viewport()->update();
+    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+
+    updateScenes();
+    timeLineView->setTimeCursor(cursorTime);
 }
 
 void MainWindow::onDeleteScene() {
@@ -6475,6 +6732,14 @@ void MainWindow::onDeletePanel()
     GameFusion::Log().info() << "Deleted panel at index " << panelIndex;
 }
 
+void MainWindow::onCopyCamera(){
+
+}
+
+void MainWindow::onPastCamera(){
+
+}
+
 void MainWindow::editScene(GameFusion::Scene& oldScene, GameFusion::Scene& newScene)
 {
     if (!scriptBreakdown) {
@@ -6657,3 +6922,5 @@ void MainWindow::insertScene(GameFusion::Scene &newSceneInput, QString sceneRefU
 
     timeLineView->update();
 }
+
+
