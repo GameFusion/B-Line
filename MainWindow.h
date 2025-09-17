@@ -77,9 +77,12 @@ struct ShotContext {
 struct CameraContext {
     GameFusion::Scene* scene = nullptr;
     GameFusion::Shot* shot = nullptr;
+    //GameFusion::Panel* panel = nullptr;
     GameFusion::CameraFrame* camera = nullptr;
 
+
     bool isValid() const {
+        //return scene && shot && panel && camera;
         return scene && shot && camera;
     }
 };
@@ -118,6 +121,9 @@ public:
     void deleteScene(const std::string &uuid, double cursorTime);
     void renameScene(QString uuid, QString oldName, QString newName, double cursorTime);
 
+    void addCamera(const GameFusion::CameraFrame cameraframe, double cursorTime);
+    void deleteCamera(QString uuid, double cursorTime);
+
     ShotSegment* createShotSegment(GameFusion::Shot& shot, GameFusion::Scene& scene, CursorItem* sceneMarker);
     void insertShotSegment(const GameFusion::Shot& shot, ShotIndices shotIndices, const GameFusion::Scene sceneRef, double cursorTime, CursorItem *sceneMarker);
     void editShotSegment(const GameFusion::Shot &editShot, double cursorTime);
@@ -134,6 +140,7 @@ public:
     ShotContext   findPreviousShot(const GameFusion::Shot& shot);
     LayerContext  findLayerByUuid(const std::string& uuid);
     CameraContext findCameraByUuid(const std::string& uuid);
+    CameraContext findCameraForTime(double time);
     ShotContext   findSceneByPanel(const std::string& panelUuid);
     GameFusion::Scene  *findSceneByUuid(const std::string& uuid);
     int           findSceneIndex(const std::string& uuid);
