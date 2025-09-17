@@ -113,12 +113,15 @@ public:
     void syncPanelDurations(Segment* segment, GameFusion::Shot* shot);
 
     void editScene(GameFusion::Scene& oldScene, GameFusion::Scene& newScene);
+    QString splitScene(const QString& sceneUuid, const QString& shotUuid, bool splitBefore, const QString& newSceneName, double cursorTime);
+    void mergeScenes(const QString& originalUuid, const QString& newUuid, bool splitBefore, const GameFusion::Scene &originalScene, double cursorTime);
     void insertScene(GameFusion::Scene& newScene, QString sceneRefUuid, bool insertAfter, double cursorTime);
     void deleteScene(const std::string &uuid, double cursorTime);
     void renameScene(QString uuid, QString oldName, QString newName, double cursorTime);
 
     void addCamera(const GameFusion::CameraFrame cameraframe, double cursorTime);
     void deleteCamera(QString uuid, double cursorTime);
+    void renameCamera(const QString& uuid, const QString& newName, double cursorTime);
 
     ShotSegment* createShotSegment(GameFusion::Shot& shot, GameFusion::Scene& scene, CursorItem* sceneMarker);
     void insertShotSegment(const GameFusion::Shot& shot, ShotIndices shotIndices, const GameFusion::Scene sceneRef, double cursorTime, CursorItem *sceneMarker);
@@ -180,9 +183,10 @@ public slots:
     void onPlaybackTick();
 
     void onNewScene();
-    void onDeleteScene();
+    void onSplitScene();
     void onRenameScene();
     void onDuplicateScene();
+    void onDeleteScene();
 
     void onNewShot();
     void onDeleteShot();
@@ -201,6 +205,8 @@ public slots:
     void onDeletePanel();
 
     void onAddCamera();
+    void onCopyCamera();
+    void onPastCamera();
     void onDuplicateCamera();
     void onDeleteCamera();
     void onRenameCamera();
@@ -333,6 +339,12 @@ protected:
     QUndoStack* undoStack; // Add undo stack member
     QAction* undoAction;
     QAction* redoAction;
+
+    QAction *newSceneAct;
+    QAction *splitSceneAct;
+    QAction *renameSceneAct;
+    QAction *duplicateSceneAct;
+    QAction *deleteSceneAct;
 
     QMenu *shotMenu;
     QAction *newShotAct;

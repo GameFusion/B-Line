@@ -341,6 +341,8 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
     //printCharacters();
 }
 
+
+
 bool ScriptBreakdown::processShots(Scene& scene, int sceneIndex, BreakdownMode mode) {
     int shotCount = 0;
     CallbackData callbackData;
@@ -991,6 +993,7 @@ void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
         scenes.end()
         );
 }
+
 
 void ScriptBreakdown::addCameraFrame(const CameraFrame& frame) {
     for(GameFusion::Scene &scene: scenes)
