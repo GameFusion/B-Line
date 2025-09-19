@@ -6733,11 +6733,48 @@ void MainWindow::onDeletePanel()
 }
 
 void MainWindow::onCopyCamera(){
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available";
+        QMessageBox::warning(this, "Error", "No ScriptBreakdown available.");
+        return;
+    }
 
+    double currentTime = timeLineView->getCursorTime();
+    CameraContext ctx = findCameraForTime(currentTime);
+
+
+    if(!ctx.isValid())
+        return;
+
+    clipboardCamera = *ctx.camera;
+    hasClipboardCamera = true;
 }
 
 void MainWindow::onPastCamera(){
 
+    if(!hasClipboardCamera)
+        return;
+
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available";
+        QMessageBox::warning(this, "Error", "No ScriptBreakdown available.");
+        return;
+    }
+
+    double currentTime = timeLineView->getCursorTime();
+    PanelContext panelContext = findPanelForTime(currentTime);
+    if(!panelContext.isValid())
+        return;
+
+    qreal fps = projectJson["fps"].toDouble();
+    qreal mspf = 1000.0f / fps;
+    GameFusion::CameraFrame newCamera(clipboardCamera);
+    newCamera.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    qreal frame = (currentTime - panelContext.shot->startTime) / mspf;
+    newCamera.frameOffset = static_cast<int>(qRound(frame));
+    newCamera.time = newCamera.frameOffset * mspf; // may not actually be used anywhere
+
+    undoStack->push(new AddCameraCommand(this, newCamera, currentTime, "Past Camera"));
 }
 
 void MainWindow::editScene(GameFusion::Scene& oldScene, GameFusion::Scene& newScene)
