@@ -365,6 +365,9 @@ protected:
 
     GameFusion::Panel clipboardPanel; // Clipboard for copy/cut/paste
     bool hasClipboardPanel = false;
+
+    GameFusion::CameraFrame clipboardCamera;
+    bool hasClipboardCamera = false;
 };
 
 
