@@ -119,7 +119,10 @@ public:
     void deleteScene(const std::string &uuid, double cursorTime);
     void renameScene(QString uuid, QString oldName, QString newName, double cursorTime);
 
-    void addCamera(const GameFusion::CameraFrame cameraframe, double cursorTime);
+    void newPanel(double t);
+    void deletePanel(double t);
+
+    void newCamera(const GameFusion::CameraFrame cameraframe, double cursorTime);
     void deleteCamera(QString uuid, double cursorTime);
     void renameCamera(const QString& uuid, const QString& newName, double cursorTime);
 
@@ -194,7 +197,7 @@ public slots:
     void onRenameShot();
     void onDuplicateShot();
 
-    void onAddPanel();
+    void onNewPanel();
     void onEditPanel();
     void onRenamePanel();
     void onDuplicatePanel();
@@ -204,7 +207,7 @@ public slots:
     void onClearPanel();
     void onDeletePanel();
 
-    void onAddCamera();
+    void onNewCamera();
     void onCopyCamera();
     void onPastCamera();
     void onDuplicateCamera();
@@ -276,8 +279,6 @@ protected:
 
     QString generateUniqueShotName(GameFusion::Scene* scene);
 
-    void addPanel(double t);
-    void deletePanel(double t);
     void timelineOptions();
 
     void saveAudioTracks();
@@ -353,7 +354,7 @@ protected:
     QAction *renameShotAct;
     QAction *duplicateShotAct;
 
-    QAction *addPanelAct;
+    QAction *newPanelAct;
     QAction *editPanelAct;
     QAction *renamePanelAct;
     QAction *duplicatePanelAct;
@@ -362,6 +363,12 @@ protected:
     QAction *pastePanelAct;
     QAction *clearPanelAct;
     QAction *deletePanelAct;
+
+    QAction *newCameraAct;
+    QAction *deleteCameraAct;
+    QAction *renameCameraAct;
+    QAction *copyCameraAct;
+    QAction *pastCameraAct;
 
     GameFusion::Panel clipboardPanel; // Clipboard for copy/cut/paste
     bool hasClipboardPanel = false;
