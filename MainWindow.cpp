@@ -356,13 +356,13 @@ private:
 
 class AddCameraCommand : public QUndoCommand {
 public:
-    AddCameraCommand(MainWindow* mainWindow, const GameFusion::CameraFrame& cameraframe, double cursorTime, QString commandName="Add Camera Frame")
+    AddCameraCommand(MainWindow* mainWindow, const GameFusion::CameraFrame& cameraframe, double cursorTime, QString commandName="New Camera Frame")
         : mainWindow_(mainWindow), cameraframe_(cameraframe), cursorTime_(cursorTime) {
         setText(commandName);
     }
 
     void redo() override {
-        mainWindow_->addCamera(cameraframe_, cursorTime_);
+        mainWindow_->newCamera(cameraframe_, cursorTime_);
     }
 
     void undo() override {
@@ -998,9 +998,9 @@ MainWindow::MainWindow(QWidget *parent)
     duplicateShotAct->setEnabled(false);
     deleteShotAct->setEnabled(false);
 
-    // Add Panel menu
+    // Panel menu
     QMenu *panelMenu = storyboardMenu->addMenu(tr("Panel"));
-    addPanelAct = panelMenu->addAction(tr("Add Panel"));
+    newPanelAct = panelMenu->addAction(tr("New Panel"));
     editPanelAct = panelMenu->addAction(tr("Edit Panel"));
     renamePanelAct = panelMenu->addAction(tr("Rename Panel"));
     duplicatePanelAct = panelMenu->addAction(tr("Duplicate Panel"));
@@ -1015,7 +1015,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 
 
-    addPanelAct->setEnabled(false);
+    newPanelAct->setEnabled(false);
     editPanelAct->setEnabled(false);
     renamePanelAct->setEnabled(false);
     duplicatePanelAct->setEnabled(false);
@@ -1027,14 +1027,14 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Existing camera actions
     QMenu *cameraMenu = storyboardMenu->addMenu(tr("Camera"));
-    QAction *addCameraAct = cameraMenu->addAction(tr("Add Camera"));
-    QAction *renameCameraAct = cameraMenu->addAction(tr("Rename Camera"));
-    QAction *duplicateCameraAct = cameraMenu->addAction(tr("Duplicate Camera"));
+    newCameraAct = cameraMenu->addAction(tr("New Camera"));
+    renameCameraAct = cameraMenu->addAction(tr("Rename Camera "));
+    QAction *duplicateCameraAct = cameraMenu->addAction(tr("Duplicate Camera (Experimental)"));
     cameraMenu->addSeparator();
-    QAction *copyCameraAct = cameraMenu->addAction(tr("Copy Camera"));
-    QAction *pastCameraAct = cameraMenu->addAction(tr("Past Camera"));
+    copyCameraAct = cameraMenu->addAction(tr("Copy Camera"));
+    pastCameraAct = cameraMenu->addAction(tr("Past Camera"));
     cameraMenu->addSeparator();
-    QAction *deleteCameraAct = cameraMenu->addAction(tr("Delete Camera"));
+    deleteCameraAct = cameraMenu->addAction(tr("Delete Camera"));
 
     //
     // Storyboard menu actions
@@ -1057,7 +1057,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(duplicateShotAct, &QAction::triggered, this, &MainWindow::onDuplicateShot);
 
     // Connect panel actions
-    connect(addPanelAct, &QAction::triggered, this, &MainWindow::onAddPanel);
+    connect(newPanelAct, &QAction::triggered, this, &MainWindow::onNewPanel);
     connect(editPanelAct, &QAction::triggered, this, &MainWindow::onEditPanel);
     connect(renamePanelAct, &QAction::triggered, this, &MainWindow::onRenamePanel);
     connect(duplicatePanelAct, &QAction::triggered, this, &MainWindow::onDuplicatePanel);
@@ -1068,7 +1068,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(deletePanelAct, &QAction::triggered, this, &MainWindow::onDeletePanel);
 
     // Connect camera actions
-    connect(addCameraAct, &QAction::triggered, this, &MainWindow::onAddCamera);
+    connect(newCameraAct, &QAction::triggered, this, &MainWindow::onNewCamera);
     connect(copyCameraAct, &QAction::triggered, this, &MainWindow::onCopyCamera);
     connect(pastCameraAct, &QAction::triggered, this, &MainWindow::onPastCamera);
     connect(duplicateCameraAct, &QAction::triggered, this, &MainWindow::onDuplicateCamera);
@@ -1079,7 +1079,7 @@ MainWindow::MainWindow(QWidget *parent)
     // Camera Global Shortcuts
     //
 
-    addCameraAct->setShortcut(QKeySequence("Ctrl+Shift+C"));
+    newCameraAct->setShortcut(QKeySequence("Ctrl+Shift+C"));
 
     //
     // Camera Side Panel
@@ -1216,7 +1216,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(timeLineView, &TimeLineView::timeCursorMoved,
             this, &MainWindow::onTimeCursorMoved);
     connect(timeLineView, &TimeLineView::addPanel,
-            this, &MainWindow::addPanel);
+            this, &MainWindow::newPanel);
     connect(timeLineView, &TimeLineView::deletePanel,
             this, &MainWindow::deletePanel);
     connect(timeLineView, &TimeLineView::optionsDialog,
@@ -2042,8 +2042,7 @@ void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices sho
             }
         }
 
-        // TODO: Add camera keyframes
-        //addCameraKeyFrames(insertedShot);
+        // Add new camera keyframes
         for(auto &camera: insertedShot.cameraFrames) {
             QString panelUuid = camera.panelUuid.c_str();
             long timeMs = -1;
@@ -3565,7 +3564,7 @@ void MainWindow::onTimeCursorMoved(double time)
     duplicateShotAct->setEnabled(false);
     deleteShotAct->setEnabled(false);
 
-    addPanelAct->setEnabled(false);
+    newPanelAct->setEnabled(false);
     editPanelAct->setEnabled(false);
     renamePanelAct->setEnabled(false);
     duplicatePanelAct->setEnabled(false);
@@ -3574,6 +3573,12 @@ void MainWindow::onTimeCursorMoved(double time)
     pastePanelAct->setEnabled(false);
     clearPanelAct->setEnabled(false);
     deletePanelAct->setEnabled(false);
+
+    newCameraAct->setEnabled(false);
+    deleteCameraAct->setEnabled(false);
+    renameCameraAct->setEnabled(false);
+    copyCameraAct->setEnabled(false);
+    pastCameraAct->setEnabled(false);
 
 
     Panel* newPanel = nullptr;
@@ -3635,7 +3640,7 @@ void MainWindow::onTimeCursorMoved(double time)
     duplicateShotAct->setEnabled(theShot);
     deleteShotAct->setEnabled(theShot);
 
-    addPanelAct->setEnabled(theShot);
+    newPanelAct->setEnabled(theShot);
     editPanelAct->setEnabled(theShot);
     renamePanelAct->setEnabled(theShot);
     duplicatePanelAct->setEnabled(theShot);
@@ -3645,6 +3650,12 @@ void MainWindow::onTimeCursorMoved(double time)
         pastePanelAct->setEnabled(theShot);
     clearPanelAct->setEnabled(theShot);
     deletePanelAct->setEnabled(theShot);
+
+    newCameraAct->setEnabled(theShot);
+    deleteCameraAct->setEnabled(theShot);
+    renameCameraAct->setEnabled(theShot);
+    copyCameraAct->setEnabled(theShot);
+    pastCameraAct->setEnabled(theShot);
 
     //--- If no panel found, show white image
     if (!newPanel) {
@@ -3710,8 +3721,8 @@ QString generateUniquePanelName(GameFusion::Shot* shot) {
     return candidateName;
 }
 
-void MainWindow::addPanel(double t) {
-    Log().info() << "Add Panel @ "<<(float)t<<"\n";
+void MainWindow::newPanel(double t) {
+    Log().info() << "New Panel @ "<<(float)t<<"\n";
 
 
 
@@ -3744,7 +3755,7 @@ void MainWindow::addPanel(double t) {
         //insertPanelAfter(panelContext, newPanel);
 
 
-        // add panel to time line
+        // add new panel to time line
         // get ShotSegment for panelContext.shot.uuid
         TrackItem * track = timeLineView->getTrack(0);
         if(!track)
@@ -4176,7 +4187,7 @@ void MainWindow::loadAudioTracks() {
     qDebug() << "Audio tracks loaded successfully.";
 }
 
-void MainWindow::onAddCamera() {
+void MainWindow::onNewCamera() {
 
     if (!scriptBreakdown) {
         GameFusion::Log().error() << "No ScriptBreakdown available";
@@ -4216,9 +4227,6 @@ void MainWindow::onAddCamera() {
     newCamera.zoom = 1;
 
     undoStack->push(new AddCameraCommand(this, newCamera, currentTime));
-
-    // Add CameraKeyFrame to timeline
-    //scriptBreakdown->addCameraFrame(newCamera);
 }
 
 void MainWindow::deleteCamera(QString uuid, double cursorTime)
@@ -4244,7 +4252,7 @@ void MainWindow::deleteCamera(QString uuid, double cursorTime)
     panelContext.scene->dirty = true;
 }
 
-void MainWindow::addCamera(const GameFusion::CameraFrame newCamera, double currentTime)
+void MainWindow::newCamera(const GameFusion::CameraFrame newCamera, double currentTime)
 {
     PanelContext panelContext = findPanelForTime(currentTime);
     if(!panelContext.isValid())
@@ -5212,14 +5220,22 @@ void MainWindow::exportMovie() {
     // Export frame by frame
     qint64 currentTimeMs = 0;
     int frameNumber = 0;
+
+    bool updateTimeLine = false; // false may be faster, false may be more precise ?
+
+    paint->getPaintArea()->setExportMode(true);
     while (frameNumber < totalFrames) {
         if (progress.wasCanceled()) {
             Log().info() << "Export canceled by user\n";
+            paint->getPaintArea()->setExportMode(false);
             return;
         }
 
         // Set timeline cursor to current frame
-        timeLineView->setTimeCursor((long)currentTimeMs);
+        if(updateTimeLine)
+            timeLineView->setTimeCursor((long)currentTimeMs);
+        else
+            onTimeCursorMoved(currentTimeMs);
 
         // Render and save frame (assuming renderFrameToImage exists in PaintArea)
         QImage frameImage(1920, 1080, QImage::Format_ARGB32_Premultiplied);
@@ -5228,12 +5244,14 @@ void MainWindow::exportMovie() {
         paint->getPaintArea()->renderFrameToImage(frameImage);
         if (frameImage.isNull()) {
             QMessageBox::warning(this, "Error", "Failed to render frame " + QString::number(frameNumber));
+            paint->getPaintArea()->setExportMode(false);
             return;
         }
 
         QString framePath = exportDir + "/frame_" + QString::number(frameNumber, 10).rightJustified(5, '0') + ".png";
         if (!frameImage.save(framePath)) {
             QMessageBox::warning(this, "Error", "Failed to save frame " + framePath);
+            paint->getPaintArea()->setExportMode(false);
             return;
         }
 
@@ -5255,6 +5273,8 @@ void MainWindow::exportMovie() {
     atrack->saveToFile(audioPath.toUtf8().constData());
     Log().info() << "Export audio track to << "<<audioPath.toUtf8().constData()<<"\n";
     QMessageBox::information(this, "Success", "Movie exported to: " + exportDir);
+
+    paint->getPaintArea()->setExportMode(false);
 }
 
 
@@ -6314,7 +6334,7 @@ void MainWindow::renameShotSegment(const QString &shotUuid, QString newName){
 
 }
 
-void MainWindow::onAddPanel()
+void MainWindow::onNewPanel()
 {
     if (!scriptBreakdown) {
             GameFusion::Log().error() << "No ScriptBreakdown available";
@@ -6395,7 +6415,7 @@ void MainWindow::onAddPanel()
             updatedShot.panels.back().startTime + updatedShot.panels.back().durationTime);
         updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * fps / 1000.0);
 
-        undoStack->push(new PanelCommand(this, originalShot, updatedShot, currentTime, "Add Panel"));
+        undoStack->push(new PanelCommand(this, originalShot, updatedShot, currentTime, "New Panel"));
 }
 
 void MainWindow::onEditPanel()
