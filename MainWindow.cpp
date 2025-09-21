@@ -927,6 +927,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     ui->setupUi(this);
 
+    logger->setServerConfig("http://localhost:50000", "your-secret-token-here");
     // Undo & Redo actions, menu system
 
     // Create Edit menu
@@ -2446,6 +2447,10 @@ void MainWindow::loadProject(QString projectDir){
     // (Optional) Store project metadata
     ProjectContext::instance().setCurrentProjectName( projectJson["projectName"].toString() );
     ProjectContext::instance().setCurrentProjectPath( projectDir );
+
+    // Set project path in logger
+    logger->setProjectPath(projectDir);
+
     paint->getPaintArea()->setProjectPath(projectDir);
 
     float fps = projectJson["fps"].toDouble();
@@ -2592,7 +2597,7 @@ void MainWindow::loadScript() {
     QString fileName;
     if(projectJson.contains("script")) {
         fileName = ProjectContext::instance().currentProjectPath() + "/" + projectJson["script"].toString();
-        scriptBreakdown = new ScriptBreakdown(fileName.toStdString().c_str(), fps, dictionary, dictionaryCustom, llamaClient);
+        scriptBreakdown = new ScriptBreakdown(fileName.toStdString().c_str(), fps, dictionary, dictionaryCustom, llamaClient, logger);
 
         if(!scriptBreakdown->load()) {
             Log().error() << "Error(s) importing script: " << scriptBreakdown->error() << "\n";
