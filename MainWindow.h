@@ -139,6 +139,10 @@ public:
     void addTimelineKeyFrames(const GameFusion::Shot& shot);
     void addLayerKeyFrames(TrackItem* track, long panelStartTime, const GameFusion::Panel& panel);
 
+    void setSelectedLayer(const QString& shotUuid, const QString& panelUuid, const QString& layerUuid);
+    QSet<double> getAllKeyframeGlobalTimes() const;
+    void updateKeyframeDisplay();
+
     // Todo : Possably move the find objects to ScriptBreakdown - there is redundancy
     ShotContext   findShotByUuid(const std::string& uuid);
     PanelContext  findPanelByUuid(const std::string& uuid);
@@ -153,6 +157,8 @@ public:
     GameFusion::Scene  *findSceneByUuid(const std::string& uuid);
     int           findSceneIndex(const std::string& uuid);
     int           findShotIndex(ShotContext shotContext);
+
+
 
 public slots:
 
@@ -342,7 +348,10 @@ protected:
     // The Script
     PerfectScriptWidget *perfectScript = nullptr;
 
-    QString currentPanelUuid;
+    QString currentPanelUuid; // redundant - deprecated
+    QString selectedShotUuid;
+    QString selectedPanelUuid;
+    QString selectedLayerUuid;
 
     // Audio Meter
     //AudioMeterWidget *audioMeter = nullptr;
