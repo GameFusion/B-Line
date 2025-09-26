@@ -38,7 +38,7 @@ enum class EasingType {
 };
 
 enum class BlendMode {
-    Normal, Multiply, Screen, Overlay
+    Opacity, Multiply, Screen, Overlay
 };
 
 inline std::string toString(EasingType easing) {
@@ -64,11 +64,11 @@ inline EasingType fromString(const std::string& str) {
 
 inline std::string toString(BlendMode mode) {
     switch (mode) {
-    case BlendMode::Normal:   return "Normal";
+    case BlendMode::Opacity:  return "Opacity";
     case BlendMode::Multiply: return "Multiply";
     case BlendMode::Screen:   return "Screen";
     case BlendMode::Overlay:  return "Overlay";
-    default:                  return "Normal";
+    default:                  return "Opacity";
     }
 }
 
@@ -76,7 +76,7 @@ inline BlendMode blendModeFromString(const std::string& str) {
     if (str == "Multiply") return BlendMode::Multiply;
     if (str == "Screen")   return BlendMode::Screen;
     if (str == "Overlay")  return BlendMode::Overlay;
-    return BlendMode::Normal;
+    return BlendMode::Opacity;
 }
 
 struct CameraFrame {
@@ -138,7 +138,7 @@ struct Layer {
     float y = 0.0f;
     float scale = 1.0f;
     float rotation = 0.0f;
-    BlendMode blendMode = BlendMode::Normal;
+    BlendMode blendMode = BlendMode::Opacity;
     std::string fx;
 
     struct KeyFrame {

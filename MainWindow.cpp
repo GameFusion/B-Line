@@ -1293,7 +1293,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Initialize comboBox_layerBlendMode
     ui->comboBox_layerBlendMode->clear();
-    ui->comboBox_layerBlendMode->addItems({"Normal", "Multiply", "Screen", "Overlay"});
+    ui->comboBox_layerBlendMode->addItems({"Opacity", "Multiply", "Screen", "Overlay"});
 
     // Connect new layer control widgets
     connect(ui->spinBox_layerRotation, QOverload<int>::of(&QSpinBox::valueChanged),
@@ -1327,11 +1327,6 @@ MainWindow::MainWindow(QWidget *parent)
     ui->doubleSpinBox_layerScale->setSingleStep(0.01);
     ui->doubleSpinBox_layerScale->setValue(1.0);
 
-    ui->dockAttributes->setStyleSheet(R"(
-    QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QListWidget, QPushButton {
-        font-size: 10pt;
-    }
-)");
 
     ui->dockLayers->setStyleSheet(R"(
     QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QListWidget, QPushButton {
@@ -1351,12 +1346,14 @@ MainWindow::MainWindow(QWidget *parent)
     }
 )");
 
-    ui->toolButton_layerAdd->setFont(FontAwesomeViewer::fontAwesomeSolid);
-    ui->toolButton_layerDup->setFont(FontAwesomeViewer::fontAwesomeSolid);
-    ui->toolButton_layerImage->setFont(FontAwesomeViewer::fontAwesomeSolid);
-    ui->toolButton_layerTrash->setFont(FontAwesomeViewer::fontAwesomeSolid);
-    ui->toolButton_layerMoveUp->setFont(FontAwesomeViewer::fontAwesomeSolid);
-    ui->toolButton_layerMoveDown->setFont(FontAwesomeViewer::fontAwesomeSolid);
+    QFont fa = FontAwesomeViewer::fontAwesomeSolid;
+    //fa.setPixelSize(8);
+    ui->toolButton_layerAdd->setFont(fa);
+    ui->toolButton_layerDup->setFont(fa);
+    ui->toolButton_layerImage->setFont(fa);
+    ui->toolButton_layerTrash->setFont(fa);
+    ui->toolButton_layerMoveUp->setFont(fa);
+    ui->toolButton_layerMoveDown->setFont(fa);
 
     ui->toolButton_layerAdd->setText(QChar(0xF0FE));
     ui->toolButton_layerDup->setText(QChar(0xF24D));
@@ -1423,8 +1420,6 @@ QComboBox, QSpinBox {
 
 
     /******************************/
-
-    delete ui->dockAttributes;
 
     this->setDockNestingEnabled(true);
 
@@ -2243,6 +2238,9 @@ void MainWindow::addTimelineKeyFrames(const GameFusion::Shot& shot) {
 
 QSet<double> MainWindow::getAllKeyframeGlobalTimes() const {
     QSet<double> times;
+    if(!scriptBreakdown)
+        return times;
+
     double fps = projectJson["fps"].toDouble(24.0);
     double mspf = 1000.0 / fps;
     for (const auto& scene : scriptBreakdown->getScenes()) {
@@ -3322,7 +3320,7 @@ void MainWindow::onLayerVisibilityChanged(QListWidgetItem* item) {
 void MainWindow::onLayerBlendMode(int index) {
     GameFusion::BlendMode mode;
     switch (index) {
-        case 0: mode = GameFusion::BlendMode::Normal; break;
+        case 0: mode = GameFusion::BlendMode::Opacity; break;
         case 1: mode = GameFusion::BlendMode::Multiply; break;
         case 2: mode = GameFusion::BlendMode::Screen; break;
         case 3: mode = GameFusion::BlendMode::Overlay; break;
