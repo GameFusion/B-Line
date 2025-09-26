@@ -593,9 +593,18 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     QToolButton *settingsButton = new QToolButton(&parent);
     settingsButton->setText(QChar(0xf1de));  // Single selection icon
     settingsButton->setFont(fontAwesome);
-    ///
 
-    // Create and configure the TimeLineView
+
+    QToolButton *viewModeButton = new QToolButton(&parent); // New toggle button
+        viewModeButton->setText(QChar(0xf0c9)); // Grid icon for stacked view
+        viewModeButton->setFont(fontAwesome);
+        viewModeButton->setCheckable(true);
+        viewModeButton->setStyleSheet(
+            "QToolButton { border: 2px solid black; color: white; background: black; border-radius: 5px; }"
+            "QToolButton:checked { background-color: #32CD32; border: 2px solid #32CD32; color: white; border-radius: 5px; }"
+        );
+
+    // --- Create and configure the TimeLineView
     //CustomGraphicsScene *scene = new CustomGraphicsScene();
     TimeLineView *timelineView = new TimeLineView(&parent);
 
@@ -838,6 +847,7 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     hlayout->addWidget(forwardStepButton);
     hlayout->addWidget(forwardFastButton);
     hlayout->addWidget(settingsButton);
+    hlayout->addWidget(viewModeButton); // Add toggle button
     //hlayout->addWidget(singleSelectionButton);
     //hlayout->addWidget(areaSelectionButton);
 
@@ -898,6 +908,10 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
 
     QObject::connect(waveformCheckbox, &QCheckBox::stateChanged, timelineView, &TimeLineView::toggleWaveformDisplay);
 
+    QObject::connect(viewModeButton, &QToolButton::clicked, [timelineView, viewModeButton]() {
+            timelineView->toggleViewMode();
+            viewModeButton->setText(timelineView->getViewMode() == TimeLineView::StackedView ? QChar(0xf0c9) : QChar(0xf338));
+        });
 
     scrollbarView->setRange(0,20000);
 
@@ -1226,6 +1240,12 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::timelineCameraUpdate);
     connect(timeLineView, &TimeLineView::cameraKeyFrameDeleted,
             this, &MainWindow::timelineCameraDeleted);
+    connect(timeLineView, &TimeLineView::keyframeAdded,
+            this, &MainWindow::onKeyframeAdded);
+    connect(timeLineView, &TimeLineView::keyframeDeleted,
+            this, &MainWindow::onKeyframeDeleted);
+    connect(timeLineView, &TimeLineView::keyframeUpdated,
+            this, &MainWindow::onKeyframeUpdated);
 
     // Add Callback for Tree Item Selection
     connect(ui->shotsTreeWidget, &QTreeWidget::itemClicked, this, &MainWindow::onTreeItemClicked);
@@ -2144,8 +2164,57 @@ ShotIndices MainWindow::deleteShotSegment(ShotContext &shotContext, double curre
     return {shotIndex, segmentIndex};
 }
 
-// In MainWindow.cpp
+void MainWindow::addLayerKeyFrames(TrackItem* track, long panelStartTime, const GameFusion::Panel& panel) {
+
+    qreal mspf = 1000.0f / projectJson["fps"].toDouble(24.0);
+    for (const auto& layer : panel.layers) {
+        // Add keyframes for motion (position x, y)
+        AttributeTrackItem* motionAttr = track->getAttributeTrack("motion");
+        if (!motionAttr) {
+            motionAttr = track->addAttribute("motion");
+        }
+        for (const auto& kf : layer.keyframes) {
+            long timeMs = panelStartTime + kf.time * mspf;
+            QVariant value = QVariant::fromValue(QPointF(kf.x, kf.y));
+            motionAttr->addKeyframe(timeMs, value);
+        }
+
+        // Add keyframes for opacity
+        AttributeTrackItem* opacityAttr = track->getAttributeTrack("opacity");
+        if (!opacityAttr) {
+            opacityAttr = track->addAttribute("opacity");
+        }
+        for (const auto& kf : layer.keyframes) {
+            long timeMs = panelStartTime + kf.time * mspf;
+            QVariant value = kf.opacity;
+            opacityAttr->addKeyframe(timeMs, value);
+        }
+
+        // Add keyframes for scale and rotation if needed
+        AttributeTrackItem* scaleAttr = track->getAttributeTrack("scale");
+        if (!scaleAttr) {
+            scaleAttr = track->addAttribute("scale");
+        }
+        for (const auto& kf : layer.keyframes) {
+            long timeMs = panelStartTime + kf.time * mspf;
+            QVariant value = kf.scale;
+            scaleAttr->addKeyframe(timeMs, value);
+        }
+
+        AttributeTrackItem* rotationAttr = track->getAttributeTrack("rotation");
+        if (!rotationAttr) {
+            rotationAttr = track->addAttribute("rotation");
+        }
+        for (const auto& kf : layer.keyframes) {
+            long timeMs = panelStartTime + kf.time * mspf;
+            QVariant value = kf.rotation;
+            rotationAttr->addKeyframe(timeMs, value);
+        }
+    }
+}
+
 void MainWindow::addTimelineKeyFrames(const GameFusion::Shot& shot) {
+
     qreal fps = projectJson["fps"].toDouble(24.0);
     qreal mspf = 1000.0f / fps;
 
@@ -2198,6 +2267,11 @@ void MainWindow::updateTimeline(){
             track->addSegment(segment);
 
             addTimelineKeyFrames(shot);
+
+
+            for (const auto& panel : shot.panels) {
+                addLayerKeyFrames(track, shot.startTime + panel.startTime, panel);
+            }
 
             startTime = shot.endTime;
             sceneMarker = nullptr; // Only link first shot to scene marker
@@ -6985,4 +7059,119 @@ void MainWindow::insertScene(GameFusion::Scene &newSceneInput, QString sceneRefU
     timeLineView->update();
 }
 
+void MainWindow::onKeyframeAdded(const QString& attribute, double timeMs, const QVariant& value, const QString& kfUuid, const QString& shotUuid) {
+    if (shotUuid.isEmpty()) return;
+    ShotContext ctx = findShotByUuid(shotUuid.toStdString());
+    if (!ctx.isValid()) return;
+    GameFusion::Shot *shot = ctx.shot;
+    double currentTime = timeMs / 1000.0;
+    PanelContext panelCtx = findPanelForTime(currentTime);
+    if (!panelCtx.isValid()) return;
+    GameFusion::Panel *panel = panelCtx.panel;
+    if (panel->layers.empty()) return;
+    GameFusion::Layer *layer = &panel->layers[0];
+
+    GameFusion::Layer::KeyFrame kf;
+    kf.uuid = kfUuid.toStdString();
+    qreal panelStartMs = shot->startTime + panel->startTime;
+    qreal relativeMs = timeMs - panelStartMs;
+    qreal fps = projectJson["fps"].toDouble(24.0);
+    kf.time = qRound((relativeMs / 1000.0) * fps);
+
+    QVariantMap valueMap = value.toMap();
+    if (attribute == "motion") {
+        kf.x = valueMap.value("x", kf.x).toFloat();
+        kf.y = valueMap.value("y", kf.y).toFloat();
+        kf.scale = valueMap.value("scale", kf.scale).toFloat();
+        kf.rotation = valueMap.value("rotation", kf.rotation).toFloat();
+    } else if (attribute == "opacity") {
+        kf.opacity = valueMap.value("opacity", kf.opacity).toFloat();
+    }
+
+    layer->keyframes.push_back(kf);
+    std::sort(layer->keyframes.begin(), layer->keyframes.end(), [](const GameFusion::Layer::KeyFrame& a, const GameFusion::Layer::KeyFrame& b) {
+        return a.time < b.time;
+    });
+
+    ctx.scene->setDirty(true);
+}
+
+void MainWindow::onKeyframeDeleted(const QString& kfUuid) {
+    for (auto& scene : scriptBreakdown->getScenes()) {
+        bool changed = false;
+        for (auto& shot : scene.shots) {
+            for (auto& panel : shot.panels) {
+                for (auto& layer : panel.layers) {
+                    auto it = std::remove_if(layer.keyframes.begin(), layer.keyframes.end(), [&](const GameFusion::Layer::KeyFrame& kf) {
+                        return kf.uuid == kfUuid.toStdString();
+                    });
+                    if (it != layer.keyframes.end()) {
+                        layer.keyframes.erase(it, layer.keyframes.end());
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if (changed) scene.setDirty(true);
+    }
+}
+
+void MainWindow::onKeyframeUpdated(const QString& kfUuid, double newTimeMs, const QVariant& newValue) {
+    GameFusion::Layer::KeyFrame oldKf;
+    GameFusion::Layer* oldLayer = nullptr;
+    GameFusion::Scene* oldScene = nullptr;
+    bool found = false;
+    for (auto& scene : scriptBreakdown->getScenes()) {
+        for (auto& shot : scene.shots) {
+            for (auto& panel : shot.panels) {
+                for (auto& layer : panel.layers) {
+                    auto it = std::find_if(layer.keyframes.begin(), layer.keyframes.end(), [&](const GameFusion::Layer::KeyFrame& kf) {
+                        return kf.uuid == kfUuid.toStdString();
+                    });
+                    if (it != layer.keyframes.end()) {
+                        oldKf = *it;
+                        layer.keyframes.erase(it);
+                        oldLayer = &layer;
+                        oldScene = &scene;
+                        found = true;
+                        break;
+                    }
+                }
+                if (found) break;
+            }
+            if (found) break;
+        }
+        if (found) break;
+    }
+    if (!found) return;
+
+    PanelContext ctx = findPanelForTime(newTimeMs / 1000.0);
+    if (!ctx.isValid()) {
+        oldLayer->keyframes.push_back(oldKf);
+        std::sort(oldLayer->keyframes.begin(), oldLayer->keyframes.end(), [](const GameFusion::Layer::KeyFrame& a, const GameFusion::Layer::KeyFrame& b) { return a.time < b.time; });
+        return;
+    }
+
+    GameFusion::Shot* newShot = ctx.shot;
+    GameFusion::Panel* newPanel = ctx.panel;
+    GameFusion::Layer* newLayer = &newPanel->layers[0];
+
+    qreal panelStartMs = newShot->startTime + newPanel->startTime;
+    qreal relativeMs = newTimeMs - panelStartMs;
+    qreal fps = projectJson["fps"].toDouble(24.0);
+    oldKf.time = qRound((relativeMs / 1000.0) * fps);
+
+    QVariantMap valueMap = newValue.toMap();
+    if (valueMap.contains("x")) oldKf.x = valueMap["x"].toFloat();
+    if (valueMap.contains("y")) oldKf.y = valueMap["y"].toFloat();
+    if (valueMap.contains("scale")) oldKf.scale = valueMap["scale"].toFloat();
+    if (valueMap.contains("rotation")) oldKf.rotation = valueMap["rotation"].toFloat();
+    if (valueMap.contains("opacity")) oldKf.opacity = valueMap["opacity"].toFloat();
+
+    newLayer->keyframes.push_back(oldKf);
+    std::sort(newLayer->keyframes.begin(), newLayer->keyframes.end(), [](const GameFusion::Layer::KeyFrame& a, const GameFusion::Layer::KeyFrame& b) { return a.time < b.time; });
+
+    oldScene->setDirty(true);
+    if (oldScene != ctx.scene) ctx.scene->setDirty(true);
+}
 

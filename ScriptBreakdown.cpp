@@ -179,6 +179,7 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
                         for (const auto& kfValue : keyframesArray) {
                             QJsonObject kfObj = kfValue.toObject();
                             Layer::KeyFrame kf;
+                            kf.uuid = kfObj["uuid"].toString().toStdString();
                             kf.time = kfObj["time"].toInt();
                             kf.x = float(kfObj["x"].toDouble());
                             kf.y = float(kfObj["y"].toDouble());
@@ -976,6 +977,7 @@ void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
                         QJsonArray keyframesArray;
                         for ( auto& kf : layer.keyframes) {
                             QJsonObject kfObj;
+                            kfObj["uuid"] = kf.uuid.c_str();
                             kfObj["time"] = kf.time;
                             kfObj["x"] = kf.x;
                             kfObj["y"] = kf.y;

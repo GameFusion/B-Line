@@ -25,6 +25,7 @@ class PerfectScriptWidget;
 class AudioMeterWidget;
 class ShotSegment;
 class CursorItem;
+class TrackItem;
 
 class QPdfWriter;
 class QUndoStack;
@@ -136,6 +137,7 @@ public:
     void renameShotSegment(const QString &shotUuid, QString newName);
     ShotIndices deleteShotSegment(ShotContext &shotContext, double cursorTime);
     void addTimelineKeyFrames(const GameFusion::Shot& shot);
+    void addLayerKeyFrames(TrackItem* track, long panelStartTime, const GameFusion::Panel& panel);
 
     // Todo : Possably move the find objects to ScriptBreakdown - there is redundancy
     ShotContext   findShotByUuid(const std::string& uuid);
@@ -266,6 +268,11 @@ public slots:
 
     void onStrokeSelected(const SelectionFrameUI& selectedStrokes);
     void onRequestCameraThumbnail(const QString &uuid, bool isEditing);
+
+    // --- key frame slots
+    void onKeyframeAdded(const QString& attribute, double timeMs, const QVariant& value, const QString& kfUuid, const QString& shotUuid);
+    void onKeyframeDeleted(const QString& kfUuid);
+    void onKeyframeUpdated(const QString& kfUuid, double newTimeMs, const QVariant& newValue);
 
 protected:
 

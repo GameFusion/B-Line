@@ -142,12 +142,18 @@ struct Layer {
     std::string fx;
 
     struct KeyFrame {
+        KeyFrame() {
+            uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+        }
+
+        std::string uuid;
         int time = 0; // in frames
         float x = 0.0f;
         float y = 0.0f;
         float scale = 1.0f;
         float rotation = 0.0f;
         float opacity = 1.0f;
+
         EasingType easing = EasingType::Linear;
 
         // Optional: bezier support
