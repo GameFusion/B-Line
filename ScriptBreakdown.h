@@ -141,8 +141,8 @@ struct Layer {
     BlendMode blendMode = BlendMode::Opacity;
     std::string fx;
 
-    struct KeyFrame {
-        KeyFrame() {
+    struct MotionKeyFrame {
+        MotionKeyFrame() {
             uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
         }
 
@@ -152,6 +152,21 @@ struct Layer {
         float y = 0.0f;
         float scale = 1.0f;
         float rotation = 0.0f;
+
+        EasingType easing = EasingType::Linear;
+
+        // Optional: bezier support
+        Vector2D bezierControl1;
+        Vector2D bezierControl2;
+    };
+
+    struct OpacityKeyFrame {
+        OpacityKeyFrame() {
+            uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+        }
+
+        std::string uuid;
+        int time = 0; // in frames
         float opacity = 1.0f;
 
         EasingType easing = EasingType::Linear;
@@ -161,10 +176,9 @@ struct Layer {
         Vector2D bezierControl2;
     };
 
-    //GameFusion::List<GameFusion::BezierPath> strokes; // Strokes for this layer
-    //std::vector<GameFusion::BezierPath> strokes;
-    std::vector<BezierCurve> strokes; // Updated to BezierCurve
-    std::vector<KeyFrame> keyframes;
+    std::vector<BezierCurve>     strokes; // Updated to BezierCurve
+    std::vector<MotionKeyFrame>  motionKeyframes;
+    std::vector<OpacityKeyFrame> opacityKeyframes;
 
     std::string imageFilePath; // If set, layer uses this image instead of strokes
 

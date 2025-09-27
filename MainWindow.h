@@ -352,6 +352,7 @@ protected:
     QString selectedShotUuid;
     QString selectedPanelUuid;
     QString selectedLayerUuid;
+    QString selectedLayerName;
 
     // Audio Meter
     //AudioMeterWidget *audioMeter = nullptr;

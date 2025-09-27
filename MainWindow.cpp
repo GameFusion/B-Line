@@ -2160,20 +2160,41 @@ ShotIndices MainWindow::deleteShotSegment(ShotContext &shotContext, double curre
 }
 
 void MainWindow::addLayerKeyFrames(TrackItem* track, long panelStartTime, const GameFusion::Panel& panel) {
-
-
-
     qreal mspf = 1000.0f / projectJson["fps"].toDouble(24.0);
+    QString panelUuid = QString::fromStdString(panel.uuid);
     for (const auto& layer : panel.layers) {
-        // Add keyframes for motion (position x, y)
+        QString layerUuid = QString::fromStdString(layer.uuid);
+        QString shotUuid;
+        for (const auto& scene : scriptBreakdown->getScenes()) {
+            for (const auto& shot : scene.shots) {
+                for (const auto& p : shot.panels) {
+                    if (p.uuid == panel.uuid) {
+                        shotUuid = QString::fromStdString(shot.uuid);
+                        break;
+                    }
+                }
+                if (!shotUuid.isEmpty()) break;
+            }
+            if (!shotUuid.isEmpty()) break;
+        }
+
+        // Add keyframes for motion
         AttributeTrackItem* motionAttr = track->getAttributeTrack("motion");
         if (!motionAttr) {
             motionAttr = track->addAttribute("motion");
         }
-        for (const auto& kf : layer.keyframes) {
+        for (const auto& kf : layer.motionKeyframes) {
             long timeMs = panelStartTime + kf.time * mspf;
-            QVariant value = QVariant::fromValue(QPointF(kf.x, kf.y));
-            motionAttr->addKeyframe(timeMs, value);
+            QVariantMap mot;
+            mot["x"] = kf.x;
+            mot["y"] = kf.y;
+            mot["scale"] = kf.scale;
+            mot["rotation"] = kf.rotation;
+            mot["uuid"] = QString::fromStdString(kf.uuid);
+            mot["shotUuid"] = shotUuid;
+            mot["panelUuid"] = panelUuid;
+            mot["layerUuid"] = layerUuid;
+            motionAttr->addKeyframe(timeMs, mot);
         }
 
         // Add keyframes for opacity
@@ -2181,33 +2202,16 @@ void MainWindow::addLayerKeyFrames(TrackItem* track, long panelStartTime, const 
         if (!opacityAttr) {
             opacityAttr = track->addAttribute("opacity");
         }
-        for (const auto& kf : layer.keyframes) {
+        for (const auto& kf : layer.opacityKeyframes) {
             long timeMs = panelStartTime + kf.time * mspf;
-            QVariant value = kf.opacity;
-            opacityAttr->addKeyframe(timeMs, value);
+            QVariantMap op;
+            op["opacity"] = kf.opacity;
+            op["uuid"] = QString::fromStdString(kf.uuid);
+            op["shotUuid"] = shotUuid;
+            op["panelUuid"] = panelUuid;
+            op["layerUuid"] = layerUuid;
+            opacityAttr->addKeyframe(timeMs, op);
         }
-/*
-        // Add keyframes for scale and rotation if needed
-        AttributeTrackItem* scaleAttr = track->getAttributeTrack("scale");
-        if (!scaleAttr) {
-            scaleAttr = track->addAttribute("scale");
-        }
-        for (const auto& kf : layer.keyframes) {
-            long timeMs = panelStartTime + kf.time * mspf;
-            QVariant value = kf.scale;
-            scaleAttr->addKeyframe(timeMs, value);
-        }
-
-        AttributeTrackItem* rotationAttr = track->getAttributeTrack("rotation");
-        if (!rotationAttr) {
-            rotationAttr = track->addAttribute("rotation");
-        }
-        for (const auto& kf : layer.keyframes) {
-            long timeMs = panelStartTime + kf.time * mspf;
-            QVariant value = kf.rotation;
-            rotationAttr->addKeyframe(timeMs, value);
-        }
-        */
     }
 }
 
@@ -2247,7 +2251,11 @@ QSet<double> MainWindow::getAllKeyframeGlobalTimes() const {
         for (const auto& shot : scene.shots) {
             for (const auto& panel : shot.panels) {
                 for (const auto& layer : panel.layers) {
-                    for (const auto& kf : layer.keyframes) {
+                    for (const auto& kf : layer.motionKeyframes) {
+                        double globalMs = shot.startTime + panel.startTime + static_cast<double>(kf.time) * mspf;
+                        times.insert(globalMs);
+                    }
+                    for (const auto& kf : layer.opacityKeyframes) {
                         double globalMs = shot.startTime + panel.startTime + static_cast<double>(kf.time) * mspf;
                         times.insert(globalMs);
                     }
@@ -2281,14 +2289,26 @@ void MainWindow::updateKeyframeDisplay() {
         //attr->setVisible(false);
     }
 
-    if (selectedLayerUuid.isEmpty()) return;
+    if (selectedLayerUuid.isEmpty() && selectedLayerName.isEmpty()) {
+        track->setSeletedLayerName("-");
+        timeLineView->updateHeaders();
+        return;
+    }
 
     LayerContext layerCts = findLayerByUuid(selectedLayerUuid.toStdString());
-    if(!layerCts.isValid()) return;
+    //if(!layerCts.isValid()) return;
+
+
 
     GameFusion::Shot  *shot  = layerCts.shot;
     GameFusion::Panel *panel = layerCts.panel;
     GameFusion::Layer *layer = layerCts.layer;
+
+    if(layer)
+        selectedLayerName = layer->name.c_str();
+
+    track->setSeletedLayerName(selectedLayerName);
+    timeLineView->updateHeaders();
 
     qreal fps = projectJson["fps"].toDouble(24.0);
     qreal mspf = 1000.0 / fps;
@@ -2302,7 +2322,7 @@ void MainWindow::updateKeyframeDisplay() {
     bool localShotMode = false;
 
     if(localShotMode) {
-        for (const auto& kf : layer->keyframes) {
+        for (const auto& kf : layer->motionKeyframes) {
             qreal globalMs = static_cast<qreal>(shot->startTime) + panel->startTime + kf.time * mspf;
             QVariantMap mot;
             mot["x"] = kf.x;
@@ -2310,11 +2330,14 @@ void MainWindow::updateKeyframeDisplay() {
             mot["scale"] = kf.scale;
             mot["rotation"] = kf.rotation;
             if (motion) motion->addKeyframe(globalMs, mot);
+        }
+        for (const auto& kf : layer->opacityKeyframes) {
+            qreal globalMs = static_cast<qreal>(shot->startTime) + panel->startTime + kf.time * mspf;
             if (opacity) opacity->addKeyframe(globalMs, QVariant(kf.opacity));
         }
     }
     else {
-        std::string layerName = layer->name;
+        std::string layerName = selectedLayerName.toStdString();
 
         if(layerName.empty())
             return;
@@ -2329,7 +2352,7 @@ void MainWindow::updateKeyframeDisplay() {
                         QString panelUuid = QString::fromStdString(panel.uuid);
                         for (const auto& layer : panel.layers) {
                             if (layer.name == layerName) {
-                                for (const auto& kf : layer.keyframes) {
+                                for (const auto& kf : layer.motionKeyframes) {
                                     qreal globalMs = shot.startTime + panel.startTime + kf.time * mspf;
                                     QVariantMap mot;
                                     mot["x"] = kf.x;
@@ -2340,6 +2363,9 @@ void MainWindow::updateKeyframeDisplay() {
                                     mot["panelUuid"] = panelUuid;
                                     mot["layerUuid"] = QString::fromStdString(layer.uuid);
                                     globalMotionKeys[shotUuid].append({globalMs, QVariant(mot)});
+                                }
+                                for (const auto& kf : layer.opacityKeyframes) {
+                                    qreal globalMs = shot.startTime + panel.startTime + kf.time * mspf;
                                     globalOpacityKeys[shotUuid].append({globalMs, QVariant(kf.opacity)});
                                 }
                             }
@@ -3764,6 +3790,9 @@ void MainWindow::newProject()
 
 void MainWindow::onTimeCursorMoved(double time)
 {
+    Log::info() << "Time cursor moved " << (float)time << "\n";
+    double cursorTime = timeLineView->getCursorTime();
+    Log::info() << "Time cursor time " << (float)cursorTime << "\n";
     //--- Respond to timeline cursor change
     //qDebug() << "Timeline cursor moved to time:" << time;
     //Log().debug() << "Timeline cursor moved to time:" << (float)time << "\n";
@@ -7216,27 +7245,34 @@ void MainWindow::onKeyframeAdded(const QString& attribute, double timeMs, const 
     GameFusion::Panel *panel = layerCtx.panel;
     GameFusion::Shot  *shot  = layerCtx.shot;
 
-    GameFusion::Layer::KeyFrame kf;
-    kf.uuid = kfUuid.toStdString();
     qreal panelStartMs = shot->startTime + panel->startTime;
     qreal relativeMs = timeMs - panelStartMs;
     qreal fps = projectJson["fps"].toDouble(24.0);
-    kf.time = qRound((relativeMs / 1000.0) * fps);
+    qreal keyTime = qRound((relativeMs / 1000.0) * fps);
 
     QVariantMap valueMap = value.toMap();
     if (attribute == "motion") {
+        GameFusion::Layer::MotionKeyFrame kf;
+        kf.uuid = kfUuid.toStdString();
+        kf.time = keyTime;
         kf.x = valueMap.value("x", kf.x).toFloat();
         kf.y = valueMap.value("y", kf.y).toFloat();
         kf.scale = valueMap.value("scale", kf.scale).toFloat();
         kf.rotation = valueMap.value("rotation", kf.rotation).toFloat();
+        layer->motionKeyframes.push_back(kf);
+        std::sort(layer->motionKeyframes.begin(), layer->motionKeyframes.end(), [](const Layer::MotionKeyFrame& a, const Layer::MotionKeyFrame& b) {
+            return a.time < b.time;
+        });
     } else if (attribute == "opacity") {
+        GameFusion::Layer::OpacityKeyFrame kf;
+        kf.uuid = kfUuid.toStdString();
+        kf.time = keyTime;
         kf.opacity = valueMap.value("opacity", kf.opacity).toFloat();
+        layer->opacityKeyframes.push_back(kf);
+        std::sort(layer->opacityKeyframes.begin(), layer->opacityKeyframes.end(), [](const Layer::OpacityKeyFrame& a, const Layer::OpacityKeyFrame& b) {
+            return a.time < b.time;
+        });
     }
-
-    layer->keyframes.push_back(kf);
-    std::sort(layer->keyframes.begin(), layer->keyframes.end(), [](const GameFusion::Layer::KeyFrame& a, const GameFusion::Layer::KeyFrame& b) {
-        return a.time < b.time;
-    });
 
     layerCtx.scene->setDirty(true);
     updateKeyframeDisplay();
@@ -7248,11 +7284,19 @@ void MainWindow::onKeyframeDeleted(const QString& kfUuid) {
         for (auto& shot : scene.shots) {
             for (auto& panel : shot.panels) {
                 for (auto& layer : panel.layers) {
-                    auto it = std::remove_if(layer.keyframes.begin(), layer.keyframes.end(), [&](const GameFusion::Layer::KeyFrame& kf) {
+                    auto motIt = std::remove_if(layer.motionKeyframes.begin(), layer.motionKeyframes.end(), [&](const Layer::MotionKeyFrame& kf) {
                         return kf.uuid == kfUuid.toStdString();
                     });
-                    if (it != layer.keyframes.end()) {
-                        layer.keyframes.erase(it, layer.keyframes.end());
+                    if (motIt != layer.motionKeyframes.end()) {
+                        layer.motionKeyframes.erase(motIt, layer.motionKeyframes.end());
+                        changed = true;
+                    }
+
+                    auto opIt = std::remove_if(layer.opacityKeyframes.begin(), layer.opacityKeyframes.end(), [&](const Layer::OpacityKeyFrame& kf) {
+                        return kf.uuid == kfUuid.toStdString();
+                    });
+                    if (opIt != layer.opacityKeyframes.end()) {
+                        layer.opacityKeyframes.erase(opIt, layer.opacityKeyframes.end());
                         changed = true;
                     }
                 }
@@ -7262,26 +7306,46 @@ void MainWindow::onKeyframeDeleted(const QString& kfUuid) {
     }
     updateKeyframeDisplay();
 }
-
 void MainWindow::onKeyframeUpdated(const QString& kfUuid, double newTimeMs, const QVariant& newValue) {
-    GameFusion::Layer::KeyFrame oldKf;
+    bool found = false;
+    QString layerName;
     GameFusion::Layer* oldLayer = nullptr;
     GameFusion::Scene* oldScene = nullptr;
-    bool found = false;
+    bool isMotion = newValue.toMap().contains("x"); // Determine if motion or opacity
+    GameFusion::Layer::MotionKeyFrame oldMotKf;
+    GameFusion::Layer::OpacityKeyFrame oldOpKf;
+
+    // Find and remove the old keyframe
     for (auto& scene : scriptBreakdown->getScenes()) {
         for (auto& shot : scene.shots) {
             for (auto& panel : shot.panels) {
                 for (auto& layer : panel.layers) {
-                    auto it = std::find_if(layer.keyframes.begin(), layer.keyframes.end(), [&](const GameFusion::Layer::KeyFrame& kf) {
-                        return kf.uuid == kfUuid.toStdString();
-                    });
-                    if (it != layer.keyframes.end()) {
-                        oldKf = *it;
-                        layer.keyframes.erase(it);
-                        oldLayer = &layer;
-                        oldScene = &scene;
-                        found = true;
-                        break;
+                    if (isMotion) {
+                        auto it = std::find_if(layer.motionKeyframes.begin(), layer.motionKeyframes.end(), [&](const GameFusion::Layer::MotionKeyFrame& kf) {
+                            return kf.uuid == kfUuid.toStdString();
+                        });
+                        if (it != layer.motionKeyframes.end()) {
+                            oldMotKf = *it;
+                            layer.motionKeyframes.erase(it);
+                            oldLayer = &layer;
+                            oldScene = &scene;
+                            layerName = QString::fromStdString(layer.name);
+                            found = true;
+                            break;
+                        }
+                    } else {
+                        auto it = std::find_if(layer.opacityKeyframes.begin(), layer.opacityKeyframes.end(), [&](const GameFusion::Layer::OpacityKeyFrame& kf) {
+                            return kf.uuid == kfUuid.toStdString();
+                        });
+                        if (it != layer.opacityKeyframes.end()) {
+                            oldOpKf = *it;
+                            layer.opacityKeyframes.erase(it);
+                            oldLayer = &layer;
+                            oldScene = &scene;
+                            layerName = QString::fromStdString(layer.name);
+                            found = true;
+                            break;
+                        }
                     }
                 }
                 if (found) break;
@@ -7292,35 +7356,79 @@ void MainWindow::onKeyframeUpdated(const QString& kfUuid, double newTimeMs, cons
     }
     if (!found) return;
 
+    // Find the new target panel/layer
     PanelContext ctx = findPanelForTime(newTimeMs / 1000.0);
     if (!ctx.isValid()) {
-        oldLayer->keyframes.push_back(oldKf);
-        std::sort(oldLayer->keyframes.begin(), oldLayer->keyframes.end(), [](const GameFusion::Layer::KeyFrame& a, const GameFusion::Layer::KeyFrame& b) { return a.time < b.time; });
+        if (isMotion) {
+            oldLayer->motionKeyframes.push_back(oldMotKf);
+            std::sort(oldLayer->motionKeyframes.begin(), oldLayer->motionKeyframes.end(), [](const GameFusion::Layer::MotionKeyFrame& a, const GameFusion::Layer::MotionKeyFrame& b) {
+                return a.time < b.time;
+            });
+        } else {
+            oldLayer->opacityKeyframes.push_back(oldOpKf);
+            std::sort(oldLayer->opacityKeyframes.begin(), oldLayer->opacityKeyframes.end(), [](const GameFusion::Layer::OpacityKeyFrame& a, const GameFusion::Layer::OpacityKeyFrame& b) {
+                return a.time < b.time;
+            });
+        }
+        updateKeyframeDisplay();
         return;
     }
 
     GameFusion::Shot* newShot = ctx.shot;
     GameFusion::Panel* newPanel = ctx.panel;
-    GameFusion::Layer* newLayer = &newPanel->layers[0];
+    GameFusion::Layer* newLayer = nullptr;
+    for (auto& l : newPanel->layers) {
+        if (l.name == layerName.toStdString()) {
+            newLayer = &l;
+            break;
+        }
+    }
+    if (!newLayer) {
+        if (isMotion) {
+            oldLayer->motionKeyframes.push_back(oldMotKf);
+            std::sort(oldLayer->motionKeyframes.begin(), oldLayer->motionKeyframes.end(), [](const GameFusion::Layer::MotionKeyFrame& a, const GameFusion::Layer::MotionKeyFrame& b) {
+                return a.time < b.time;
+            });
+        } else {
+            oldLayer->opacityKeyframes.push_back(oldOpKf);
+            std::sort(oldLayer->opacityKeyframes.begin(), oldLayer->opacityKeyframes.end(), [](const GameFusion::Layer::OpacityKeyFrame& a, const GameFusion::Layer::OpacityKeyFrame& b) {
+                return a.time < b.time;
+            });
+        }
+        updateKeyframeDisplay();
+        return;
+    }
 
     qreal panelStartMs = newShot->startTime + newPanel->startTime;
     qreal relativeMs = newTimeMs - panelStartMs;
     qreal fps = projectJson["fps"].toDouble(24.0);
-    oldKf.time = qRound((relativeMs / 1000.0) * fps);
+    qreal mspf = 1000.0 / fps;
+    int frameTime = qRound(relativeMs / mspf);
 
-    QVariantMap valueMap = newValue.toMap();
-    if (valueMap.contains("x")) oldKf.x = valueMap["x"].toFloat();
-    if (valueMap.contains("y")) oldKf.y = valueMap["y"].toFloat();
-    if (valueMap.contains("scale")) oldKf.scale = valueMap["scale"].toFloat();
-    if (valueMap.contains("rotation")) oldKf.rotation = valueMap["rotation"].toFloat();
-    if (valueMap.contains("opacity")) oldKf.opacity = valueMap["opacity"].toFloat();
-
-    newLayer->keyframes.push_back(oldKf);
-    std::sort(newLayer->keyframes.begin(), newLayer->keyframes.end(), [](const GameFusion::Layer::KeyFrame& a, const GameFusion::Layer::KeyFrame& b) { return a.time < b.time; });
+    if (isMotion) {
+        QVariantMap valueMap = newValue.toMap();
+        GameFusion::Layer::MotionKeyFrame newKf = oldMotKf;
+        newKf.time = frameTime;
+        if (valueMap.contains("x")) newKf.x = valueMap["x"].toFloat();
+        if (valueMap.contains("y")) newKf.y = valueMap["y"].toFloat();
+        if (valueMap.contains("scale")) newKf.scale = valueMap["scale"].toFloat();
+        if (valueMap.contains("rotation")) newKf.rotation = valueMap["rotation"].toFloat();
+        newLayer->motionKeyframes.push_back(newKf);
+        std::sort(newLayer->motionKeyframes.begin(), newLayer->motionKeyframes.end(), [](const GameFusion::Layer::MotionKeyFrame& a, const GameFusion::Layer::MotionKeyFrame& b) {
+            return a.time < b.time;
+        });
+    } else {
+        GameFusion::Layer::OpacityKeyFrame newKf = oldOpKf;
+        newKf.time = frameTime;
+        newKf.opacity = newValue.toFloat();
+        newLayer->opacityKeyframes.push_back(newKf);
+        std::sort(newLayer->opacityKeyframes.begin(), newLayer->opacityKeyframes.end(), [](const GameFusion::Layer::OpacityKeyFrame& a, const GameFusion::Layer::OpacityKeyFrame& b) {
+            return a.time < b.time;
+        });
+    }
 
     oldScene->setDirty(true);
     if (oldScene != ctx.scene) ctx.scene->setDirty(true);
-
     updateKeyframeDisplay();
 }
 

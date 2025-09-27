@@ -172,8 +172,10 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
                     layer.scale = float(layerObj["scale"].toDouble(1.0));
                     layer.rotation = float(layerObj["rotation"].toDouble(0.0));
                     layer.imageFilePath = layerObj["imageFilePath"].toString().toStdString();
+                    layer.fx = layerObj["fx"].toString().toStdString();
 
                     // Keyframes
+                    /*
                     if (layerObj.contains("keyframes")) {
                         QJsonArray keyframesArray = layerObj["keyframes"].toArray();
                         for (const auto& kfValue : keyframesArray) {
@@ -195,7 +197,40 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
 
                             layer.keyframes.push_back(kf);
                         }
-                    }
+                    }*/
+
+                    if (layerObj.contains("motionKeyframes"))
+                        for (const QJsonValue& kfVal : layerObj["motionKeyframes"].toArray()) {
+                            QJsonObject kfObj = kfVal.toObject();
+                            Layer::MotionKeyFrame kf;
+                            kf.uuid = kfObj["uuid"].toString().toStdString();
+                            kf.time = kfObj["time"].toInt();
+                            kf.x = kfObj["x"].toDouble();
+                            kf.y = kfObj["y"].toDouble();
+                            kf.scale = kfObj["scale"].toDouble();
+                            kf.rotation = kfObj["rotation"].toDouble();
+                            kf.easing = fromString(kfObj["easing"].toString().toStdString());
+                            kf.bezierControl1.x() = kfObj["bezierControl1_x"].toDouble();
+                            kf.bezierControl1.y() = kfObj["bezierControl1_y"].toDouble();
+                            kf.bezierControl2.x() = kfObj["bezierControl2_x"].toDouble();
+                            kf.bezierControl2.y() = kfObj["bezierControl2_y"].toDouble();
+                            layer.motionKeyframes.push_back(kf);
+                        }
+
+                    if (layerObj.contains("opacityKeyframes"))
+                        for (const QJsonValue& kfVal : layerObj["opacityKeyframes"].toArray()) {
+                            QJsonObject kfObj = kfVal.toObject();
+                            Layer::OpacityKeyFrame kf;
+                            kf.uuid = kfObj["uuid"].toString().toStdString();
+                            kf.time = kfObj["time"].toInt();
+                            kf.opacity = kfObj["opacity"].toDouble();
+                            kf.easing = fromString(kfObj["easing"].toString().toStdString());
+                            kf.bezierControl1.x() = kfObj["bezierControl1_x"].toDouble();
+                            kf.bezierControl1.y() = kfObj["bezierControl1_y"].toDouble();
+                            kf.bezierControl2.x() = kfObj["bezierControl2_x"].toDouble();
+                            kf.bezierControl2.y() = kfObj["bezierControl2_y"].toDouble();
+                            layer.opacityKeyframes.push_back(kf);
+                        }
 
                     // Load strokes
                     if (layerObj.contains("strokes")) {
@@ -973,27 +1008,37 @@ void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
                         }
                         layerObj["strokes"] = strokeArray;
 
-                        // Keyframes
-                        QJsonArray keyframesArray;
-                        for ( auto& kf : layer.keyframes) {
+                        QJsonArray motionKeyframesArray;
+                        for (const auto& kf : layer.motionKeyframes) {
                             QJsonObject kfObj;
-                            kfObj["uuid"] = kf.uuid.c_str();
+                            kfObj["uuid"] = QString::fromStdString(kf.uuid);
                             kfObj["time"] = kf.time;
                             kfObj["x"] = kf.x;
                             kfObj["y"] = kf.y;
                             kfObj["scale"] = kf.scale;
                             kfObj["rotation"] = kf.rotation;
-                            kfObj["opacity"] = kf.opacity;
-                            kfObj["easing"] = static_cast<int>(kf.easing);
-                            kfObj["bezierControl1X"] = kf.bezierControl1.x();
-                            kfObj["bezierControl1Y"] = kf.bezierControl1.y();
-                            kfObj["bezierControl2X"] = kf.bezierControl2.x();
-                            kfObj["bezierControl2Y"] = kf.bezierControl2.y();
-
-                            keyframesArray.append(kfObj);
+                            kfObj["easing"] = QString::fromStdString(toString(kf.easing));
+                            kfObj["bezierControl1_x"] = kf.bezierControl1.x();
+                            kfObj["bezierControl1_y"] = kf.bezierControl1.y();
+                            kfObj["bezierControl2_x"] = kf.bezierControl2.x();
+                            kfObj["bezierControl2_y"] = kf.bezierControl2.y();
+                            motionKeyframesArray.append(kfObj);
                         }
-
-                        layerObj["keyframes"] = keyframesArray;
+                        layerObj["motionKeyframes"] = motionKeyframesArray;
+                        QJsonArray opacityKeyframesArray;
+                        for (const auto& kf : layer.opacityKeyframes) {
+                            QJsonObject kfObj;
+                            kfObj["uuid"] = QString::fromStdString(kf.uuid);
+                            kfObj["time"] = kf.time;
+                            kfObj["opacity"] = kf.opacity;
+                            kfObj["easing"] = QString::fromStdString(toString(kf.easing));
+                            kfObj["bezierControl1_x"] = kf.bezierControl1.x();
+                            kfObj["bezierControl1_y"] = kf.bezierControl1.y();
+                            kfObj["bezierControl2_x"] = kf.bezierControl2.x();
+                            kfObj["bezierControl2_y"] = kf.bezierControl2.y();
+                            opacityKeyframesArray.append(kfObj);
+                        }
+                        layerObj["opacityKeyframes"] = opacityKeyframesArray;
                         layersArray.append(layerObj);
                     }
 
