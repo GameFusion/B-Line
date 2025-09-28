@@ -279,7 +279,7 @@ public slots:
     void onKeyframeAdded(const QString& attribute, double timeMs, const QVariant& value, const QString& kfUuid, const QString& shotUuid);
     void onKeyframeDeleted(const QString& kfUuid);
     void onKeyframeUpdated(const QString& kfUuid, double newTimeMs, const QVariant& newValue);
-
+    void updateKeyframe(const QString& kfUuid, double timeMs, const QVariant& value, const QString& layerUuid, const QString& panelUuid, const QString& shotUuid); //
 protected:
 
 	void dragEnterEvent(QDragEnterEvent *event) override;
