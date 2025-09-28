@@ -64,6 +64,19 @@ struct LayerContext {
     }
 };
 
+struct KeyframeContext {
+    GameFusion::Scene* scene = nullptr;
+    GameFusion::Shot* shot = nullptr;
+    GameFusion::Panel* panel = nullptr;
+    GameFusion::Layer* layer = nullptr;
+    GameFusion::Layer::KeyFrame *keyframe = nullptr;
+    bool isMotion = false;
+
+    bool isValid() const {
+        return scene && shot && panel && layer && keyframe;
+    }
+};
+
 struct ShotContext {
     GameFusion::Scene* scene = nullptr;
     GameFusion::Shot* shot = nullptr;
@@ -157,7 +170,7 @@ public:
     GameFusion::Scene  *findSceneByUuid(const std::string& uuid);
     int           findSceneIndex(const std::string& uuid);
     int           findShotIndex(ShotContext shotContext);
-
+    KeyframeContext findKeyframeByLayerUuid(const std::string layerUuid, const std::string keyframeUuid);
 
 
 public slots:
@@ -279,7 +292,14 @@ public slots:
     void onKeyframeAdded(const QString& attribute, double timeMs, const QVariant& value, const QString& kfUuid, const QString& shotUuid);
     void onKeyframeDeleted(const QString& kfUuid);
     void onKeyframeUpdated(const QString& kfUuid, double newTimeMs, const QVariant& newValue);
+    void onGroupedKeyframeUpdated(const QString& uuid1, double newTimeMs1, const QVariant& value1,
+                                  const QString& uuid2, double newTimeMs2, const QVariant& value2);
     void updateKeyframe(const QString& kfUuid, double timeMs, const QVariant& value, const QString& layerUuid, const QString& panelUuid, const QString& shotUuid); //
+
+    // Auto save and related timer functions
+    void onCheckDirtyTimer();
+    void onAutoSaveTimer();
+    void toggleAutoSave(bool checked);
 protected:
 
 	void dragEnterEvent(QDragEnterEvent *event) override;
@@ -303,6 +323,8 @@ protected:
     void loadScript();
 
     void updateWindowTitle(bool isModified);
+
+    QVariantMap getKeyframeValueMap(const KeyframeContext& keyframeContext);
 
 protected:
 	Ui::MainWindowBoarder *ui;
@@ -397,6 +419,16 @@ protected:
 
     GameFusion::CameraFrame clipboardCamera;
     bool hasClipboardCamera = false;
+
+private:
+    void loadSettings();
+    void saveSettings();
+
+    QTimer *dirtyCheckTimer;
+    QTimer *autoSaveTimer;
+    bool autoSave = false;
+    bool savePending = false;
+    //QAction *autoSaveAction;
 };
 
 

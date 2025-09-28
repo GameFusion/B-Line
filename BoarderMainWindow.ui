@@ -41,6 +41,8 @@
     <addaction name="actionOpen"/>
     <addaction name="actionSave"/>
     <addaction name="separator"/>
+    <addaction name="actionAuto_Save"/>
+    <addaction name="separator"/>
     <addaction name="actionLogin"/>
     <addaction name="separator"/>
     <addaction name="actionExport_as_PDF"/>
@@ -1098,6 +1100,14 @@
   <action name="actionUpload_to_Flow">
    <property name="text">
     <string>Upload to Flow...</string>
+   </property>
+  </action>
+  <action name="actionAuto_Save">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Auto Save</string>
    </property>
   </action>
  </widget>

@@ -141,39 +141,33 @@ struct Layer {
     BlendMode blendMode = BlendMode::Opacity;
     std::string fx;
 
-    struct MotionKeyFrame {
-        MotionKeyFrame() {
+    struct KeyFrame {
+        KeyFrame() {
             uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
         }
-
         std::string uuid;
         int time = 0; // in frames
-        float x = 0.0f;
-        float y = 0.0f;
-        float scale = 1.0f;
-        float rotation = 0.0f;
-
         EasingType easing = EasingType::Linear;
-
         // Optional: bezier support
         Vector2D bezierControl1;
         Vector2D bezierControl2;
     };
 
-    struct OpacityKeyFrame {
-        OpacityKeyFrame() {
-            uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    struct MotionKeyFrame:public KeyFrame {
+        MotionKeyFrame():KeyFrame() {
         }
 
-        std::string uuid;
-        int time = 0; // in frames
+        float x = 0.0f;
+        float y = 0.0f;
+        float scale = 1.0f;
+        float rotation = 0.0f;
+    };
+
+    struct OpacityKeyFrame:KeyFrame {
+        OpacityKeyFrame():KeyFrame() {
+        }
+
         float opacity = 1.0f;
-
-        EasingType easing = EasingType::Linear;
-
-        // Optional: bezier support
-        Vector2D bezierControl1;
-        Vector2D bezierControl2;
     };
 
     std::vector<BezierCurve>     strokes; // Updated to BezierCurve
