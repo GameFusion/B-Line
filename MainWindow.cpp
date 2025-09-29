@@ -650,6 +650,30 @@ private:
     MainWindow* m_mainWindow;
 };
 
+class LayerDuplicateCommand : public QUndoCommand {
+public:
+    LayerDuplicateCommand(const QString& originalLayerUuid, const QString& duplicatedLayerUuid,
+                          const QString& panelUuid, MainWindow* mainWindow)
+        : m_originalLayerUuid(originalLayerUuid), m_duplicatedLayerUuid(duplicatedLayerUuid),
+          m_panelUuid(panelUuid), m_mainWindow(mainWindow) {
+        setText("Duplicate Layer");
+    }
+
+    void undo() override {
+        m_mainWindow->removeLayer(m_duplicatedLayerUuid, m_panelUuid);
+    }
+
+    void redo() override {
+        m_mainWindow->duplicateLayer(m_originalLayerUuid, m_duplicatedLayerUuid);
+    }
+
+private:
+    QString m_originalLayerUuid;
+    QString m_duplicatedLayerUuid;
+    QString m_panelUuid;
+    MainWindow* m_mainWindow;
+};
+
 class CompositeUndoCommand : public QUndoCommand {
 public:
     CompositeUndoCommand(const QString& text) {
@@ -1515,6 +1539,9 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::onLayerMoveUp);
     connect(ui->toolButton_layerMoveDown, &QToolButton::clicked,
             this, &MainWindow::onLayerMoveDown);
+    connect(ui->toolButton_layerDup, &QToolButton::clicked,
+            this, &MainWindow::onLayerDuplicate);
+
 
     ui->layerListWidget->setDragDropMode(QAbstractItemView::InternalMove);
     ui->layerListWidget->setDefaultDropAction(Qt::MoveAction);
@@ -3878,6 +3905,25 @@ void MainWindow::onLayerMoveDown() {
     }
 
     undoStack->push(new LayerReorderCommand(oldUuidOrder, newUuidOrder, currentPanel->uuid.c_str(), this));
+}
+
+void MainWindow::onLayerDuplicate() {
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    if (selectedLayers.isEmpty()) return;
+
+    if (!currentPanel) return;
+
+    QListWidgetItem* selected = selectedLayers.first();
+    QString originalLayerUuid = selected->data(Qt::UserRole).toString();
+    LayerContext layerContext = findLayerByUuid(originalLayerUuid.toStdString().c_str());
+    if (!layerContext.isValid())
+        return;
+
+    // Create a duplicate layer
+    QString duplicatedLayerUuid = QUuid::createUuid().toString();
+
+    undoStack->push(new LayerDuplicateCommand(originalLayerUuid, duplicatedLayerUuid,
+                                             QString::fromStdString(currentPanel->uuid), this));
 }
 
 void MainWindow::onLayerReordered(const QModelIndex &parent,
@@ -8012,11 +8058,15 @@ void MainWindow::applyLayerOrder(const std::vector<QString>& orderUuids, const Q
     updateLayerListWidget(orderUuids); // Sync UI
 }
 
-void MainWindow::addLayer(const GameFusion::Layer& layer, const QString& panelUuid) {
+void MainWindow::addLayer(const GameFusion::Layer& layer, const QString& panelUuid, int index) {
     PanelContext panelContext = findPanelByUuid(panelUuid.toStdString());
     if (!panelContext.isValid()) return;
 
-    panelContext.panel->layers.insert(panelContext.panel->layers.begin(), layer);
+    if (index < 0 || index > static_cast<int>(panelContext.panel->layers.size())) {
+            index = 0; // Default to inserting at the beginning if index is invalid
+        }
+
+    panelContext.panel->layers.insert(panelContext.panel->layers.begin() + index, layer);
 
     panelContext.scene->dirty = true;
     updateWindowTitle(true);
@@ -8167,3 +8217,22 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
     return QMainWindow::eventFilter(obj, event);
 }
 
+void MainWindow::duplicateLayer(const QString &sourceLayerUuid, const QString &duplicateLayerUuid) {
+    LayerContext layerContext = findLayerByUuid(sourceLayerUuid.toStdString().c_str());
+    if (!layerContext.isValid())
+        return;
+
+    GameFusion::Layer duplicatedLayer = *layerContext.layer;
+    duplicatedLayer.uuid = duplicateLayerUuid.toStdString();
+    duplicatedLayer.name = layerContext.layer->name + " (Copy)";
+
+    int insertIndex = 0;
+    for (size_t i = 0; i < layerContext.panel->layers.size(); ++i) {
+        if (layerContext.panel->layers[i].uuid == sourceLayerUuid.toStdString()) {
+            insertIndex = static_cast<int>(i);
+            break;
+        }
+    }
+
+    addLayer(duplicatedLayer, layerContext.panel->uuid.c_str(), insertIndex);
+}

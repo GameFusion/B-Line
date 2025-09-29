@@ -268,6 +268,7 @@ public slots:
     void onLayerDelete();
     void onLayerMoveUp();
     void onLayerMoveDown();
+    void onLayerDuplicate();
     void onLayerReordered(const QModelIndex &parent,
                                       int start, int end,
                                       const QModelIndex &destination, int row);
@@ -304,7 +305,7 @@ public slots:
     void onGroupedKeyframeUpdated(const QString& uuid1, double newTimeMs1, const QVariant& value1,
                                   const QString& uuid2, double newTimeMs2, const QVariant& value2);
     // --- Layers re-ordering
-    void addLayer(const GameFusion::Layer& layer, const QString& panelUuid);
+    void addLayer(const GameFusion::Layer& layer, const QString& panelUuid, int index = 0);
     void removeLayer(const QString& layerUuid, const QString& panelUuid);
     void applyLayerOrder(const std::vector<QString>& orderUuids, const QString& panelUuid);
     std::vector<QString> getCurrentLayerUuidOrder(const QString& panelUuid) ;
@@ -314,6 +315,7 @@ public slots:
     void setLayerAttribute(const QString& layerUuid, const QString& panelUuid,
                            LayerAttributeType attributeType,
                            const std::variant<int, double, GameFusion::BlendMode>& value);
+    void duplicateLayer(const QString &sourceLayerUuid, const QString &duplicateLayerUuid);
 
     // Auto save and related timer functions
     void onCheckDirtyTimer();
