@@ -589,6 +589,30 @@ private:
     MainWindow* m_mainWindow;
 };
 
+
+class LayerLoadImageCommand : public QUndoCommand {
+public:
+    LayerLoadImageCommand(const QString& layerUuid, const QString& panelUuid, const std::string& oldImageFilePath, const std::string& newImageFilePath, MainWindow* mainWindow)
+        : m_layerUuid(layerUuid), m_panelUuid(panelUuid), m_oldImageFilePath(oldImageFilePath), m_newImageFilePath(newImageFilePath), m_mainWindow(mainWindow) {
+        setText("Load Layer Image");
+    }
+
+    void undo() override {
+        m_mainWindow->setLayerImage(m_layerUuid, m_panelUuid, m_oldImageFilePath);
+    }
+
+    void redo() override {
+        m_mainWindow->setLayerImage(m_layerUuid, m_panelUuid, m_newImageFilePath);
+    }
+
+private:
+    QString m_layerUuid;
+    QString m_panelUuid;
+    std::string m_oldImageFilePath;
+    std::string m_newImageFilePath;
+    MainWindow* m_mainWindow;
+};
+
 class CompositeUndoCommand : public QUndoCommand {
 public:
     CompositeUndoCommand(const QString& text) {
@@ -3632,34 +3656,23 @@ void MainWindow::onLayerBlendMode(int index) {
 
 void MainWindow::onLayerLoadImage() {
     QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    if (selectedLayers.isEmpty()) return;
 
-    for(auto selected: selectedLayers) {
-        QString uuid = selected->data(Qt::UserRole).toString();
-        LayerContext layerContext = findLayerByUuid(uuid.toStdString());
-        if(layerContext.isValid()){
+    if (!currentPanel) return;
 
-            QString fileName = QFileDialog::getOpenFileName(this, tr("Open Image"), "", tr("Images (*.png *.jpg *.bmp)"));
+    // Only one layer can be selected
+    QListWidgetItem* selected = selectedLayers.first();
+    QString layerUuid = selected->data(Qt::UserRole).toString();
+    LayerContext layerContext = findLayerByUuid(layerUuid.toStdString().c_str());
+    if (!layerContext.isValid()) return;
 
-            if (!fileName.isEmpty()) {
-                layerContext.scene->dirty = true;
-                updateWindowTitle(true);
-                layerContext.layer->imageFilePath =  fileName.toStdString();
-                QImage image;
-                if (image.load(fileName)) {
-                    //layers[activeLayerIndex].image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
-                    //layers[activeLayerIndex].layer.image = QString::fromLatin1(image.toPNG().toBase64()).toStdString();
-                    //updateCompositeImage();
-                    //update();
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Open Image"), "", tr("Images (*.png *.jpg *.bmp)"));
+    if (fileName.isEmpty()) return;
 
-                    paint->getPaintArea()->updateLayer(*layerContext.layer);
-                }
-            }
+    std::string oldImageFilePath = layerContext.layer->imageFilePath;
+    std::string newImageFilePath = fileName.toStdString();
 
-        }
-        return; //
-    }
-
-    paint->getPaintArea()->updateCompositeImage();
+    undoStack->push(new LayerLoadImageCommand(layerUuid, QString::fromStdString(currentPanel->uuid), oldImageFilePath, newImageFilePath, this));
 }
 
 void MainWindow::onLayerOpacity(int value) {
@@ -8013,5 +8026,30 @@ void MainWindow::setLayerFX(const QString& layerUuid, const QString& panelUuid, 
         populateLayerList(panelContext.panel);
         paint->getPaintArea()->invalidateAllLayers();
         paint->getPaintArea()->updateCompositeImage();
+    }
+}
+
+void MainWindow::setLayerImage(const QString& layerUuid, const QString& panelUuid, const std::string& imageFilePath) {
+    PanelContext panelContext = findPanelByUuid(panelUuid.toStdString());
+    if (!panelContext.isValid()) return;
+
+    auto it = std::find_if(panelContext.panel->layers.begin(), panelContext.panel->layers.end(),
+                           [&](const GameFusion::Layer& l) { return l.uuid == layerUuid.toStdString(); });
+    if (it != panelContext.panel->layers.end()) {
+        it->imageFilePath = imageFilePath;
+        panelContext.scene->dirty = true;
+        updateWindowTitle(true);
+        if (!imageFilePath.empty()) {
+            QImage image;
+            if (!image.load(QString::fromStdString(imageFilePath))) {
+                qWarning() << "Failed to load image:" << QString::fromStdString(imageFilePath);
+                return;
+            }
+        }
+
+        long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
+        float fps = projectJson["fps"].toDouble();
+        paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraFrames);
+        populateLayerList(panelContext.panel);
     }
 }
