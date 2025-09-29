@@ -121,6 +121,8 @@ class MainWindow : public QMainWindow
 
 public:
 
+    enum class LayerAttributeType { Rotation, PosX, PosY, Scale, BlendMode };
+
 	MainWindow(QWidget *parent = 0);
 	virtual ~MainWindow();
 
@@ -309,12 +311,19 @@ public slots:
     void updateLayerListWidget(const std::vector<QString>& orderUuids);
     void setLayerFX(const QString& layerUuid, const QString& panelUuid, const std::string& fx);
     void setLayerImage(const QString& layerUuid, const QString& panelUuid, const std::string& imageFilePath);
+    void setLayerAttribute(const QString& layerUuid, const QString& panelUuid,
+                           LayerAttributeType attributeType,
+                           const std::variant<int, double, GameFusion::BlendMode>& value);
 
     // Auto save and related timer functions
     void onCheckDirtyTimer();
     void onAutoSaveTimer();
     void toggleAutoSave(bool checked);
+
+
 protected:
+
+    bool eventFilter(QObject *obj, QEvent *event);
 
 	void dragEnterEvent(QDragEnterEvent *event) override;
 	//void dragMoveEvent(QDragMoveEvent *event) override;

@@ -613,6 +613,43 @@ private:
     MainWindow* m_mainWindow;
 };
 
+
+class LayerAttributeCommand : public QUndoCommand {
+public:
+
+    LayerAttributeCommand(const QString& layerUuid, const QString& panelUuid,
+                         MainWindow::LayerAttributeType attrType,
+                         const std::variant<int, double, GameFusion::BlendMode>& oldValue,
+                         const std::variant<int, double, GameFusion::BlendMode>& newValue,
+                         MainWindow* mainWindow)
+        : m_layerUuid(layerUuid), m_panelUuid(panelUuid), m_attrType(attrType),
+          m_oldValue(oldValue), m_newValue(newValue), m_mainWindow(mainWindow) {
+        switch (attrType) {
+            case MainWindow::LayerAttributeType::Rotation: setText("Change Layer Rotation"); break;
+            case MainWindow::LayerAttributeType::PosX: setText("Change Layer X Position"); break;
+            case MainWindow::LayerAttributeType::PosY: setText("Change Layer Y Position"); break;
+            case MainWindow::LayerAttributeType::Scale: setText("Change Layer Scale"); break;
+            case MainWindow::LayerAttributeType::BlendMode: setText("Change Layer Blend Mode"); break;
+        }
+    }
+
+    void undo() override {
+        m_mainWindow->setLayerAttribute(m_layerUuid, m_panelUuid, m_attrType, m_oldValue);
+    }
+
+    void redo() override {
+        m_mainWindow->setLayerAttribute(m_layerUuid, m_panelUuid, m_attrType, m_newValue);
+    }
+
+private:
+    QString m_layerUuid;
+    QString m_panelUuid;
+    MainWindow::LayerAttributeType m_attrType;
+    std::variant<int, double, GameFusion::BlendMode> m_oldValue;
+    std::variant<int, double, GameFusion::BlendMode> m_newValue;
+    MainWindow* m_mainWindow;
+};
+
 class CompositeUndoCommand : public QUndoCommand {
 public:
     CompositeUndoCommand(const QString& text) {
@@ -1497,6 +1534,11 @@ MainWindow::MainWindow(QWidget *parent)
     ui->comboBox_layerBlendMode->clear();
     ui->comboBox_layerBlendMode->addItems({"Opacity", "Multiply", "Screen", "Overlay"});
 
+
+
+    // In constructor:
+
+
     // Connect new layer control widgets
     connect(ui->spinBox_layerRotation, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &MainWindow::onLayerRotationChanged);
@@ -1525,10 +1567,14 @@ MainWindow::MainWindow(QWidget *parent)
     ui->doubleSpinBox_layerPosX->setValue(0.0);
     ui->doubleSpinBox_layerPosY->setRange(-38400, 38400);
     ui->doubleSpinBox_layerPosY->setValue(0.0);
-    ui->doubleSpinBox_layerScale->setRange(0., 10.0);
-    ui->doubleSpinBox_layerScale->setSingleStep(0.01);
+    ui->doubleSpinBox_layerScale->setRange(0., 100.0);
+    ui->doubleSpinBox_layerScale->setSingleStep(0.001);
     ui->doubleSpinBox_layerScale->setValue(1.0);
 
+    ui->spinBox_layerRotation->installEventFilter(this);
+    ui->doubleSpinBox_layerPosX->installEventFilter(this);
+    ui->doubleSpinBox_layerPosY->installEventFilter(this);
+    ui->doubleSpinBox_layerScale->installEventFilter(this);
 
     ui->dockLayers->setStyleSheet(R"(
     QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QListWidget, QPushButton {
@@ -3878,10 +3924,10 @@ void MainWindow::onLayerRotationChanged(int value) {
         LayerContext layerContext = findLayerByUuid(data.toString().toStdString());
 
         if (layerContext.isValid()) {
-            layerContext.scene->dirty = true;
-            updateWindowTitle(true);
-            layerContext.layer->rotation = value;
-            paint->getPaintArea()->updateLayer(*layerContext.layer);
+            int oldValue = layerContext.layer->rotation;
+            undoStack->push(new LayerAttributeCommand(layerContext.layer->uuid.c_str(), QString::fromStdString(layerContext.panel->uuid),
+                                                         LayerAttributeType::Rotation,
+                                                         oldValue, value, this));
         }
     }
 }
@@ -3897,10 +3943,10 @@ void MainWindow::onLayerPosXChanged(double value) {
         LayerContext layerContext = findLayerByUuid(data.toString().toStdString());
 
         if (layerContext.isValid()) {
-            layerContext.scene->dirty = true;
-            updateWindowTitle(true);
-            layerContext.layer->x = value;
-            paint->getPaintArea()->updateLayer(*layerContext.layer);
+            double oldValue = layerContext.layer->x;
+            undoStack->push(new LayerAttributeCommand(layerContext.layer->uuid.c_str(), QString::fromStdString(layerContext.panel->uuid),
+                                                         LayerAttributeType::PosX,
+                                                         oldValue, value, this));
         }
     }
 }
@@ -3916,10 +3962,10 @@ void MainWindow::onLayerPosYChanged(double value) {
         LayerContext layerContext = findLayerByUuid(data.toString().toStdString());
 
         if (layerContext.isValid()) {
-            layerContext.scene->dirty = true;
-            updateWindowTitle(true);
-            layerContext.layer->y = value;
-            paint->getPaintArea()->updateLayer(*layerContext.layer);
+            double oldValue = layerContext.layer->y;
+            undoStack->push(new LayerAttributeCommand(layerContext.layer->uuid.c_str(), QString::fromStdString(layerContext.panel->uuid),
+                                                         LayerAttributeType::PosY,
+                                                         oldValue, value, this));
         }
     }
 }
@@ -3935,10 +3981,10 @@ void MainWindow::onLayerScaleChanged(double value) {
         LayerContext layerContext = findLayerByUuid(data.toString().toStdString());
 
         if (layerContext.isValid()) {
-            layerContext.scene->dirty = true;
-            updateWindowTitle(true);
-            layerContext.layer->scale = value;
-            paint->getPaintArea()->updateLayer(*layerContext.layer);
+            double oldValue = layerContext.layer->scale;
+            undoStack->push(new LayerAttributeCommand(layerContext.layer->uuid.c_str(), QString::fromStdString(layerContext.panel->uuid),
+                                                         LayerAttributeType::Scale,
+                                                         oldValue, value, this));
         }
     }
 }
@@ -8053,3 +8099,71 @@ void MainWindow::setLayerImage(const QString& layerUuid, const QString& panelUui
         populateLayerList(panelContext.panel);
     }
 }
+
+void MainWindow::setLayerAttribute(const QString& layerUuid, const QString& panelUuid,
+                                  MainWindow::LayerAttributeType attrType,
+                                  const std::variant<int, double, GameFusion::BlendMode>& value) {
+    PanelContext panelContext = findPanelByUuid(panelUuid.toStdString());
+    if (!panelContext.isValid()) return;
+
+    auto it = std::find_if(panelContext.panel->layers.begin(), panelContext.panel->layers.end(),
+                           [&](const GameFusion::Layer& l) { return l.uuid == layerUuid.toStdString(); });
+    if (it != panelContext.panel->layers.end()) {
+        panelContext.scene->dirty = true;
+        updateWindowTitle(true);
+        switch (attrType) {
+            case LayerAttributeType::Rotation:
+                it->rotation = std::get<int>(value);
+                ui->spinBox_layerRotation->blockSignals(true);
+                ui->spinBox_layerRotation->setValue(it->rotation);
+                ui->spinBox_layerRotation->blockSignals(false);
+                break;
+            case LayerAttributeType::PosX:
+                it->x = std::get<double>(value);
+                ui->doubleSpinBox_layerPosX->blockSignals(true);
+                ui->doubleSpinBox_layerPosX->setValue(it->x);
+                ui->doubleSpinBox_layerPosX->blockSignals(false);
+                break;
+            case LayerAttributeType::PosY:
+                it->y = std::get<double>(value);
+                ui->doubleSpinBox_layerPosY->blockSignals(true);
+                ui->doubleSpinBox_layerPosY->setValue(it->y);
+                ui->doubleSpinBox_layerPosY->blockSignals(false);
+                break;
+            case LayerAttributeType::Scale:
+                it->scale = std::get<double>(value);
+                ui->doubleSpinBox_layerScale->blockSignals(true);
+                ui->doubleSpinBox_layerScale->setValue(it->scale/1.);
+                ui->doubleSpinBox_layerScale->blockSignals(false);
+                break;
+            case LayerAttributeType::BlendMode:
+                it->blendMode = std::get<GameFusion::BlendMode>(value);
+                break;
+        }
+        paint->getPaintArea()->updateLayer(*it);
+        //populateLayerList(panelContext.panel);
+        //paint->getPaintArea()->invalidateAllLayers();
+        paint->getPaintArea()->updateCompositeImage();
+    }
+}
+
+bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
+    if (event->type() == QEvent::KeyPress && (obj == ui->spinBox_layerRotation ||
+                                              obj == ui->doubleSpinBox_layerPosX ||
+                                              obj == ui->doubleSpinBox_layerPosY ||
+                                              obj == ui->doubleSpinBox_layerScale)) {
+        QKeyEvent *keyEvent = static_cast<QKeyEvent*>(event);
+        QKeySequence pressed(keyEvent->modifiers() | keyEvent->key());
+
+        if (pressed == QKeySequence::Undo) {
+            undoAction->trigger();   // Ctrl+Z ou cmd+Z sur Mac
+            return true;             // eat event
+        }
+        if (pressed == QKeySequence::Redo) {
+            redoAction->trigger();   // Ctrl+Y / Ctrl+Shift+Z selon plateforme
+            return true;
+        }
+    }
+    return QMainWindow::eventFilter(obj, event);
+}
+
