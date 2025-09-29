@@ -522,6 +522,49 @@ private:
     MainWindow* m_mainWindow;
 };
 
+class LayerAddCommand : public QUndoCommand {
+public:
+    LayerAddCommand(const GameFusion::Layer& layer, const QString& panelUuid, MainWindow* mainWindow)
+        : m_layer(layer), m_panelUuid(panelUuid), m_mainWindow(mainWindow) {
+        setText("Add Layer");
+    }
+
+    void undo() override {
+        m_mainWindow->removeLayer(QString::fromStdString(m_layer.uuid), m_panelUuid);
+    }
+
+    void redo() override {
+        m_mainWindow->addLayer(m_layer, m_panelUuid);
+    }
+
+private:
+    GameFusion::Layer m_layer;
+    QString m_panelUuid;
+    MainWindow* m_mainWindow;
+};
+
+class LayerDeleteCommand : public QUndoCommand {
+public:
+    LayerDeleteCommand(const GameFusion::Layer& layer, int index, const QString& panelUuid, MainWindow* mainWindow)
+        : m_layer(layer), m_index(index), m_panelUuid(panelUuid), m_mainWindow(mainWindow) {
+        setText("Delete Layer");
+    }
+
+    void undo() override {
+        m_mainWindow->addLayer(m_layer, m_panelUuid);
+    }
+
+    void redo() override {
+        m_mainWindow->removeLayer(QString::fromStdString(m_layer.uuid), m_panelUuid);
+    }
+
+private:
+    GameFusion::Layer m_layer;
+    int m_index;
+    QString m_panelUuid;
+    MainWindow* m_mainWindow;
+};
+
 class CompositeUndoCommand : public QUndoCommand {
 public:
     CompositeUndoCommand(const QString& text) {
@@ -3616,64 +3659,60 @@ void MainWindow::onLayerAdd() {
     if (!currentPanel)
         return;
 
-    PanelContext panelContext = findPanelByUuid(currentPanel->uuid);
-    if(panelContext.isValid()){
+    GameFusion::Layer layer;
+    layer.name = "Layer " + std::to_string(currentPanel->layers.size() + 1);
+    undoStack->push(new LayerAddCommand(layer, QString::fromStdString(currentPanel->uuid), this));
 
-        GameFusion::Layer layer;
-        layer.name = "Layer " + std::to_string(currentPanel->layers.size() + 1);
-        currentPanel->layers.insert(currentPanel->layers.begin(), layer);
+    return;
 
-        panelContext.scene->dirty = true;
-        updateWindowTitle(true);
 
-        long panelStartTime = panelContext.shot->startTime + currentPanel->startTime;
-        float fps = projectJson["fps"].toDouble();
-
-        paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, panelContext.shot->cameraFrames);
-
-        // Update Layer Panel
-        populateLayerList(panelContext.panel);
-    }
-
-    paint->getPaintArea()->invalidateAllLayers();
-    paint->getPaintArea()->updateCompositeImage();
 }
 
 void MainWindow::onLayerDelete() {
-    int erasedCount(0);
     QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
-    for(auto selected: selectedLayers) {
+    if (selectedLayers.isEmpty()) return;
+
+    if (!currentPanel) return;
+
+    //CompositeUndoCommand* composite = new CompositeUndoCommand("Delete Layers");
+
+    std::vector<std::pair<GameFusion::Layer, int>> deletedLayers;
+    for (const auto& selected : selectedLayers) {
         std::string toDeleteUuid = selected->data(Qt::UserRole).toString().toStdString();
 
         LayerContext layerContext = findLayerByUuid(toDeleteUuid.c_str());
-        if(layerContext.isValid()){
-            layerContext.scene->dirty = true;
-            updateWindowTitle(true);
-            int layerIndex = 0;
-            for(auto layer: layerContext.panel->layers){
-                if(layer.uuid == toDeleteUuid){
-                    layerContext.panel->layers.erase(layerContext.panel->layers.begin() + layerIndex);
-                    layerContext.scene->dirty = true;
-                    updateWindowTitle(true);
-                    erasedCount ++;
-                    populateLayerList(layerContext.panel);
-                    break;
-                }
-                layerIndex++;
+        if (!layerContext.isValid()) continue;
+
+        int layerIndex = 0;
+        for (auto it = layerContext.panel->layers.begin(); it != layerContext.panel->layers.end(); ++it) {
+            if (it->uuid == toDeleteUuid) {
+                //deletedLayers.emplace_back(*it, layerIndex);
+                //layerContext.panel->layers.erase(it);
+                //composite->addCommand(new LayerDeleteCommand(*it, layerIndex, QString::fromStdString(currentPanel->uuid), this));
+                undoStack->push(new LayerDeleteCommand(*it, layerIndex, QString::fromStdString(currentPanel->uuid), this));
+                return;
             }
+            layerIndex++;
         }
     }
+/*
+    if (!deletedLayers.empty()) {
+        undoStack->push(composite);
 
-    if(erasedCount > 0){
         PanelContext panelContext = findPanelByUuid(currentPanel->uuid);
-        if(panelContext.isValid()){
-            long panelStartTime = panelContext.shot->startTime + currentPanel->startTime;
+        if (panelContext.isValid()) {
+            panelContext.scene->dirty = true;
+            updateWindowTitle(true);
+            long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
             float fps = projectJson["fps"].toDouble();
-            paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, panelContext.shot->cameraFrames);
+            paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraFrames);
+            populateLayerList(panelContext.panel);
         }
-    }
 
-    paint->getPaintArea()->updateCompositeImage();
+        paint->getPaintArea()->invalidateAllLayers();
+        paint->getPaintArea()->updateCompositeImage();
+    }
+    */
 }
 
 void MainWindow::onLayerFX() {
@@ -7884,4 +7923,50 @@ void MainWindow::applyLayerOrder(const std::vector<QString>& orderUuids, const Q
     paint->getPaintArea()->invalidateAllLayers();
     paint->getPaintArea()->updateCompositeImage();
     updateLayerListWidget(orderUuids); // Sync UI
+}
+
+void MainWindow::addLayer(const GameFusion::Layer& layer, const QString& panelUuid) {
+    PanelContext panelContext = findPanelByUuid(panelUuid.toStdString());
+    if (!panelContext.isValid()) return;
+
+    panelContext.panel->layers.insert(panelContext.panel->layers.begin(), layer);
+
+    panelContext.scene->dirty = true;
+    updateWindowTitle(true);
+
+    long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
+    float fps = projectJson["fps"].toDouble();
+
+    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraFrames);
+
+    // Update Layer Panel
+    populateLayerList(panelContext.panel);
+
+    paint->getPaintArea()->invalidateAllLayers();
+    paint->getPaintArea()->updateCompositeImage();
+}
+
+void MainWindow::removeLayer(const QString& layerUuid, const QString& panelUuid) {
+    PanelContext panelContext = findPanelByUuid(panelUuid.toStdString());
+    if (!panelContext.isValid()) return;
+
+    auto it = std::find_if(panelContext.panel->layers.begin(), panelContext.panel->layers.end(),
+                           [&](const GameFusion::Layer& l) { return l.uuid == layerUuid.toStdString(); });
+    if (it != panelContext.panel->layers.end()) {
+        panelContext.panel->layers.erase(it);
+    }
+
+    panelContext.scene->dirty = true;
+    updateWindowTitle(true);
+
+    long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
+    float fps = projectJson["fps"].toDouble();
+
+    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraFrames);
+
+    // Update Layer Panel
+    populateLayerList(panelContext.panel);
+
+    paint->getPaintArea()->invalidateAllLayers();
+    paint->getPaintArea()->updateCompositeImage();
 }

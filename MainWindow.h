@@ -302,6 +302,8 @@ public slots:
     void onGroupedKeyframeUpdated(const QString& uuid1, double newTimeMs1, const QVariant& value1,
                                   const QString& uuid2, double newTimeMs2, const QVariant& value2);
     // --- Layers re-ordering
+    void addLayer(const GameFusion::Layer& layer, const QString& panelUuid);
+    void removeLayer(const QString& layerUuid, const QString& panelUuid);
     void applyLayerOrder(const std::vector<QString>& orderUuids, const QString& panelUuid);
     std::vector<QString> getCurrentLayerUuidOrder(const QString& panelUuid) ;
     void updateLayerListWidget(const std::vector<QString>& orderUuids);
