@@ -565,6 +565,30 @@ private:
     MainWindow* m_mainWindow;
 };
 
+
+class LayerFXCommand : public QUndoCommand {
+public:
+    LayerFXCommand(const QString& layerUuid, const QString& panelUuid, const std::string& oldFX, const std::string& newFX, MainWindow* mainWindow)
+        : m_layerUuid(layerUuid), m_panelUuid(panelUuid), m_oldFX(oldFX), m_newFX(newFX), m_mainWindow(mainWindow) {
+        setText("Change Layer FX");
+    }
+
+    void undo() override {
+        m_mainWindow->setLayerFX(m_layerUuid, m_panelUuid, m_oldFX);
+    }
+
+    void redo() override {
+        m_mainWindow->setLayerFX(m_layerUuid, m_panelUuid, m_newFX);
+    }
+
+private:
+    QString m_layerUuid;
+    QString m_panelUuid;
+    std::string m_oldFX;
+    std::string m_newFX;
+    MainWindow* m_mainWindow;
+};
+
 class CompositeUndoCommand : public QUndoCommand {
 public:
     CompositeUndoCommand(const QString& text) {
@@ -3664,8 +3688,6 @@ void MainWindow::onLayerAdd() {
     undoStack->push(new LayerAddCommand(layer, QString::fromStdString(currentPanel->uuid), this));
 
     return;
-
-
 }
 
 void MainWindow::onLayerDelete() {
@@ -3718,22 +3740,28 @@ void MainWindow::onLayerDelete() {
 void MainWindow::onLayerFX() {
 
     QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
-    for(auto selected: selectedLayers) {
-        std::string toDeleteUuid = selected->data(Qt::UserRole).toString().toStdString();
+    if (selectedLayers.isEmpty()) return;
 
-        LayerContext layerContext = findLayerByUuid(toDeleteUuid.c_str());
-        if(layerContext.isValid()){
-            if(layerContext.layer->fx.empty())
-                layerContext.layer->fx = "blur";
-            else
-                layerContext.layer->fx.clear();
-            layerContext.scene->dirty = true;
-            updateWindowTitle(true);
-            paint->getPaintArea()->updateLayer(*layerContext.layer);
-        }
+    if (!currentPanel) return;
+
+    //CompositeUndoCommand* composite = new CompositeUndoCommand("Change Layer FX");
+
+    for (const auto& selected : selectedLayers) {
+        QString layerUuid = selected->data(Qt::UserRole).toString();
+        LayerContext layerContext = findLayerByUuid(layerUuid.toStdString().c_str());
+        if (!layerContext.isValid()) continue;
+
+        std::string oldFX = layerContext.layer->fx;
+        std::string newFX = layerContext.layer->fx.empty() ? "blur" : "";
+
+        //composite->addCommand(new LayerFXCommand(layerUuid, QString::fromStdString(currentPanel->uuid), oldFX, newFX, this));
+        undoStack->push(new LayerFXCommand(layerUuid, QString::fromStdString(currentPanel->uuid), oldFX, newFX, this));
+        return;
     }
 
-    paint->getPaintArea()->updateCompositeImage();
+    //if (composite->childCount() > 0) {
+    //    undoStack->push(composite);
+    //}
 }
 
 void MainWindow::onLayerMoveUp() {
@@ -7969,4 +7997,21 @@ void MainWindow::removeLayer(const QString& layerUuid, const QString& panelUuid)
 
     paint->getPaintArea()->invalidateAllLayers();
     paint->getPaintArea()->updateCompositeImage();
+}
+
+void MainWindow::setLayerFX(const QString& layerUuid, const QString& panelUuid, const std::string& fx) {
+    PanelContext panelContext = findPanelByUuid(panelUuid.toStdString());
+    if (!panelContext.isValid()) return;
+
+    auto it = std::find_if(panelContext.panel->layers.begin(), panelContext.panel->layers.end(),
+                           [&](const GameFusion::Layer& l) { return l.uuid == layerUuid.toStdString(); });
+    if (it != panelContext.panel->layers.end()) {
+        it->fx = fx;
+        panelContext.scene->dirty = true;
+        updateWindowTitle(true);
+        paint->getPaintArea()->updateLayer(*it);
+        populateLayerList(panelContext.panel);
+        paint->getPaintArea()->invalidateAllLayers();
+        paint->getPaintArea()->updateCompositeImage();
+    }
 }

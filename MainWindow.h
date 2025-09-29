@@ -307,6 +307,7 @@ public slots:
     void applyLayerOrder(const std::vector<QString>& orderUuids, const QString& panelUuid);
     std::vector<QString> getCurrentLayerUuidOrder(const QString& panelUuid) ;
     void updateLayerListWidget(const std::vector<QString>& orderUuids);
+    void setLayerFX(const QString& layerUuid, const QString& panelUuid, const std::string& fx);
 
     // Auto save and related timer functions
     void onCheckDirtyTimer();
