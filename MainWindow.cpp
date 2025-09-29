@@ -3569,6 +3569,7 @@ void MainWindow::onLayerLoadImage() {
         return; //
     }
 
+    paint->getPaintArea()->updateCompositeImage();
 }
 
 void MainWindow::onLayerOpacity(int value) {
@@ -3610,6 +3611,9 @@ void MainWindow::onLayerAdd() {
         // Update Layer Panel
         populateLayerList(panelContext.panel);
     }
+
+    paint->getPaintArea()->invalidateAllLayers();
+    paint->getPaintArea()->updateCompositeImage();
 }
 
 void MainWindow::onLayerDelete() {
@@ -3645,6 +3649,8 @@ void MainWindow::onLayerDelete() {
             paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, panelContext.shot->cameraFrames);
         }
     }
+
+    paint->getPaintArea()->updateCompositeImage();
 }
 
 void MainWindow::onLayerFX() {
@@ -3655,54 +3661,92 @@ void MainWindow::onLayerFX() {
 
         LayerContext layerContext = findLayerByUuid(toDeleteUuid.c_str());
         if(layerContext.isValid()){
-            layerContext.layer->fx = "blur";
+            if(layerContext.layer->fx.empty())
+                layerContext.layer->fx = "blur";
+            else
+                layerContext.layer->fx.clear();
             layerContext.scene->dirty = true;
             updateWindowTitle(true);
             paint->getPaintArea()->updateLayer(*layerContext.layer);
         }
     }
+
+    paint->getPaintArea()->updateCompositeImage();
 }
 
 void MainWindow::onLayerMoveUp() {
-    //int index = ui->layerListWidget->currentIndex();
     int index = ui->layerListWidget->currentRow();
+    if (index <= 0) return; // Cannot move up if at top
 
-    if (index > 0) {
-        QString text = ui->comboBox_layerBlendMode->itemText(index);
-        QVariant data = ui->comboBox_layerBlendMode->itemData(index);
-        ui->comboBox_layerBlendMode->removeItem(index);
-        ui->comboBox_layerBlendMode->insertItem(index - 1, text, data);
-        ui->comboBox_layerBlendMode->setCurrentIndex(index - 1);
-        // Optional: emit or handle reordering logic callback here
+    QListWidgetItem* item = ui->layerListWidget->takeItem(index);
+    ui->layerListWidget->insertItem(index - 1, item);
+    ui->layerListWidget->setCurrentItem(item);
 
-        LayerContext layerContext = findLayerByUuid(data.toString().toStdString());
-        if(layerContext.isValid()){
-            layerContext.scene->dirty = true;
-            updateWindowTitle(true);
-            paint->getPaintArea()->updateLayer(*layerContext.layer);
+    // Sync layer order from QListWidget to panel->layers
+    if (!currentPanel) return;
+
+    std::vector<GameFusion::Layer> reordered;
+    QString uuid;
+    for (int i = 0; i < ui->layerListWidget->count(); ++i) {
+        QListWidgetItem* widgetItem = ui->layerListWidget->item(i);
+        uuid = widgetItem->data(Qt::UserRole).toString();
+        auto it = std::find_if(currentPanel->layers.begin(), currentPanel->layers.end(),
+        [&](const GameFusion::Layer& l) { return l.uuid == uuid.toStdString(); });
+        if (it != currentPanel->layers.end()) {
+            reordered.push_back(*it);
         }
     }
+
+    currentPanel->layers = std::move(reordered);
+
+    PanelContext panelCtx = findPanelByUuid(currentPanel->uuid);
+    if (panelCtx.isValid()) {
+        panelCtx.scene->dirty = true;
+        updateWindowTitle(true);
+        long panelStartTime = panelCtx.shot->startTime + panelCtx.panel->startTime;
+        float fps = projectJson["fps"].toDouble();
+        paint->getPaintArea()->setPanel(*panelCtx.panel, panelStartTime, fps, panelCtx.shot->cameraFrames);
+    }
+    paint->getPaintArea()->invalidateAllLayers();
+    paint->getPaintArea()->updateCompositeImage();
 }
 
 void MainWindow::onLayerMoveDown() {
-    //int index = ui->comboBox_layerBlendMode->currentIndex();
     int index = ui->layerListWidget->currentRow();
-    int count = ui->comboBox_layerBlendMode->count();
-    if (index < count - 1) {
-        QString text = ui->comboBox_layerBlendMode->itemText(index);
-        QVariant data = ui->comboBox_layerBlendMode->itemData(index);
-        ui->comboBox_layerBlendMode->removeItem(index);
-        ui->comboBox_layerBlendMode->insertItem(index + 1, text, data);
-        ui->comboBox_layerBlendMode->setCurrentIndex(index + 1);
-        // Optional: emit or handle reordering logic callback here
+    int count = ui->layerListWidget->count();
 
-        LayerContext layerContext = findLayerByUuid(data.toString().toStdString());
-        if(layerContext.isValid()){
-            layerContext.scene->dirty = true;
-            updateWindowTitle(true);
-            paint->getPaintArea()->updateLayer(*layerContext.layer);
+    if (index < 0 || index >= count - 1) return; // Cannot move down if at bottom or no selection
+
+    QListWidgetItem* item = ui->layerListWidget->takeItem(index);
+    ui->layerListWidget->insertItem(index + 1, item);
+    ui->layerListWidget->setCurrentItem(item);
+
+    // Sync layer order from QListWidget to panel->layers
+    if (!currentPanel) return;
+
+    std::vector<GameFusion::Layer> reordered;
+    QString uuid;
+    for (int i = 0; i < ui->layerListWidget->count(); ++i) {
+        QListWidgetItem* widgetItem = ui->layerListWidget->item(i);
+        uuid = widgetItem->data(Qt::UserRole).toString();
+        auto it = std::find_if(currentPanel->layers.begin(), currentPanel->layers.end(),
+        [&](const GameFusion::Layer& l) { return l.uuid == uuid.toStdString(); });
+        if (it != currentPanel->layers.end()) {
+            reordered.push_back(*it);
         }
     }
+
+    currentPanel->layers = std::move(reordered);
+    PanelContext panelCtx = findPanelByUuid(currentPanel->uuid);
+    if (panelCtx.isValid()) {
+        panelCtx.scene->dirty = true;
+        updateWindowTitle(true);
+        long panelStartTime = panelCtx.shot->startTime + panelCtx.panel->startTime;
+        float fps = projectJson["fps"].toDouble();
+        paint->getPaintArea()->setPanel(*panelCtx.panel, panelStartTime, fps, panelCtx.shot->cameraFrames);
+    }
+    paint->getPaintArea()->invalidateAllLayers();
+    paint->getPaintArea()->updateCompositeImage();
 }
 
 void MainWindow::onLayerReordered(const QModelIndex &parent,
@@ -3714,9 +3758,10 @@ void MainWindow::onLayerReordered(const QModelIndex &parent,
 
     std::vector<GameFusion::Layer> reordered;
 
+    QString uuid;
     for (int i = 0; i < ui->layerListWidget->count(); ++i) {
         QListWidgetItem* item = ui->layerListWidget->item(i);
-        QString uuid = item->data(Qt::UserRole).toString();
+        uuid = item->data(Qt::UserRole).toString();
         auto it = std::find_if(currentPanel->layers.begin(), currentPanel->layers.end(),
                                [&](const GameFusion::Layer& l) { return l.uuid == uuid.toStdString(); });
         if (it != currentPanel->layers.end()) {
@@ -3726,12 +3771,17 @@ void MainWindow::onLayerReordered(const QModelIndex &parent,
 
     currentPanel->layers = std::move(reordered);
 
-    LayerContext layerContext = findLayerByUuid(currentPanel->uuid);
-    if(layerContext.isValid()){
-        layerContext.scene->dirty = true;
+    PanelContext panelCtx = findPanelByUuid(currentPanel->uuid);
+    if(panelCtx.isValid()){
+        panelCtx.scene->dirty = true;
         updateWindowTitle(true);
-        paint->getPaintArea()->updateLayer(*layerContext.layer);
+
+        long panelStartTime = panelCtx.shot->startTime + panelCtx.panel->startTime;
+        float fps = projectJson["fps"].toDouble();
+
+        paint->getPaintArea()->setPanel(*panelCtx.panel, panelStartTime, fps, panelCtx.shot->cameraFrames);
     }
+
 }
 
 
