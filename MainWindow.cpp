@@ -498,6 +498,29 @@ private:
     double m_corsorTime;
 };
 
+class LayerReorderCommand : public QUndoCommand {
+public:
+    LayerReorderCommand(const std::vector<QString>& oldUuidOrder,
+                        const std::vector<QString>& newUuidOrder,
+                        const QString& panelUuid, MainWindow* mainWindow)
+        : m_oldUuidOrder(oldUuidOrder), m_newUuidOrder(newUuidOrder), m_panelUuid(panelUuid), m_mainWindow(mainWindow) {
+        setText("Reorder Layers");
+    }
+
+    void undo() override {
+        m_mainWindow->applyLayerOrder(m_oldUuidOrder, m_panelUuid);
+    }
+
+    void redo() override {
+        m_mainWindow->applyLayerOrder(m_newUuidOrder, m_panelUuid);
+    }
+
+private:
+    std::vector<QString> m_oldUuidOrder;
+    std::vector<QString> m_newUuidOrder;
+    QString m_panelUuid;
+    MainWindow* m_mainWindow;
+};
 
 class CompositeUndoCommand : public QUndoCommand {
 public:
@@ -3678,6 +3701,8 @@ void MainWindow::onLayerMoveUp() {
     int index = ui->layerListWidget->currentRow();
     if (index <= 0) return; // Cannot move up if at top
 
+    std::vector<QString> oldUuidOrder = getCurrentLayerUuidOrder(currentPanel->uuid.c_str());
+
     QListWidgetItem* item = ui->layerListWidget->takeItem(index);
     ui->layerListWidget->insertItem(index - 1, item);
     ui->layerListWidget->setCurrentItem(item);
@@ -3685,37 +3710,32 @@ void MainWindow::onLayerMoveUp() {
     // Sync layer order from QListWidget to panel->layers
     if (!currentPanel) return;
 
-    std::vector<GameFusion::Layer> reordered;
-    QString uuid;
+    std::vector<QString> newUuidOrder;
     for (int i = 0; i < ui->layerListWidget->count(); ++i) {
         QListWidgetItem* widgetItem = ui->layerListWidget->item(i);
-        uuid = widgetItem->data(Qt::UserRole).toString();
-        auto it = std::find_if(currentPanel->layers.begin(), currentPanel->layers.end(),
-        [&](const GameFusion::Layer& l) { return l.uuid == uuid.toStdString(); });
-        if (it != currentPanel->layers.end()) {
-            reordered.push_back(*it);
-        }
+        QString uuid = widgetItem->data(Qt::UserRole).toString();
+        newUuidOrder.push_back(uuid);
     }
 
-    currentPanel->layers = std::move(reordered);
+     undoStack->push(new LayerReorderCommand(oldUuidOrder, newUuidOrder, currentPanel->uuid.c_str(), this));
+}
 
-    PanelContext panelCtx = findPanelByUuid(currentPanel->uuid);
-    if (panelCtx.isValid()) {
-        panelCtx.scene->dirty = true;
-        updateWindowTitle(true);
-        long panelStartTime = panelCtx.shot->startTime + panelCtx.panel->startTime;
-        float fps = projectJson["fps"].toDouble();
-        paint->getPaintArea()->setPanel(*panelCtx.panel, panelStartTime, fps, panelCtx.shot->cameraFrames);
+std::vector<QString> MainWindow::getCurrentLayerUuidOrder(const QString& panelUuid)  {
+    PanelContext panelCtx = findPanelByUuid(panelUuid.toStdString());
+    if (!panelCtx.isValid()) return {};
+    std::vector<QString> uuidOrder;
+    for (const auto& layer : panelCtx.panel->layers) {
+        uuidOrder.push_back(QString::fromStdString(layer.uuid));
     }
-    paint->getPaintArea()->invalidateAllLayers();
-    paint->getPaintArea()->updateCompositeImage();
+    return uuidOrder;
 }
 
 void MainWindow::onLayerMoveDown() {
     int index = ui->layerListWidget->currentRow();
     int count = ui->layerListWidget->count();
-
     if (index < 0 || index >= count - 1) return; // Cannot move down if at bottom or no selection
+
+    std::vector<QString> oldUuidOrder = getCurrentLayerUuidOrder(currentPanel->uuid.c_str());
 
     QListWidgetItem* item = ui->layerListWidget->takeItem(index);
     ui->layerListWidget->insertItem(index + 1, item);
@@ -3724,29 +3744,14 @@ void MainWindow::onLayerMoveDown() {
     // Sync layer order from QListWidget to panel->layers
     if (!currentPanel) return;
 
-    std::vector<GameFusion::Layer> reordered;
-    QString uuid;
+    std::vector<QString> newUuidOrder;
     for (int i = 0; i < ui->layerListWidget->count(); ++i) {
         QListWidgetItem* widgetItem = ui->layerListWidget->item(i);
-        uuid = widgetItem->data(Qt::UserRole).toString();
-        auto it = std::find_if(currentPanel->layers.begin(), currentPanel->layers.end(),
-        [&](const GameFusion::Layer& l) { return l.uuid == uuid.toStdString(); });
-        if (it != currentPanel->layers.end()) {
-            reordered.push_back(*it);
-        }
+        QString uuid = widgetItem->data(Qt::UserRole).toString();
+        newUuidOrder.push_back(uuid);
     }
 
-    currentPanel->layers = std::move(reordered);
-    PanelContext panelCtx = findPanelByUuid(currentPanel->uuid);
-    if (panelCtx.isValid()) {
-        panelCtx.scene->dirty = true;
-        updateWindowTitle(true);
-        long panelStartTime = panelCtx.shot->startTime + panelCtx.panel->startTime;
-        float fps = projectJson["fps"].toDouble();
-        paint->getPaintArea()->setPanel(*panelCtx.panel, panelStartTime, fps, panelCtx.shot->cameraFrames);
-    }
-    paint->getPaintArea()->invalidateAllLayers();
-    paint->getPaintArea()->updateCompositeImage();
+    undoStack->push(new LayerReorderCommand(oldUuidOrder, newUuidOrder, currentPanel->uuid.c_str(), this));
 }
 
 void MainWindow::onLayerReordered(const QModelIndex &parent,
@@ -3755,6 +3760,8 @@ void MainWindow::onLayerReordered(const QModelIndex &parent,
 {
     // Sync layer order from QListWidget to panel->layers
     if (!currentPanel) return;
+
+    std::vector<QString> oldUuidOrder = getCurrentLayerUuidOrder(currentPanel->uuid.c_str());
 
     std::vector<GameFusion::Layer> reordered;
 
@@ -3771,17 +3778,12 @@ void MainWindow::onLayerReordered(const QModelIndex &parent,
 
     currentPanel->layers = std::move(reordered);
 
-    PanelContext panelCtx = findPanelByUuid(currentPanel->uuid);
-    if(panelCtx.isValid()){
-        panelCtx.scene->dirty = true;
-        updateWindowTitle(true);
-
-        long panelStartTime = panelCtx.shot->startTime + panelCtx.panel->startTime;
-        float fps = projectJson["fps"].toDouble();
-
-        paint->getPaintArea()->setPanel(*panelCtx.panel, panelStartTime, fps, panelCtx.shot->cameraFrames);
+    std::vector<QString> newUuidOrder;
+    for (const auto& layer : currentPanel->layers) {
+        newUuidOrder.push_back(QString::fromStdString(layer.uuid));
     }
 
+    undoStack->push(new LayerReorderCommand(oldUuidOrder, newUuidOrder, currentPanel->uuid.c_str(), this));
 }
 
 
@@ -7830,4 +7832,56 @@ void MainWindow::deleteKeyframe(const QString& kfUuid, double time, const QVaria
     layerCtx.scene->setDirty(true);
     paint->getPaintArea()->updateLayer(*layerCtx.layer);
     updateKeyframeDisplay();
+}
+
+void MainWindow::updateLayerListWidget(const std::vector<QString>& orderUuids) {
+    ui->layerListWidget->blockSignals(true);
+
+    QMap<QString, QListWidgetItem*> uuidToItem;
+    for (int i = 0; i < ui->layerListWidget->count(); ++i) {
+        QListWidgetItem* item = ui->layerListWidget->item(i);
+        QString uuid = item->data(Qt::UserRole).toString();
+        uuidToItem[uuid] = item;
+    }
+
+    int insertIndex = 0;
+    for (const QString& uuid : orderUuids) {
+        if (uuidToItem.contains(uuid)) {
+            QListWidgetItem* item = uuidToItem[uuid];
+            int currentIndex = ui->layerListWidget->row(item);
+            if (currentIndex != insertIndex) {
+                ui->layerListWidget->takeItem(currentIndex);
+                ui->layerListWidget->insertItem(insertIndex, item);
+            }
+            insertIndex++;
+        }
+    }
+
+    ui->layerListWidget->blockSignals(false);
+}
+
+void MainWindow::applyLayerOrder(const std::vector<QString>& orderUuids, const QString& panelUuid) {
+    PanelContext panelCtx = findPanelByUuid(panelUuid.toStdString());
+    if (!panelCtx.isValid()) return;
+
+    std::vector<GameFusion::Layer> reordered;
+    for (const QString& uuid : orderUuids) {
+        auto it = std::find_if(panelCtx.panel->layers.begin(), panelCtx.panel->layers.end(),
+                               [&](const GameFusion::Layer& l) { return l.uuid == uuid.toStdString(); });
+        if (it != panelCtx.panel->layers.end()) {
+            reordered.push_back(*it);
+        }
+    }
+
+    panelCtx.panel->layers = reordered;
+    panelCtx.scene->dirty = true;
+    updateWindowTitle(true);
+
+    long panelStartTime = panelCtx.shot->startTime + panelCtx.panel->startTime;
+    float fps = projectJson["fps"].toDouble();
+
+    paint->getPaintArea()->setPanel(*panelCtx.panel, panelStartTime, fps, panelCtx.shot->cameraFrames);
+    paint->getPaintArea()->invalidateAllLayers();
+    paint->getPaintArea()->updateCompositeImage();
+    updateLayerListWidget(orderUuids); // Sync UI
 }

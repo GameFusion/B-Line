@@ -301,7 +301,10 @@ public slots:
     void onKeyframeUpdated(const QString& kfUuid, double newTimeMs, const QVariant& newValue);
     void onGroupedKeyframeUpdated(const QString& uuid1, double newTimeMs1, const QVariant& value1,
                                   const QString& uuid2, double newTimeMs2, const QVariant& value2);
-
+    // --- Layers re-ordering
+    void applyLayerOrder(const std::vector<QString>& orderUuids, const QString& panelUuid);
+    std::vector<QString> getCurrentLayerUuidOrder(const QString& panelUuid) ;
+    void updateLayerListWidget(const std::vector<QString>& orderUuids);
 
     // Auto save and related timer functions
     void onCheckDirtyTimer();
@@ -332,6 +335,8 @@ protected:
     void updateWindowTitle(bool isModified);
 
     QVariantMap getKeyframeValueMap(const KeyframeContext& keyframeContext);
+
+
 
 protected:
 	Ui::MainWindowBoarder *ui;
