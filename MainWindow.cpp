@@ -470,6 +470,35 @@ private:
     MainWindow* m_mainWindow;
 };
 
+
+// Custom undo command for keyframe add
+class KeyframeAddCommand : public QUndoCommand {
+public:
+    KeyframeAddCommand(const QString& kfUuid, double time, const QVariantMap& value, const QString& layerUuid, const QString& panelUuid, const QString& shotUuid, MainWindow* mainWindow, double cursorTime)
+        : m_kfUuid(kfUuid), m_time(time), m_value(value), m_layerUuid(layerUuid), m_panelUuid(panelUuid), m_shotUuid(shotUuid), m_mainWindow(mainWindow), m_corsorTime(cursorTime) {
+        setText("Add Keyframe");
+    }
+
+    void undo() override {
+        m_mainWindow->deleteKeyframe(m_kfUuid, m_time, m_value, m_layerUuid, m_panelUuid, m_shotUuid, m_corsorTime); // todo implement in MainWindow
+    }
+
+    void redo() override {
+        m_mainWindow->addKeyframe(m_kfUuid, m_time, m_value, m_layerUuid, m_panelUuid, m_shotUuid, m_corsorTime); // todo implement in MainWindow
+    }
+
+private:
+    QString m_kfUuid;
+    double m_time;
+    QVariantMap m_value;
+    QString m_layerUuid;
+    QString m_panelUuid;
+    QString m_shotUuid;
+    MainWindow* m_mainWindow;
+    double m_corsorTime;
+};
+
+
 class CompositeUndoCommand : public QUndoCommand {
 public:
     CompositeUndoCommand(const QString& text) {
@@ -2502,14 +2531,14 @@ void MainWindow::updateKeyframeDisplay() {
                                     op["opacity"] = kf.opacity;
                                     op["time"] = globalFr;
                                     op["uuid"] = QString::fromStdString(kf.uuid);
-                                    op["sceneName"] = QString::fromStdString(layerCts.scene->name);
-                                    op["sceneUuid"] = QString::fromStdString(layerCts.scene->uuid);
-                                    op["shotName"] = QString::fromStdString(layerCts.shot->name);
-                                    op["shotUuid"] = QString::fromStdString(layerCts.shot->uuid);
-                                    op["panelName"] = QString::fromStdString(layerCts.panel->name);
-                                    op["panelUuid"] = QString::fromStdString(layerCts.panel->uuid);
-                                    op["layerName"] = QString::fromStdString(layerCts.layer->name);
-                                    op["layerUuid"] = QString::fromStdString(layerCts.layer->uuid);
+                                    op["sceneName"] = QString::fromStdString(scene.name);
+                                    op["sceneUuid"] = QString::fromStdString(scene.uuid);
+                                    op["shotName"] = QString::fromStdString(shot.name);
+                                    op["shotUuid"] = QString::fromStdString(shot.uuid);
+                                    op["panelName"] = QString::fromStdString(panel.name);
+                                    op["panelUuid"] = QString::fromStdString(panel.uuid);
+                                    op["layerName"] = QString::fromStdString(layer.name);
+                                    op["layerUuid"] = QString::fromStdString(layer.uuid);
                                     globalOpacityKeys[shotUuid].append({globalMs, QVariant(op)});
                                 }
                             }
@@ -7382,44 +7411,44 @@ void MainWindow::insertScene(GameFusion::Scene &newSceneInput, QString sceneRefU
 
 void MainWindow::onKeyframeAdded(const QString& attribute, double timeMs, const QVariant& value, const QString& kfUuid, const QString& shotUuid) {
 
-    LayerContext layerCtx = findLayerByUuid(selectedLayerUuid.toStdString());
-    if(!layerCtx.isValid())
+    PanelContext panelCtx = findPanelForTime(timeMs);
+    if(!panelCtx.isValid())
         return;
-    GameFusion::Layer *layer = layerCtx.layer;
-    GameFusion::Panel *panel = layerCtx.panel;
-    GameFusion::Shot  *shot  = layerCtx.shot;
 
-    qreal panelStartMs = shot->startTime + panel->startTime;
+    GameFusion::Layer *layer = nullptr;
+    for(auto &L: panelCtx.panel->layers) {
+        if(L.name == selectedLayerName.toStdString())
+        {
+            layer = &L;
+            break;
+        }
+    }
+
+    if(!layer) {
+        GameFusion::Log().info() << "Error unable to find layer "<<attribute.toUtf8().constData()<<" in panel "<<panelCtx.panel->name.c_str() << " "<<panelCtx.panel->uuid.c_str()<<"\n";
+        return;
+    }
+
+    qreal panelStartMs = panelCtx.shot->startTime + panelCtx.panel->startTime;
     qreal relativeMs = timeMs - panelStartMs;
     qreal fps = projectJson["fps"].toDouble(24.0);
     qreal keyTime = qRound((relativeMs / 1000.0) * fps);
 
     QVariantMap valueMap = value.toMap();
-    if (attribute == "motion") {
-        GameFusion::Layer::MotionKeyFrame kf;
-        kf.uuid = kfUuid.toStdString();
-        kf.time = keyTime;
-        kf.x = valueMap.value("x", kf.x).toFloat();
-        kf.y = valueMap.value("y", kf.y).toFloat();
-        kf.scale = valueMap.value("scale", kf.scale).toFloat();
-        kf.rotation = valueMap.value("rotation", kf.rotation).toFloat();
-        layer->motionKeyframes.push_back(kf);
-        std::sort(layer->motionKeyframes.begin(), layer->motionKeyframes.end(), [](const Layer::MotionKeyFrame& a, const Layer::MotionKeyFrame& b) {
-            return a.time < b.time;
-        });
-    } else if (attribute == "opacity") {
-        GameFusion::Layer::OpacityKeyFrame kf;
-        kf.uuid = kfUuid.toStdString();
-        kf.time = keyTime;
-        kf.opacity = valueMap.value("opacity", kf.opacity).toFloat();
-        layer->opacityKeyframes.push_back(kf);
-        std::sort(layer->opacityKeyframes.begin(), layer->opacityKeyframes.end(), [](const Layer::OpacityKeyFrame& a, const Layer::OpacityKeyFrame& b) {
-            return a.time < b.time;
-        });
-    }
 
-    layerCtx.scene->setDirty(true);
-    updateKeyframeDisplay();
+    valueMap["sceneName"] = panelCtx.scene->name.c_str();
+    valueMap["sceneUuid"] = panelCtx.scene->uuid.c_str();
+    valueMap["shotName"] = panelCtx.shot->name.c_str();
+    valueMap["shotUuid"] = panelCtx.shot->uuid.c_str();
+    valueMap["panelName"] = panelCtx.panel->name.c_str();
+    valueMap["panelUuid"] = panelCtx.panel->uuid.c_str();
+    valueMap["layerName"] = layer->name.c_str();
+    valueMap["layerUuid"] = layer->uuid.c_str();
+
+    double cursorTime = timeLineView->getCursorTime();
+
+    // Push undo command
+    undoStack->push(new KeyframeAddCommand(kfUuid, keyTime, valueMap, layer->uuid.c_str(), panelCtx.panel->uuid.c_str(), panelCtx.shot->uuid.c_str(), this, cursorTime));
 }
 
 void MainWindow::onKeyframeDeleted(const QString& kfUuid) {
@@ -7675,4 +7704,80 @@ void MainWindow::toggleAutoSave(bool checked) {
     } else {
         autoSaveTimer->stop(); // Stop timer if disabled
     }
+}
+
+void MainWindow::addKeyframe(const QString& kfUuid, double keyTime, const QVariantMap& value,
+                             const QString& layerUuid, const QString& panelUuid, const QString& shotUuid, double cursorTime) {
+    LayerContext layerCtx = findLayerByUuid(layerUuid.toStdString());
+    if (!layerCtx.isValid()) {
+        GameFusion::Log().error() << "Invalid layer context for UUID " << layerUuid.toUtf8().constData() << "\n";
+        return;
+    }
+    GameFusion::Layer *layer = layerCtx.layer;
+    GameFusion::Panel *panel = layerCtx.panel;
+    GameFusion::Shot *shot = layerCtx.shot;
+
+    bool isMotion = value.contains("x");
+    if (isMotion) {
+        GameFusion::Layer::MotionKeyFrame kf;
+        kf.uuid = kfUuid.toStdString();
+        kf.time = keyTime;
+        kf.x = value.value("x", 0.0f).toFloat();
+        kf.y = value.value("y", 0.0f).toFloat();
+        kf.scale = value.value("scale", 1.0f).toFloat();
+        kf.rotation = value.value("rotation", 0.0f).toFloat();
+        layer->motionKeyframes.push_back(kf);
+        std::sort(layer->motionKeyframes.begin(), layer->motionKeyframes.end(),
+                  [](const GameFusion::Layer::MotionKeyFrame& a, const GameFusion::Layer::MotionKeyFrame& b) {
+                      return a.time < b.time;
+                  });
+    } else {
+        GameFusion::Layer::OpacityKeyFrame kf;
+        kf.uuid = kfUuid.toStdString();
+        kf.time = keyTime;
+        kf.opacity = value.value("opacity", 1.0f).toFloat();
+        layer->opacityKeyframes.push_back(kf);
+        std::sort(layer->opacityKeyframes.begin(), layer->opacityKeyframes.end(),
+                  [](const GameFusion::Layer::OpacityKeyFrame& a, const GameFusion::Layer::OpacityKeyFrame& b) {
+                      return a.time < b.time;
+                  });
+    }
+
+    layerCtx.scene->setDirty(true);
+    paint->getPaintArea()->updateLayer(*layerCtx.layer);
+    updateKeyframeDisplay();
+
+}
+
+void MainWindow::deleteKeyframe(const QString& kfUuid, double time, const QVariantMap& value,
+                               const QString& layerUuid, const QString& panelUuid, const QString& shotUuid, double cursorTime) {
+    LayerContext layerCtx = findLayerByUuid(layerUuid.toStdString());
+    if (!layerCtx.isValid()) {
+        GameFusion::Log().error() << "Invalid layer context for UUID " << layerUuid.toUtf8().constData() << "\n";
+        return;
+    }
+    GameFusion::Layer *layer = layerCtx.layer;
+
+    bool isMotion = value.contains("x");
+    if (isMotion) {
+        auto it = std::find_if(layer->motionKeyframes.begin(), layer->motionKeyframes.end(),
+                               [&](const GameFusion::Layer::MotionKeyFrame& kf) {
+                                   return kf.uuid == kfUuid.toStdString();
+                               });
+        if (it != layer->motionKeyframes.end()) {
+            layer->motionKeyframes.erase(it);
+        }
+    } else {
+        auto it = std::find_if(layer->opacityKeyframes.begin(), layer->opacityKeyframes.end(),
+                               [&](const GameFusion::Layer::OpacityKeyFrame& kf) {
+                                   return kf.uuid == kfUuid.toStdString();
+                               });
+        if (it != layer->opacityKeyframes.end()) {
+            layer->opacityKeyframes.erase(it);
+        }
+    }
+
+    layerCtx.scene->setDirty(true);
+    paint->getPaintArea()->updateLayer(*layerCtx.layer);
+    updateKeyframeDisplay();
 }

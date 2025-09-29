@@ -152,6 +152,13 @@ public:
     void addTimelineKeyFrames(const GameFusion::Shot& shot);
     void addLayerKeyFrames(TrackItem* track, long panelStartTime, const GameFusion::Panel& panel);
 
+    void addKeyframe(const QString& kfUuid, double time, const QVariantMap& value,
+                     const QString& layerUuid, const QString& panelUuid, const QString& shotUuid, double cursorTime);
+    void updateKeyframe(const QString& kfUuid, double timeMs, const QVariant& value, const QString& layerUuid, const QString& panelUuid, const QString& shotUuid); //
+    void deleteKeyframe(const QString& kfUuid, double time, const QVariantMap& value,
+                        const QString& layerUuid, const QString& panelUuid, const QString& shotUuid, double cursorTime);
+
+
     void setSelectedLayer(const QString& shotUuid, const QString& panelUuid, const QString& layerUuid);
     QSet<double> getAllKeyframeGlobalTimes() const;
     void updateKeyframeDisplay();
@@ -294,7 +301,7 @@ public slots:
     void onKeyframeUpdated(const QString& kfUuid, double newTimeMs, const QVariant& newValue);
     void onGroupedKeyframeUpdated(const QString& uuid1, double newTimeMs1, const QVariant& value1,
                                   const QString& uuid2, double newTimeMs2, const QVariant& value2);
-    void updateKeyframe(const QString& kfUuid, double timeMs, const QVariant& value, const QString& layerUuid, const QString& panelUuid, const QString& shotUuid); //
+
 
     // Auto save and related timer functions
     void onCheckDirtyTimer();
