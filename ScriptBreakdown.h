@@ -330,6 +330,56 @@ struct Act {
     std::vector<Scene> scenes;
 };
 
+// Linear interpolation for position at a given time
+inline std::pair<double, double> interpolatePosition(const std::vector<Layer::MotionKeyFrame>& keyframes, double currentTime) {
+    if (keyframes.empty()) return {0.0, 0.0};
+    if (keyframes.size() == 1) return {keyframes[0].x, keyframes[0].y};
+
+    // Initialize prev and next
+    Layer::MotionKeyFrame prev = keyframes[0];
+    Layer::MotionKeyFrame next = keyframes[0];
+    bool nextFound = false;
+
+    // Find prev (largest time <= currentTime) and next (smallest time >= currentTime)
+    for (const auto& kf : keyframes) {
+        if (kf.time <= currentTime && kf.time >= prev.time) {
+            prev = kf;
+        }
+        if (kf.time >= currentTime && (!nextFound || kf.time < next.time)) {
+            next = kf;
+            nextFound = true;
+        }
+    }
+
+    // Edge cases: currentTime before first or after last keyframe
+    if (currentTime < keyframes[0].time) return {keyframes[0].x, keyframes[0].y};
+    if (currentTime > keyframes[keyframes.size() - 1].time) return {keyframes[keyframes.size() - 1].x, keyframes[keyframes.size() - 1].y};
+
+    // If next wasn't found (shouldn't happen if keyframes are sorted), use prev
+    if (!nextFound) return {prev.x, prev.y};
+
+    // Linear interpolation
+    double t = (currentTime - prev.time) / (next.time - prev.time);
+    double x = prev.x + t * (next.x - prev.x);
+    double y = prev.y + t * (next.y - prev.y);
+    return {x, y};
+}
+
+// Linear interpolation for position at a given time
+inline std::pair<double, double> interpolatePosition(Layer::MotionKeyFrame& prev, Layer::MotionKeyFrame& next, double currentTime) {
+
+
+    // Edge cases: currentTime before first or after last keyframe
+    if (currentTime <= prev.time) return {prev.x, prev.y};
+    if (currentTime >= next.time) return {next.x, next.y};
+
+    // Linear interpolation
+    double t = (currentTime - prev.time) / (next.time - prev.time);
+    double x = prev.x + t * (next.x - prev.x);
+    double y = prev.y + t * (next.y - prev.y);
+    return {x, y};
+}
+
 class ScriptBreakdown : public Script {
 public:
     enum class BreakdownMode {

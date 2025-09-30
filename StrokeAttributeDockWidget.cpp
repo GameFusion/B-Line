@@ -136,6 +136,7 @@ StrokeAttributeDockWidget::StrokeAttributeDockWidget(QWidget *parent)
     connect(smoothnessSlider, &QSlider::valueChanged, this, &StrokeAttributeDockWidget::updateSmoothnessLabel);
     connect(smoothnessSlider, &QSlider::valueChanged, this, &StrokeAttributeDockWidget::emitStrokeProperties);
     connect(maxWidthSlider, &QSlider::valueChanged, this, &StrokeAttributeDockWidget::updateMaxWidthLabel);
+    //connect(maxWidthSlider, &QSlider::sliderReleased, this, &StrokeAttributeDockWidget::onMaxWidthReleased);
     connect(maxWidthSlider, &QSlider::valueChanged, this, &StrokeAttributeDockWidget::emitStrokeProperties);
     connect(minWidthSlider, &QSlider::valueChanged, this, &StrokeAttributeDockWidget::updateMinWidthLabel);
     connect(minWidthSlider, &QSlider::valueChanged, this, &StrokeAttributeDockWidget::emitStrokeProperties);
@@ -160,6 +161,11 @@ void StrokeAttributeDockWidget::updateSmoothnessLabel(int value)
 void StrokeAttributeDockWidget::updateMaxWidthLabel(int value)
 {
     maxWidthLabel->setText(QString("%1 px").arg(value / 10.0, 0, 'f', 1));
+    emitStrokeProperties();
+}
+
+void StrokeAttributeDockWidget::onMaxWidthReleased(int value)
+{
     emitStrokeProperties();
 }
 

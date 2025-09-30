@@ -157,13 +157,15 @@ public:
     void addKeyframe(const QString& kfUuid, double time, const QVariantMap& value,
                      const QString& layerUuid, const QString& panelUuid, const QString& shotUuid, double cursorTime);
     void updateKeyframe(const QString& kfUuid, double timeMs, const QVariant& value, const QString& layerUuid, const QString& panelUuid, const QString& shotUuid); //
+    void setKeyFramePosition(const QString& layerUuid, const QString& panelUuid, int keyFrameIndex, double x, double y); // paint area edits
+    void setLayerPosition(const QString& layerUuid, const QString& panelUuid, double x, double y); // paint area edits
     void deleteKeyframe(const QString& kfUuid, double time, const QVariantMap& value,
                         const QString& layerUuid, const QString& panelUuid, const QString& shotUuid, double cursorTime);
 
 
     void setSelectedLayer(const QString& shotUuid, const QString& panelUuid, const QString& layerUuid);
     QSet<double> getAllKeyframeGlobalTimes() const;
-    void updateKeyframeDisplay();
+    void updateKeyframeDisplay(); // time line edits
 
     // Todo : Possably move the find objects to ScriptBreakdown - there is redundancy
     ShotContext   findShotByUuid(const std::string& uuid);
@@ -173,6 +175,7 @@ public:
     ShotContext   findShotForTime(double time);
     ShotContext   findPreviousShot(const GameFusion::Shot& shot);
     LayerContext  findLayerByUuid(const std::string& uuid);
+    LayerContext  findLayerByUuid(const std::string& panelUuid, const std::string& layerUuid);
     CameraContext findCameraByUuid(const std::string& uuid);
     CameraContext findCameraForTime(double time);
     ShotContext   findSceneByPanel(const std::string& panelUuid);
@@ -280,6 +283,8 @@ public slots:
 
     void onPaintAreaLayerAdded(const GameFusion::Layer& layer);
     void onPaintAreaLayerModified(const GameFusion::Layer& layer);
+    void onKeyFramePositionChanged(const QString& layerUuid, int keyFrameIndex, double oldX, double oldY, double newX, double newY);
+    void onLayerPositionChanged(const QString& layerUuid, double oldX, double oldY, double newX, double newY, bool isEditing);
 
     void updateLayerThumbnail(const QString& uuid, const QImage& thumbnail);
     void onPaintAreaImageModified(const QString& uuid, const QImage& image, bool editing);
@@ -316,6 +321,7 @@ public slots:
                            LayerAttributeType attributeType,
                            const std::variant<int, double, GameFusion::BlendMode>& value);
     void duplicateLayer(const QString &sourceLayerUuid, const QString &duplicateLayerUuid);
+    void updateLayer(const QString& layerUuid, const QString& panelUuid, const GameFusion::Layer& layer);    // this is used for undo/redo layer strokes from painter, this can be fine tuned
 
     // Auto save and related timer functions
     void onCheckDirtyTimer();
@@ -336,9 +342,11 @@ protected:
     void updateTimeline();
 
 
-
+    // --- TODO put these in Dedicated Class for Layer Side Panel
     void populateLayerList(GameFusion::Panel* panel);
+    void updateLayerPanelAttributes(GameFusion::Layer &layer);
 
+    // ---
     QString generateUniqueShotName(GameFusion::Scene* scene);
 
     void timelineOptions();

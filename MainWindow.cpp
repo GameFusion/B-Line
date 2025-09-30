@@ -470,6 +470,57 @@ private:
     MainWindow* m_mainWindow;
 };
 
+// --- undo command for layer keyframe edits from paint area (a la Preston Blair)
+class LayerKeyFrameCommand : public QUndoCommand {
+public:
+    LayerKeyFrameCommand(const QString& layerUuid, const QString& panelUuid, int keyFrameIndex,
+                         double oldX, double oldY, double newX, double newY, MainWindow* mainWindow)
+        : m_layerUuid(layerUuid), m_panelUuid(panelUuid), m_keyFrameIndex(keyFrameIndex),
+          m_oldX(oldX), m_oldY(oldY), m_newX(newX), m_newY(newY), m_mainWindow(mainWindow) {
+        setText("Change Keyframe Position");
+    }
+
+    void undo() override {
+        m_mainWindow->setKeyFramePosition(m_layerUuid, m_panelUuid, m_keyFrameIndex, m_oldX, m_oldY);
+    }
+
+    void redo() override {
+        m_mainWindow->setKeyFramePosition(m_layerUuid, m_panelUuid, m_keyFrameIndex, m_newX, m_newY);
+    }
+
+private:
+    QString m_layerUuid;
+    QString m_panelUuid;
+    int m_keyFrameIndex;
+    double m_oldX, m_oldY;
+    double m_newX, m_newY;
+    MainWindow* m_mainWindow;
+};
+
+class LayerPositionCommand : public QUndoCommand {
+public:
+    LayerPositionCommand(const QString& layerUuid, const QString& panelUuid,
+                         double oldX, double oldY, double newX, double newY, MainWindow* mainWindow)
+        : m_layerUuid(layerUuid), m_panelUuid(panelUuid),
+          m_oldX(oldX), m_oldY(oldY), m_newX(newX), m_newY(newY), m_mainWindow(mainWindow) {
+        setText("Change Layer Position");
+    }
+
+    void undo() override {
+        m_mainWindow->setLayerPosition(m_layerUuid, m_panelUuid, m_oldX, m_oldY);
+    }
+
+    void redo() override {
+        m_mainWindow->setLayerPosition(m_layerUuid, m_panelUuid, m_newX, m_newY);
+    }
+
+private:
+    QString m_layerUuid;
+    QString m_panelUuid;
+    double m_oldX, m_oldY;
+    double m_newX, m_newY;
+    MainWindow* m_mainWindow;
+};
 
 // Custom undo command for keyframe add
 class KeyframeAddCommand : public QUndoCommand {
@@ -670,6 +721,32 @@ public:
 private:
     QString m_originalLayerUuid;
     QString m_duplicatedLayerUuid;
+    QString m_panelUuid;
+    MainWindow* m_mainWindow;
+};
+
+
+class LayerPaintCommand : public QUndoCommand {
+public:
+    LayerPaintCommand(const GameFusion::Layer& originalLayer, const GameFusion::Layer& modifiedLayer,
+                     const QString& layerUuid, const QString& panelUuid, MainWindow* mainWindow)
+        : m_originalLayer(originalLayer), m_modifiedLayer(modifiedLayer),
+          m_layerUuid(layerUuid), m_panelUuid(panelUuid), m_mainWindow(mainWindow) {
+        setText("Paint Stroke");
+    }
+
+    void undo() override {
+        m_mainWindow->updateLayer(m_layerUuid, m_panelUuid, m_originalLayer);
+    }
+
+    void redo() override {
+        m_mainWindow->updateLayer(m_layerUuid, m_panelUuid, m_modifiedLayer);
+    }
+
+private:
+    GameFusion::Layer m_originalLayer;
+    GameFusion::Layer m_modifiedLayer;
+    QString m_layerUuid;
     QString m_panelUuid;
     MainWindow* m_mainWindow;
 };
@@ -1587,6 +1664,12 @@ MainWindow::MainWindow(QWidget *parent)
     connect(paint->getPaintArea(), &PaintArea::compositImageModified,
             this, &MainWindow::onPaintAreaImageModified);
 
+    connect(paint->getPaintArea(), &PaintArea::keyFramePositionChanged,
+            this, &MainWindow::onKeyFramePositionChanged);
+
+    connect(paint->getPaintArea(), &PaintArea::LayerPositionChanged,
+            this, &MainWindow::onLayerPositionChanged);
+
     // Initialize new widgets
     ui->spinBox_layerRotation->setRange(-3600, 3600);
     ui->spinBox_layerRotation->setValue(0);
@@ -1637,7 +1720,9 @@ MainWindow::MainWindow(QWidget *parent)
     ui->toolButton_layerMoveUp->setText(QChar(0xf062));
     ui->toolButton_layerMoveDown->setText(QChar(0xf063));
 
-    paint->createTools(&FontAwesomeViewer::fontAwesomeSolid);
+    QFont toolFonts = FontAwesomeViewer::fontAwesomeSolid;
+    toolFonts.setPixelSize(14);
+    paint->createTools(&toolFonts);
 
     //
 
@@ -3280,6 +3365,29 @@ LayerContext MainWindow::findLayerByUuid(const std::string& uuid) {
     return {};
 }
 
+LayerContext MainWindow::findLayerByUuid(const std::string& panelUuid, const std::string& layerUuid) {
+
+    if(!scriptBreakdown)
+        return {};
+
+    auto& scenes = scriptBreakdown->getScenes();
+    for (Scene& scene : scenes) {
+        for (Shot& shot : scene.shots) {
+            for(Panel &panel : shot.panels){
+                if(panel.uuid == panelUuid){
+                    for(Layer &layer : panel.layers)
+                        if (layer.uuid == layerUuid)
+                            return { &scene, &shot, &panel, &layer};
+                    return {};
+                }
+            }
+        }
+    }
+
+    return {};
+}
+
+
 PanelContext MainWindow::findPanelForTime(double time, double threshold) {
 
     if(!scriptBreakdown){
@@ -3664,9 +3772,37 @@ void MainWindow::populateLayerList(GameFusion::Panel* panel) {
         }
 
 
+
     //currentPanelUuid = panel->uuid.c_str();
     paint->getPaintArea()->invalidateAllLayers();
     paint->getPaintArea()->updateCompositeImage();
+}
+
+void MainWindow::updateLayerPanelAttributes(GameFusion::Layer &layer)
+{
+    ui->doubleSpinBox_layerPosX->blockSignals(true);
+    ui->doubleSpinBox_layerPosY->blockSignals(true);
+    ui->spinBox_layerRotation->blockSignals(true);
+    ui->doubleSpinBox_layerScale->blockSignals(true);
+    ui->comboBox_layerBlendMode->blockSignals(true);
+
+    // ---
+
+    ui->doubleSpinBox_layerPosX->setValue(layer.x);
+    ui->doubleSpinBox_layerPosY->setValue(layer.y);
+    ui->spinBox_layerRotation->setValue(layer.rotation);
+    ui->doubleSpinBox_layerScale->setValue(layer.scale);
+
+    std::string blendStr = toString(layer.blendMode);
+    ui->comboBox_layerBlendMode->setCurrentText(blendStr.c_str());
+
+    // ---
+
+    ui->doubleSpinBox_layerPosX->blockSignals(false);
+    ui->doubleSpinBox_layerPosY->blockSignals(false);
+    ui->spinBox_layerRotation->blockSignals(false);
+    ui->doubleSpinBox_layerScale->blockSignals(false);
+    ui->comboBox_layerBlendMode->blockSignals(false);
 }
 
 void MainWindow::onLayerSelectionChanged(QListWidgetItem* current, QListWidgetItem* previous) {
@@ -4037,6 +4173,24 @@ void MainWindow::onLayerScaleChanged(double value) {
 
 
 void MainWindow::onPaintAreaLayerModified(const Layer &modLayer) {
+
+    {
+        if (!currentPanel) return;
+
+            LayerContext layerContext = findLayerByUuid(modLayer.uuid);
+            if (!layerContext.isValid()) return;
+
+            // Capture the original layer state
+            GameFusion::Layer originalLayer = *layerContext.layer; // Deep copy
+
+            // Push undo command before modifying the layer
+            undoStack->push(new LayerPaintCommand(originalLayer, modLayer,
+                                                 QString::fromStdString(modLayer.uuid),
+                                                 QString::fromStdString(currentPanel->uuid), this));
+    }
+
+    return;
+
     // Do something with the modified layer
     qDebug() << "Layer modified!";
     // Example: autosave, update UI, notify timeline, etc.
@@ -4051,15 +4205,6 @@ void MainWindow::onPaintAreaLayerModified(const Layer &modLayer) {
         updateWindowTitle(true);
         //layerContext.layer->visible = visible;
     }
-/*
-    for(Layer& layer : currentPanel->layers) {
-        if(layer.uuid == modLayer.uuid) {
-            layer = modLayer;
-
-            return;
-        }
-    }
-*/
 }
 
 void MainWindow::onPaintAreaLayerAdded(const Layer& layer) {
@@ -8235,4 +8380,100 @@ void MainWindow::duplicateLayer(const QString &sourceLayerUuid, const QString &d
     }
 
     addLayer(duplicatedLayer, layerContext.panel->uuid.c_str(), insertIndex);
+}
+
+void MainWindow::updateLayer(const QString& layerUuid, const QString& panelUuid, const GameFusion::Layer& layer) {
+    PanelContext panelContext = findPanelByUuid(panelUuid.toStdString());
+    if (!panelContext.isValid()) return;
+
+    auto it = std::find_if(panelContext.panel->layers.begin(), panelContext.panel->layers.end(),
+                           [&](const GameFusion::Layer& l) { return l.uuid == layerUuid.toStdString(); });
+    if (it != panelContext.panel->layers.end()) {
+        *it = layer; // Deep copy to update layer
+        panelContext.scene->dirty = true;
+        updateWindowTitle(true);
+        paint->getPaintArea()->updateLayer(*it);
+        populateLayerList(panelContext.panel);
+        paint->getPaintArea()->invalidateAllLayers();
+        paint->getPaintArea()->updateCompositeImage();
+    }
+}
+
+void MainWindow::onKeyFramePositionChanged(const QString& layerUuid, int keyFrameIndex, double oldX, double oldY, double newX, double newY) {
+    if (!currentPanel) return;
+
+    undoStack->push(new LayerKeyFrameCommand(layerUuid, QString::fromStdString(currentPanel->uuid),
+                                             keyFrameIndex, oldX, oldY, newX, newY, this));
+
+}
+
+void MainWindow::onLayerPositionChanged(const QString& layerUuid, double oldX, double oldY, double newX, double newY, bool isEditing) {
+    if (!currentPanel) return;
+
+    if(isEditing){
+        ui->doubleSpinBox_layerPosX->blockSignals(true);
+        ui->doubleSpinBox_layerPosX->blockSignals(true);
+        ui->doubleSpinBox_layerPosX->setValue(newX);
+        ui->doubleSpinBox_layerPosY->setValue(newY);
+        ui->doubleSpinBox_layerPosX->blockSignals(false);
+        ui->doubleSpinBox_layerPosX->blockSignals(false);
+        return;
+    }
+    undoStack->push(new LayerPositionCommand(layerUuid, QString::fromStdString(currentPanel->uuid),
+                                             oldX, oldY, newX, newY, this));
+}
+
+void MainWindow::setKeyFramePosition(const QString& layerUuid, const QString& panelUuid, int keyFrameIndex, double x, double y) {
+
+    LayerContext layerContext = findLayerByUuid(panelUuid.toStdString(), layerUuid.toStdString());
+
+    if (!layerContext.isValid()) return;
+
+    auto it = std::find_if(layerContext.panel->layers.begin(), layerContext.panel->layers.end(),
+                           [&](const GameFusion::Layer& l) { return l.uuid == layerUuid.toStdString(); });
+    if (it == layerContext.panel->layers.end() || keyFrameIndex < 0 || keyFrameIndex >= static_cast<int>(it->motionKeyframes.size())) return;
+
+    Layer::MotionKeyFrame &kf = it->motionKeyframes[keyFrameIndex];
+
+    kf.x = x;
+    kf.y = y;
+
+    layerContext.scene->dirty = true;
+    updateWindowTitle(true);
+    paint->getPaintArea()->updateLayer(*it);
+    populateLayerList(layerContext.panel);
+    paint->getPaintArea()->invalidateAllLayers();
+    paint->getPaintArea()->updateCompositeImage();
+
+    bool isMotion = true;
+    KeyframeContext keyCtx = {layerContext.scene, layerContext.shot, layerContext.panel, layerContext.layer, &kf, isMotion};
+
+
+    QVariantMap valueMap = getKeyframeValueMap(keyCtx);
+    TrackItem *track = timeLineView->getTrack(0);
+    double panelStartTime = layerContext.panel->startTime;
+
+    qreal fps = projectJson["fps"].toDouble(24.0);
+    float mspf = fps > 0 ? 1000./fps : 1;
+    long timeMs = panelStartTime + kf.time * mspf;
+    track->addKeyframeToAttribute("motion", timeMs, valueMap);
+
+    updateLayerPanelAttributes(*layerContext.layer);
+}
+
+void MainWindow::setLayerPosition(const QString& layerUuid, const QString& panelUuid, double x, double y) {
+    LayerContext layerCtx = findLayerByUuid(layerUuid.toStdString());
+    if (!layerCtx.isValid()) return;
+
+    layerCtx.layer->x = x;
+    layerCtx.layer->y = y;
+
+    layerCtx.scene->dirty = true;
+    //updateWindowTitle(true);
+    //paint->getPaintArea()->updateLayer(*layerCtx.layer);
+    //populateLayerList(layerCtx.panel);
+    updateLayerPanelAttributes(*layerCtx.layer);
+    //paint->getPaintArea()->invalidateAllLayers();
+    //paint->getPaintArea()->updateCompositeImage();
+
 }

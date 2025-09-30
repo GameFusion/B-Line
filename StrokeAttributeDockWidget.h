@@ -30,6 +30,7 @@ signals:
 private slots:
     void updateSmoothnessLabel(int value);
     void updateMaxWidthLabel(int value);
+    void onMaxWidthReleased(int value);
     void updateMinWidthLabel(int value);
     void updateSamplingLabel(int value);
     void updateTaperLabel(int value);
