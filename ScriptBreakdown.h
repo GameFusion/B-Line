@@ -365,6 +365,49 @@ inline std::pair<double, double> interpolatePosition(const std::vector<Layer::Mo
     return {x, y};
 }
 
+// Line segment intersection detection
+inline bool segmentsIntersect(const QPointF& p1, const QPointF& p2, const QPointF& p3, const QPointF& p4, QPointF& intersection)  {
+    double denom = (p4.y() - p3.y()) * (p2.x() - p1.x()) - (p4.x() - p3.x()) * (p2.y() - p1.y());
+    if (std::abs(denom) < 1e-10) return false; // Parallel or coincident
+
+    double ua = ((p4.x() - p3.x()) * (p1.y() - p3.y()) - (p4.y() - p3.y()) * (p1.x() - p3.x())) / denom;
+    double ub = ((p2.x() - p1.x()) * (p1.y() - p3.y()) - (p2.y() - p1.y()) * (p1.x() - p3.x())) / denom;
+
+    if (ua >= 0.0 && ua <= 1.0 && ub >= 0.0 && ub <= 1.0) {
+        intersection = p1 + ua * (p2 - p1);
+        return true;
+    }
+    return false;
+}
+
+inline bool segmentsIntersect2D(const GameFusion::Vector3D& p1, const GameFusion::Vector3D& p2, const GameFusion::Vector3D& p3, const GameFusion::Vector3D& p4, GameFusion::Vector3D& intersection)  {
+    double denom = (p4.y() - p3.y()) * (p2.x() - p1.x()) - (p4.x() - p3.x()) * (p2.y() - p1.y());
+    if (std::abs(denom) < 1e-10) return false; // Parallel or coincident
+
+    double ua = ((p4.x() - p3.x()) * (p1.y() - p3.y()) - (p4.y() - p3.y()) * (p1.x() - p3.x())) / denom;
+    double ub = ((p2.x() - p1.x()) * (p1.y() - p3.y()) - (p2.y() - p1.y()) * (p1.x() - p3.x())) / denom;
+
+    if (ua >= 0.0 && ua <= 1.0 && ub >= 0.0 && ub <= 1.0) {
+        intersection = p1 + ua * (p2 - p1);
+        return true;
+    }
+    return false;
+}
+/*
+bool pointOnSegment(const QPointF& p, const QPointF& s1, const QPointF& s2) {
+    double dx = s2.x() - s1.x();
+    double dy = s2.y() - s1.y();
+    double length = std::sqrt(dx * dx + dy * dy);
+    if (length < 1e-10) return false;
+
+    double t = ((p.x() - s1.x()) * dx + (p.y() - s1.y()) * dy) / (length * length);
+    if (t < 0.0 || t > 1.0) return false;
+
+    QPointF proj = s1 + t * (s2 - s1);
+    return (p - proj).manhattanLength() < 1e-5;
+}
+*/
+
 // Linear interpolation for position at a given time
 inline std::pair<double, double> interpolatePosition(Layer::MotionKeyFrame& prev, Layer::MotionKeyFrame& next, double currentTime) {
 

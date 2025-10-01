@@ -19,6 +19,11 @@ struct BezierControl {
         : point(p), leftControl(left), rightControl(right) {}
 };
 
+struct IntersectionInfo {
+    Vector3D point; // Intersection point
+    float t;        // Global t-value (0 to 1) across the curve
+};
+
 class BezierCurve {
 public:
     BezierCurve() = default;
@@ -53,7 +58,7 @@ public:
     void toJson(QJsonObject& json) const;
     void fromJson(const QJsonObject& json);
 
-    int size(){return handles_.size();}
+    int size() const {return handles_.size();};
 
     // Get and set stroke properties
     void setStrokeProperties(const StrokeProperties& props) {
@@ -75,6 +80,9 @@ private:
     StrokeProperties strokeProperties_; // Per-stroke attributes
 
 };
+
+bool sectionCurveAtIntersection(const BezierCurve& curve, const BezierCurve& other, std::pair<BezierCurve, BezierCurve>& sectioned, IntersectionInfo& info);
+
 
 } // namespace GameFusion
 
