@@ -38,7 +38,7 @@ INCLUDEPATH += $$GF/GameEngine/GameWeb
 INCLUDEPATH += $$GF/Projects/PhoneDEC/dec_phone_corr/
 INCLUDEPATH += $$GF/GameEngine/Demos/Draw
 
-RESOURCES += $$GF/Applications/CommonQt/qdarkstyle/style.qrc
+jjjjj += $$GF/Applications/CommonQt/qdarkstyle/style.qrc
 RESOURCES += ../Boarder.qrc
 
 macx {
@@ -92,6 +92,12 @@ CONFIG(debug, debug|release) {
 
     PRIVATE_FRAMEWORKS.path = Contents/Resources
     QMAKE_BUNDLE_DATA += PRIVATE_FRAMEWORKS
+
+    OBJECTIVE_SOURCES += ../TabletEventHandler.mm
+    HEADERS += ../TabletEventHandler.h
+
+    LIBS += -framework CoreGraphics -framework ApplicationServices
+    LIBS += -framework CoreGraphics
 }
 
 

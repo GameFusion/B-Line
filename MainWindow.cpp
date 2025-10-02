@@ -751,6 +751,31 @@ private:
     MainWindow* m_mainWindow;
 };
 
+class LayerPaintErasedStrokes : public QUndoCommand {
+public:
+    LayerPaintErasedStrokes(const GameFusion::Layer& originalLayer, const GameFusion::Layer& modifiedLayer,
+                     const QString& layerUuid, const QString& panelUuid, MainWindow* mainWindow)
+        : m_originalLayer(originalLayer), m_modifiedLayer(modifiedLayer),
+          m_layerUuid(layerUuid), m_panelUuid(panelUuid), m_mainWindow(mainWindow) {
+        setText("Erase Stroke");
+    }
+
+    void undo() override {
+        m_mainWindow->updateLayer(m_layerUuid, m_panelUuid, m_originalLayer);
+    }
+
+    void redo() override {
+        m_mainWindow->updateLayer(m_layerUuid, m_panelUuid, m_modifiedLayer);
+    }
+
+private:
+    GameFusion::Layer m_originalLayer;
+    GameFusion::Layer m_modifiedLayer;
+    QString m_layerUuid;
+    QString m_panelUuid;
+    MainWindow* m_mainWindow;
+};
+
 class CompositeUndoCommand : public QUndoCommand {
 public:
     CompositeUndoCommand(const QString& text) {
@@ -1027,9 +1052,9 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     timelineView->scene()->setSceneRect(0, 0, 20000, 700);  // Adjust dimensions as needed
     timelineView->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    timelineView->addCameraKeyFrame("A", 100, "");
-    timelineView->addCameraKeyFrame("B", 500, "");
-    timelineView->addCameraKeyFrame("C", 1500, "");
+    timelineView->addCameraKeyFrame("A", 0, "");
+    timelineView->addCameraKeyFrame("B", 200, "");
+    //timelineView->addCameraKeyFrame("C", 150"");
 
     // Create tracks
     Track *track1 = new Track("Track 1", 0, 500000, TrackType::Storyboard); // Name, Start Time, Duration in seconds
@@ -1041,12 +1066,16 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     TrackItem *t2 = timelineView->addTrack(track2);
     //timelineView->addTrack(track3);
 
-    Segment* segment = new Segment(scene, 100, 400);
+    Segment* segment = new Segment(scene, 0, 400);
     t1->addSegment(segment);
     //t1->addSegment(5, 100);
     // Layout setup (if necessary)
 
     //scene->addItem(t1);
+
+    bool TestPhonemes = false;
+
+    if(TestPhonemes){
 
     new MarkerItem(20, 30, 20, 220, segment, "Hello", "HH", "(OS)");
     new MarkerItem(40, 30, 40, 220, segment, "", "EH", "");
@@ -1077,7 +1106,7 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     t2->addSegment(segment3);
     //new MarkerItem(70, 30, 70, 220, segment3, "", "L", "");
 
-
+}
 
     // Layout setup
     /*
@@ -1661,6 +1690,9 @@ MainWindow::MainWindow(QWidget *parent)
     connect(paint->getPaintArea(), &PaintArea::layerModified,
             this, &MainWindow::onPaintAreaLayerModified);
 
+    connect(paint->getPaintArea(), &PaintArea::layerErasedStrokes,
+            this, &MainWindow::onPaintAreaEraseStrokes);
+
     connect(paint->getPaintArea(), &PaintArea::compositImageModified,
             this, &MainWindow::onPaintAreaImageModified);
 
@@ -1811,6 +1843,8 @@ QComboBox, QSpinBox {
         autoSaveTimer->start(30000); // Every 30 seconds
     }
 
+    setTabletTracking(true);
+
     return;
     //
     QList <int> list;
@@ -1934,6 +1968,12 @@ void MainWindow::dropEvent(QDropEvent *event)
     event->acceptProposedAction();
 }
 
+
+void MainWindow::tabletEvent(QTabletEvent* event) {
+    //cursorPos = event->posF().toPoint();
+    float currentPressure = event->pressure(); // [0.0, 1.0]
+    GameFusion::Log().info() << "Main Window pressure "<<(float)currentPressure<<"\n";
+}
 
 void MainWindow::about()
 {
@@ -4174,37 +4214,40 @@ void MainWindow::onLayerScaleChanged(double value) {
 
 void MainWindow::onPaintAreaLayerModified(const Layer &modLayer) {
 
-    {
-        if (!currentPanel) return;
+    if (!currentPanel) return;
 
-            LayerContext layerContext = findLayerByUuid(modLayer.uuid);
-            if (!layerContext.isValid()) return;
+        LayerContext layerContext = findLayerByUuid(modLayer.uuid);
+        if (!layerContext.isValid()) return;
 
-            // Capture the original layer state
-            GameFusion::Layer originalLayer = *layerContext.layer; // Deep copy
+        // Capture the original layer state
+        GameFusion::Layer originalLayer = *layerContext.layer; // Deep copy
 
-            // Push undo command before modifying the layer
-            undoStack->push(new LayerPaintCommand(originalLayer, modLayer,
-                                                 QString::fromStdString(modLayer.uuid),
-                                                 QString::fromStdString(currentPanel->uuid), this));
-    }
+        // Push undo command before modifying the layer
+        undoStack->push(new LayerPaintCommand(originalLayer, modLayer,
+                                             QString::fromStdString(modLayer.uuid),
+                                             QString::fromStdString(currentPanel->uuid), this));
+
 
     return;
+}
 
-    // Do something with the modified layer
-    qDebug() << "Layer modified!";
-    // Example: autosave, update UI, notify timeline, etc.
+void MainWindow::onPaintAreaEraseStrokes(const Layer &modLayer) {
 
-    if (!currentPanel)
-        return;
+    if (!currentPanel) return;
 
-    LayerContext layerContext = findLayerByUuid(modLayer.uuid);
-    if(layerContext.isValid()){
-        *layerContext.layer = modLayer; // issue on free Bezier list after this point
-        layerContext.scene->dirty = true;
-        updateWindowTitle(true);
-        //layerContext.layer->visible = visible;
-    }
+        LayerContext layerContext = findLayerByUuid(modLayer.uuid);
+        if (!layerContext.isValid()) return;
+
+        // Capture the original layer state
+        GameFusion::Layer originalLayer = *layerContext.layer; // Deep copy
+
+        // Push undo command before modifying the layer
+        undoStack->push(new LayerPaintErasedStrokes(originalLayer, modLayer,
+                                             QString::fromStdString(modLayer.uuid),
+                                             QString::fromStdString(currentPanel->uuid), this));
+
+
+    return;
 }
 
 void MainWindow::onPaintAreaLayerAdded(const Layer& layer) {
@@ -4962,6 +5005,8 @@ void MainWindow::loadAudioTracks() {
             float volume = segObj["volume"].toDouble(1.0);
             float pan = segObj["pan"].toDouble(0.0);
 
+            if(!trackItem)
+                continue;
 
             AudioSegment *segment = new AudioSegment(trackItem->scene(), startTime, duration);
 
@@ -8476,4 +8521,9 @@ void MainWindow::setLayerPosition(const QString& layerUuid, const QString& panel
     //paint->getPaintArea()->invalidateAllLayers();
     //paint->getPaintArea()->updateCompositeImage();
 
+}
+
+void MainWindow::showEvent(QShowEvent *event) {
+    QMainWindow::showEvent(event);
+    emit windowShown();
 }

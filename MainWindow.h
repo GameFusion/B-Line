@@ -184,6 +184,8 @@ public:
     int           findShotIndex(ShotContext shotContext);
     KeyframeContext findKeyframeByLayerUuid(const std::string layerUuid, const std::string keyframeUuid);
 
+signals:
+    void windowShown();
 
 public slots:
 
@@ -283,6 +285,7 @@ public slots:
 
     void onPaintAreaLayerAdded(const GameFusion::Layer& layer);
     void onPaintAreaLayerModified(const GameFusion::Layer& layer);
+    void onPaintAreaEraseStrokes(const GameFusion::Layer& layer);
     void onKeyFramePositionChanged(const QString& layerUuid, int keyFrameIndex, double oldX, double oldY, double newX, double newY);
     void onLayerPositionChanged(const QString& layerUuid, double oldX, double oldY, double newX, double newY, bool isEditing);
 
@@ -332,11 +335,12 @@ public slots:
 protected:
 
     bool eventFilter(QObject *obj, QEvent *event);
-
+    void tabletEvent(QTabletEvent* event) override;
 	void dragEnterEvent(QDragEnterEvent *event) override;
 	//void dragMoveEvent(QDragMoveEvent *event) override;
 	//void dragLeaveEvent(QDragLeaveEvent *event) override;
 	void dropEvent(QDropEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
     bool initializeLlamaClient();
     void updateTimeline();

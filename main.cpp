@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QSplashScreen>
+#include <QTimer>
 
 #include "Str.h"
 #include "Log.h"
@@ -33,9 +34,26 @@ int main(int argc, char *argv[])
 	MessageBox(NULL, L"Attach the debugger now (e.g., via Visual Studio 'Debug' -> 'Attach to Process').\nClick OK to continue.", L"Wait for Debug", MB_OK | MB_ICONINFORMATION);
 #endif
 
-	QPixmap pixmap("Btrfs3D.png");
-	QSplashScreen splash(pixmap);
-	splash.show();
+    // Load splash screen image
+    QPixmap pixmap(":/docs/logo-on-black.png");
+    if (pixmap.isNull()) {
+        qWarning() << "Failed to load splash screen image: docs/logo-on-black.png";
+    }
+
+    // Create splash screen
+    QSplashScreen splash(pixmap);
+    splash.setWindowFlag(Qt::WindowStaysOnTopHint);
+
+    // Center on primary screen
+    QRect screenGeometry = QGuiApplication::primaryScreen()->geometry();
+    int x = (screenGeometry.width() - pixmap.width()) / 2;
+    int y = (screenGeometry.height() - pixmap.height()) / 2;
+    //splash.move(x, y);
+
+    // Show splash screen
+    splash.show();
+    app.processEvents(); // Ensure splash screen is drawn immediately
+    splash.showMessage("Loading...", Qt::AlignCenter, Qt::white);
 
 	GameFusion::Str logPath("./");
 	GameFusion::Log::enableFile(logPath);
@@ -79,9 +97,15 @@ int main(int argc, char *argv[])
 	//SetWhiteTheme();
 	//SetBlackTheme();
 
-	GameFusion::GameTime::usleep(1000);
+    //GameFusion::GameTime::usleep(2000);
+
+
 
     MainWindow w;
+
+    // Close splash screen when main window is shown or after 3 seconds
+    QTimer::singleShot(2000, &splash, &QSplashScreen::close);
+    //QObject::connect(&w, &MainWindow::windowShown, &splash, &QSplashScreen::close);
 
     ConsoleDialog *console = new ConsoleDialog(&w);
     console->enableCommandPrompt(true);

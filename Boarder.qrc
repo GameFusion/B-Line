@@ -3,5 +3,6 @@
 <file alias="fa-regular-400.ttf">resources/fonts/fa-regular-400.ttf</file>
         <file alias="fa-brands-400.ttf">resources/fonts/fa-brands-400.ttf</file>
         <file alias="fa-solid-900.ttf">resources/fonts/fa-solid-900.ttf</file>
+        <file>docs/logo-on-black.png</file>
 </qresource>
 </RCC>

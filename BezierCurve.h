@@ -50,6 +50,8 @@ public:
     std::vector<Vector3D>& vertexArray() { return vertices_; }
     const std::vector<Vector3D>& vertexArray() const { return vertices_; }
 
+    std::vector<float> strokePressure(){return strokePressure_;}
+
     // Static method to interpolate a value along the curve (for animation)
     static float GetValue(float startTime, float endTime, float startValue, float endValue,
                           float control1, float control2, float currentTime);
@@ -68,6 +70,10 @@ public:
         return strokeProperties_;
     }
 
+    void setStrokePressure(const std::vector<float> pressureData){
+        strokePressure_ = pressureData;
+    }
+
     // Iterator support
     auto begin() { return handles_.begin(); }
     auto end() { return handles_.end(); }
@@ -75,10 +81,10 @@ public:
     auto end() const { return handles_.end(); }
 
 private:
-    std::vector<BezierControl> handles_; // Control points defining the curve
-    std::vector<Vector3D> vertices_;    // Generated vertices for rendering
-    StrokeProperties strokeProperties_; // Per-stroke attributes
-
+    std::vector<BezierControl>  handles_; // Control points defining the curve
+    std::vector<Vector3D>       vertices_;    // Generated vertices for rendering
+    StrokeProperties            strokeProperties_; // Per-stroke attributes
+    std::vector<float>          strokePressure_; // tablet pressure
 };
 
 bool sectionCurveAtIntersection(const BezierCurve& curve, const BezierCurve& other, std::pair<BezierCurve, BezierCurve>& sectioned, IntersectionInfo& info);
