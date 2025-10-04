@@ -10,13 +10,28 @@
 
 namespace GameFusion {
 
+struct StrokePoint {
+    QPointF pos;
+    float pressure = 1.0f;  // 0.0-1.0
+};
+
 struct BezierControl {
     Vector3D point;      // Anchor point
     Vector3D leftControl; // Left control point (relative to point)
     Vector3D rightControl; // Right control point (relative to point)
 
+    Vector3D sideNormal; // side normal to the curve
+    Vector3D tangentNormal; // tangent normal to the curve
+
+    int indexPoint = -1;
+
     BezierControl(const Vector3D& p, const Vector3D& left, const Vector3D& right)
         : point(p), leftControl(left), rightControl(right) {}
+
+    BezierControl(const Vector3D& p, const Vector3D& left, const Vector3D& right, const int indexPoint)
+        : point(p), leftControl(left), rightControl(right), indexPoint(indexPoint) {}
+
+    BezierControl(){}
 };
 
 struct IntersectionInfo {
@@ -51,6 +66,7 @@ public:
     const std::vector<Vector3D>& vertexArray() const { return vertices_; }
 
     std::vector<float> strokePressure(){return strokePressure_;}
+    std::vector<float> strokePressure() const {return strokePressure_;}
 
     // Static method to interpolate a value along the curve (for animation)
     static float GetValue(float startTime, float endTime, float startValue, float endValue,
@@ -80,6 +96,8 @@ public:
     auto begin() const { return handles_.begin(); }
     auto end() const { return handles_.end(); }
 
+    Vector3D evaluate(double t) const;
+
 private:
     std::vector<BezierControl>  handles_; // Control points defining the curve
     std::vector<Vector3D>       vertices_;    // Generated vertices for rendering
@@ -90,6 +108,27 @@ private:
 bool sectionCurveAtIntersection(const BezierCurve& curve, const BezierCurve& other, std::pair<BezierCurve, BezierCurve>& sectioned, IntersectionInfo& info);
 
 
+// Simple 2x2 matrix inversion for least-squares
+struct Matrix2x2 {
+    double a, b, c, d;
+};
+
+
+bool invert2x2(const Matrix2x2& m, Matrix2x2& inv);
+
+// Solve Ax = b for 2x2 A, 2D x/b
+Vector3D solve2x2(const Matrix2x2& A, double bx, double by);
+
+// Find closest t on curve to point Q (Newton-Raphson)
+double closestParam(const GameFusion::BezierCurve& curve, const QPointF& Q, double initial_t = 0.5);
+
+// Compute chord-length parameters
+std::vector<double> chordParams(const std::vector<StrokePoint>& points);
+
+BezierCurve simplifyBezierCurve(const BezierCurve& curve, double threshold);
+
 } // namespace GameFusion
+
+
 
 #endif // BEZIERCURVE_H

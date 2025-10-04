@@ -38,7 +38,7 @@ INCLUDEPATH += $$GF/GameEngine/GameWeb
 INCLUDEPATH += $$GF/Projects/PhoneDEC/dec_phone_corr/
 INCLUDEPATH += $$GF/GameEngine/Demos/Draw
 
-jjjjj += $$GF/Applications/CommonQt/qdarkstyle/style.qrc
+RESOURCES += $$GF/Applications/CommonQt/qdarkstyle/style.qrc
 RESOURCES += ../Boarder.qrc
 
 macx {
@@ -193,6 +193,7 @@ SOURCES += $$GF/Applications/CommonQt/QtUtils.cpp
 QT += opengl
 QT += widgets
 QT += network
+QT += concurrent
 CONFIG += qt thread release
 
 # Input

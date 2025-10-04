@@ -161,6 +161,43 @@ void BezierCurve::fromJson(const QJsonObject& json) {
     assess(strokeProperties_.stepCount, false);
 }
 
+Vector3D GameFusion::BezierCurve::evaluate(double t) const {
+    if (handles_.empty()) return {0, 0, 0};
+    if (handles_.size() < 2) return handles_[0].point; // Single point case
+
+    // Clamp t to [0, 1]
+    t = std::clamp(t, 0.0, 1.0);
+
+    // For a single segment (2 handles), use t directly
+    if (handles_.size() == 2) {
+        const Vector3D& P0 = handles_[0].point;
+        const Vector3D C1 = handles_[0].point + handles_[0].rightControl;
+        const Vector3D C2 = handles_[1].point + handles_[1].leftControl;
+        const Vector3D& P3 = handles_[1].point;
+        double u = 1.0 - t;
+        return u * u * u * P0 + 3 * u * u * t * C1 + 3 * u * t * t * C2 + t * t * t * P3;
+    }
+
+    // For multiple segments, map t to the correct segment
+    size_t numSegments = handles_.size() - 1;
+    double segmentLength = 1.0 / numSegments;
+    size_t segmentIndex = static_cast<size_t>(t * numSegments);
+    if (segmentIndex >= numSegments) segmentIndex = numSegments - 1; // Handle t=1 edge case
+
+    // Compute local t for the selected segment
+    double localT = (t - segmentIndex * segmentLength) / segmentLength;
+
+    // Get control points for the segment
+    const Vector3D& P0 = handles_[segmentIndex].point;
+    const Vector3D C1 = handles_[segmentIndex].point + handles_[segmentIndex].rightControl;
+    const Vector3D C2 = handles_[segmentIndex + 1].point + handles_[segmentIndex + 1].leftControl;
+    const Vector3D& P3 = handles_[segmentIndex + 1].point;
+
+    // Compute point on the cubic Bézier segment
+    double u = 1.0 - localT;
+    return u * u * u * P0 + 3 * u * u * localT * C1 + 3 * u * localT * localT * C2 + localT * localT * localT * P3;
+}
+
 // Helper struct for a single cubic Bézier segment
 struct CubicBezier {
     Vector3D p0, p1, p2, p3;
@@ -405,6 +442,226 @@ bool sectionCurveAtIntersection(const BezierCurve& curve, const BezierCurve& oth
     info.point = inter_point;
     info.t = min_global_t;
     return true;
+}
+
+bool invert2x2(const Matrix2x2& m, Matrix2x2& inv) {
+    double det = m.a * m.d - m.b * m.c;
+    if (std::abs(det) < 1e-6) return false;
+    inv.a = m.d / det;
+    inv.b = -m.b / det;
+    inv.c = -m.c / det;
+    inv.d = m.a / det;
+    return true;
+}
+
+Vector3D solve2x2(const Matrix2x2& A, double bx, double by) {
+    Matrix2x2 inv;
+    if (!invert2x2(A, inv)) return {0, 0, 0};
+    double cx = inv.a * bx + inv.b * by;
+    double cy = inv.c * bx + inv.d * by;
+    return {(float)cx, (float)cy, 0};  // Assuming 2D
+}
+
+double closestParam(const GameFusion::BezierCurve& curve, const QPointF& Q, double initial_t) {
+    if (curve.size() < 2) return 0.5;
+    const Vector3D& P0 = curve[0].point;
+    const Vector3D C1 = curve[0].point + curve[0].rightControl;
+    const Vector3D C2 = curve[1].point + curve[1].leftControl;
+    const Vector3D& P3 = curve[1].point;
+
+    double t = initial_t;
+    for (int iter = 0; iter < 5; ++iter) {
+        double u = 1 - t;
+        Vector3D B = u * u * u * P0 + 3 * u * u * t * C1 + 3 * u * t * t * C2 + t * t * t * P3;
+        Vector3D dB = 3 * u * u * (C1 - P0) + 6 * u * t * (C2 - C1) + 3 * t * t * (P3 - C2);
+        Vector3D ddB = 6 * u * (C2 - 2 * C1 + P0) + 6 * t * (P3 - 2 * C2 + C1);
+
+        Vector3D diff(B.x() - Q.x(), B.y() - Q.y(), 0);
+        double f = Vector3D::dotProduct(diff, dB);  // Changed from diff.dot(dB)
+        double df = Vector3D::dotProduct(dB, dB) + Vector3D::dotProduct(diff, ddB);
+        if (std::abs(df) < 1e-6) break;
+        t -= f / df;
+        t = std::clamp(t, 0.0, 1.0);
+    }
+    return t;
+}
+
+std::vector<double> chordParams(const std::vector<StrokePoint>& points) {
+    std::vector<double> t(points.size(), 0.0);
+    double total_len = 0.0;
+    for (size_t i = 1; i < points.size(); ++i) {
+        QPointF diff = points[i].pos - points[i-1].pos;
+        total_len += std::sqrt(diff.x()*diff.x() + diff.y()*diff.y());
+        t[i] = total_len;
+    }
+    if (total_len > 0) {
+        for (double& val : t) val /= total_len;
+    }
+    return t;
+}
+
+// Function to simplify a BezierCurve by merging adjacent segments where possible,
+// based on the geometric control points, without relying on dense sampling.
+// The threshold represents the maximum allowed deviation (distance) of the original
+// middle anchor point from the approximated merged segment.
+// If the deviation is <= threshold, the segments are merged, preserving end tangents.
+// This automatically preserves sharp corners, as they would cause high deviation.
+// Reasoning: Merging two segments removes the middle anchor and approximates with
+// a single cubic using the original start tangent of the first segment and end
+// tangent of the second segment. The deviation check ensures visual equivalence.
+// The process is a greedy left-to-right pass, which may not find the global optimum
+// but is efficient and simple.
+
+BezierCurve simplifyBezierCurve(const BezierCurve& curve, double threshold) {
+    size_t num_handles = curve.size();
+    if (num_handles < 3) {
+        // Nothing to simplify (fewer than 2 segments)
+        return curve;
+    }
+
+    std::vector<BezierControl> new_handles;
+    std::vector<float> new_pressures;
+    const auto& orig_pressures = curve.strokePressure();
+
+    bool has_pressures = !orig_pressures.empty() && orig_pressures.size() == num_handles;
+    if (has_pressures) {
+        new_pressures.push_back(orig_pressures[0]);
+    }
+
+    new_handles.push_back(curve[0]);
+
+    size_t current = 0;
+    while (current + 1 < num_handles) {
+        if (current + 2 < num_handles) {
+            // Attempt to merge segments current to current+1 and current+1 to current+2
+            Vector3D P0 = curve[current].point;
+            Vector3D L0 = curve[current].leftControl; // Preserve for previous segment
+            Vector3D R0 = curve[current].rightControl; // Will adjust magnitude
+            Vector3D P1 = curve[current + 1].point;
+            Vector3D L1 = curve[current + 1].leftControl;
+            Vector3D R1 = curve[current + 1].rightControl;
+            Vector3D P3 = curve[current + 2].point;
+            Vector3D L2 = curve[current + 2].leftControl; // Will adjust magnitude
+            Vector3D R2 = curve[current + 2].rightControl; // Preserve for next segment
+
+            // Create temporary single-segment curve for deviation check
+            BezierControl start_merged(P0, L0, R0);
+            BezierControl end_merged(P3, L2, R2);
+            BezierCurve merged;
+            merged += start_merged;
+            merged += end_merged;
+
+            // Compute deviation: distance from original middle point to closest point on merged curve
+            QPointF middle_q(P1.x(), P1.y());
+            double t_m = closestParam(merged, middle_q, 0.5);
+            Vector3D proj = merged.evaluate(t_m);
+            double dist = (proj - P1).length();
+
+            if (dist <= threshold) {
+                // Adjust tangent magnitudes parametrically
+                // Use original tangent directions but scale magnitudes
+                //Vector3D C1_orig = P0 + R0; // Original first control point
+                //Vector3D C2_orig = P3 + L2; // Original second control point
+                //Vector3D C1_mid = P1 + L1;  // Control point from first segment
+                //Vector3D C2_mid = P1 + R1;  // Control point from second segment
+
+
+
+                // Solve for C1 and C2 such that B(t_m) ≈ P1
+                // B(t_m) = u^3 P0 + 3u^2 t C1 + 3u t^2 C2 + t^3 P3
+                // We want C1 and C2 to lie on original tangent directions
+                // R0_new = alpha * R0, L2_new = beta * L2
+                // Compute scalars alpha and beta to minimize error at P1
+                // Compute coefficients
+                double u = 1.0 - t_m;
+                double u2 = u * u;
+                double u3 = u2 * u;
+                double t2 = t_m * t_m;
+                double t3 = t2 * t_m;
+                double coeff1 = 3.0 * u2 * t_m;  // For C1
+                double coeff2 = 3.0 * u * t2;     // For C2
+
+                // Compute rhs = P1 - u3 P0 - t3 P3
+                Vector3D rhs = P1 - (u3 * P0 + t3 * P3);
+
+                // Compute b = rhs - coeff1 * P0 - coeff2 * P3
+                Vector3D b = rhs - (coeff1 * P0 + coeff2 * P3);
+
+                // Get unit vectors (handle zero length)
+                Vector3D unit_R0(0,0,0), unit_L2(0,0,0);
+                float orig_len_R0 = R0.length();
+                float orig_len_L2 = L2.length();
+                if (orig_len_R0 > 1e-6f) {
+                    unit_R0 = R0 / orig_len_R0;
+                }
+                if (orig_len_L2 > 1e-6f) {
+                    unit_L2 = L2 / orig_len_L2;
+                }
+
+                // Set up 2x2 matrix A: columns are coeff1 * unit_R0 and coeff2 * unit_L2
+                Matrix2x2 A;
+                A.a = coeff1 * unit_R0.x();
+                A.b = coeff2 * unit_L2.x();
+                A.c = coeff1 * unit_R0.y();
+                A.d = coeff2 * unit_L2.y();
+
+                // Solve for alpha, beta
+                Vector3D solution = solve2x2(A, b.x(), b.y());
+                double alpha = solution.x();
+                double beta = solution.y();
+
+                // Fallback if solve fails (singular matrix, e.g., parallel tangents)
+                Matrix2x2 inv;
+                if (!invert2x2(A, inv)) {
+                    // Fallback: average original lengths
+                    float avg_len = (orig_len_R0 + orig_len_L2) * 0.5f;
+                    if (orig_len_R0 > 0) R0 = unit_R0 * avg_len;
+                    if (orig_len_L2 > 0) L2 = unit_L2 * avg_len;
+                } else {
+                    // Apply scales: new magnitude = alpha (or beta), since we used unit vectors
+                    // But to preserve "feel", optionally scale by original length factor, but here we set directly
+                    if (orig_len_R0 > 0) R0 = unit_R0 * alpha;
+                    if (orig_len_L2 > 0) L2 = unit_L2 * beta;
+                }
+
+                // If you want to prevent direction flips, clamp alpha and beta to positive:
+                // alpha = std::max(0.0, alpha);
+                // beta = std::max(0.0, beta);
+                // Then R0 = unit_R0 * alpha; etc.
+
+                // Proceed with new_start and new_end as before
+
+                // Create new merged segment with adjusted tangents
+                BezierControl new_start(P0, L0, R0);
+                BezierControl new_end(P3, L2, R2);
+                new_handles.push_back(new_end);
+                if (has_pressures) {
+                    new_pressures.push_back(orig_pressures[current + 2]);
+                }
+                current += 2;
+                continue;
+            }
+        }
+
+        // Cannot merge or no more to merge: add the next original handle
+        new_handles.push_back(curve[current + 1]);
+        if (has_pressures) {
+            new_pressures.push_back(orig_pressures[current + 1]);
+        }
+        current += 1;
+    }
+
+    // Build the simplified curve
+    BezierCurve simplified;
+    simplified.setStrokeProperties(curve.getStrokeProperties());
+    for (const auto& handle : new_handles) {
+        simplified += handle;
+    }
+    if (has_pressures) {
+        simplified.setStrokePressure(new_pressures);
+    }
+
+    return simplified;
 }
 
 } // namespace GameFusion
