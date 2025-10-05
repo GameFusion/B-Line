@@ -43,6 +43,7 @@
 #include "NewShotDialog.h"
 #include "NewPanelDialog.h"
 #include "NewSceneDialog.h"
+#include "ColorPaletteWidget.h"
 
 #include "GameCore.h" // for GameContext->gameTime()
 #include "SoundServer.h"
@@ -1824,6 +1825,17 @@ QComboBox, QSpinBox {
 
     ui->dockCameras->setMaximumWidth(350);
     strokeDock->setMaximumWidth(350);
+
+    /******************************/
+    QDockWidget *dock = new QDockWidget("Color Palette", this);
+            ColorPaletteWidget *paletteWidget = new ColorPaletteWidget();
+            dock->setWidget(paletteWidget);
+            addDockWidget(Qt::RightDockWidgetArea, dock);
+
+            connect(paletteWidget, &ColorPaletteWidget::colorPicked, this, [](const QColor &color){
+                qDebug() << "Selected color:" << color;
+            });
+
     /******************************/
 
     // Load settings

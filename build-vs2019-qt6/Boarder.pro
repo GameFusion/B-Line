@@ -237,6 +237,9 @@ HEADERS += ../NewSceneDialog.h
 
 HEADERS += ../ProjectContext.h
 
+SOURCES += ../ColorPaletteWidget.cpp
+HEADERS += ../ColorPaletteWidget.h
+
 # Input source files
 SOURCES +=  \
            $$GF/Applications/TimeLineProject/TimeLineView.cpp \
