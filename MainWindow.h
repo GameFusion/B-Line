@@ -145,6 +145,7 @@ public:
     void newCamera(const GameFusion::CameraFrame cameraframe, double cursorTime);
     void deleteCamera(QString uuid, double cursorTime);
     void renameCamera(const QString& uuid, const QString& newName, double cursorTime);
+    void setCamera(const GameFusion::CameraFrame &cameraframe, const std::string &cameraUuid, bool isEditing);
 
     ShotSegment* createShotSegment(GameFusion::Shot& shot, GameFusion::Scene& scene, CursorItem* sceneMarker);
     void insertShotSegment(const GameFusion::Shot& shot, ShotIndices shotIndices, const GameFusion::Scene sceneRef, double cursorTime, CursorItem *sceneMarker);

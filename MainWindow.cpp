@@ -355,8 +355,6 @@ private:
     double cursorTime_;
 };
 
-
-
 class AddCameraCommand : public QUndoCommand {
 public:
     AddCameraCommand(MainWindow* mainWindow, const GameFusion::CameraFrame& cameraframe, double cursorTime, QString commandName="New Camera Frame")
@@ -404,6 +402,32 @@ private:
     QString newName_;
     double cursorTime_;
 };
+
+// Undo camera edits like position change
+class UpdateCameraCommand : public QUndoCommand {
+public:
+    UpdateCameraCommand(MainWindow* mainWindow, ScriptBreakdown* breakdown, const GameFusion::CameraFrame& oldFrame,
+                       const GameFusion::CameraFrame& newFrame, const QString& uuid, QUndoCommand* parent = nullptr)
+        : QUndoCommand(parent), m_mainWindow(mainWindow), m_breakdown(breakdown), m_oldFrame(oldFrame), m_newFrame(newFrame), m_uuid(uuid) {
+        setText("Update Camera Frame");
+    }
+
+    void undo() override {
+        m_mainWindow->setCamera(m_oldFrame, m_oldFrame.uuid.c_str(), false);
+    }
+
+    void redo() override {
+        m_mainWindow->setCamera(m_newFrame, m_newFrame.uuid.c_str(), false);
+    }
+
+private:
+    MainWindow* m_mainWindow;
+    ScriptBreakdown* m_breakdown;
+    GameFusion::CameraFrame m_oldFrame;
+    GameFusion::CameraFrame m_newFrame;
+    QString m_uuid;
+};
+
 
 class SplitSceneCommand : public QUndoCommand {
 public:
@@ -5247,9 +5271,32 @@ void MainWindow::onCameraFrameAddedFromSidePanel(const GameFusion::CameraFrame& 
 }
 
 void MainWindow::onCameraFrameUpdated(const GameFusion::CameraFrame& frame, bool isEditing) {
-    scriptBreakdown->updateCameraFrame(frame);
 
-    onRequestCameraThumbnail(frame.uuid.c_str(), isEditing);
+    if (!isEditing) {  // Only for non-edits; assume m_undoStack is your QUndoStack*
+        CameraContext cameraCtx = findCameraByUuid(frame.uuid);
+        if(!cameraCtx.isValid())
+            return;
+        GameFusion::CameraFrame oldFrame = *cameraCtx.camera;  // Add this getter if needed
+        // Push command for undoable update
+        undoStack->push( new UpdateCameraCommand(this, scriptBreakdown, oldFrame, frame, QString::fromUtf8(frame.uuid.c_str())) );
+        return;
+    }
+
+    setCamera(frame, frame.uuid.c_str(), isEditing);
+    // Proceed with update (always, as it's the core action)
+    //scriptBreakdown->updateCameraFrame(frame);
+    //onRequestCameraThumbnail(frame.uuid.c_str(), isEditing);
+}
+
+void MainWindow::setCamera(const GameFusion::CameraFrame &cameraframe, const std::string &cameraUuid, bool isEditing){
+    CameraContext cameraCtx = findCameraByUuid(cameraUuid);
+    if(!cameraCtx.isValid())
+        return;
+
+    scriptBreakdown->updateCameraFrame(cameraframe);
+    onRequestCameraThumbnail(cameraUuid.c_str(), isEditing);
+
+    paint->getPaintArea()->updateCamera(cameraframe);
 }
 
 void MainWindow::onCameraFrameDeleted(const QString& uuid) {
