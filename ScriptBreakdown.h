@@ -109,6 +109,7 @@ struct CameraFrame {
     // Optional: For Bezier
     Vector2D bezierControl1;
     Vector2D bezierControl2;
+
 };
 
 struct Audio {
@@ -254,7 +255,10 @@ struct Shot {
     std::string intent;       // Narrative/emotional purpose
     std::vector<CharacterDialog> characters;
     std::vector<Panel> panels;
+
     std::vector<CameraFrame> cameraFrames; // Global across panels, time-based
+    GameFusion::BezierCurve cameraMotionPath; // Bézier for camera trajectory
+
     std::string uuid;
     int startTime=-1;
     int endTime=-1;

@@ -98,11 +98,27 @@ public:
 
     Vector3D evaluate(double t) const;
 
+    Vector3D getAnchor(int index) const;
+
+    // Smoothing: Creates smooth in/out tangents with uniform time spacing *per segment*
+    // strength: 0.0 = linear, 1.0 = full smooth (default 0.5)
+    void smoothAuto(bool loop=false);
+    void smooth(float strength = 0.5f, bool loop = false);
+    void smooth2(float smoothIn, float smoothOut);
+
+    // Linearize: Creates straight-line tangents with uniform linear spacing *per segment*
+    void linearize(bool loop = false);
+
+    // Helper: Compute perpendicular vector (normal) in 2D for smooth tangents
+    static Vector3D perpendicular(const Vector3D& vec) { return Vector3D(-vec.y(), vec.x()); }
+
 private:
     std::vector<BezierControl>  handles_; // Control points defining the curve
     std::vector<Vector3D>       vertices_;    // Generated vertices for rendering
     StrokeProperties            strokeProperties_; // Per-stroke attributes
     std::vector<float>          strokePressure_; // tablet pressure
+
+    bool m_isClosed = false;
 };
 
 bool sectionCurveAtIntersection(const BezierCurve& curve, const BezierCurve& other, std::pair<BezierCurve, BezierCurve>& sectioned, IntersectionInfo& info);

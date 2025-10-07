@@ -664,4 +664,282 @@ BezierCurve simplifyBezierCurve(const BezierCurve& curve, double threshold) {
     return simplified;
 }
 
+void BezierCurve::linearize(bool loop) {
+    if (handles_.size() < 2) return; // No-op for <2 points
+
+    m_isClosed = loop;
+
+    for (int i = 0; i < handles_.size(); ++i){
+        BezierControl &handle = handles_[i];
+        handle.leftControl= Vector3D();
+        handle.rightControl= Vector3D();
+    }
+
+    for (int i = 0; i < handles_.size(); ++i) {
+        Vector3D prior = getAnchor(i - 1);
+        Vector3D next = getAnchor(i + 1);
+
+        // Incoming tangent: Along prior-to-current, length = local segment distance (uniform linear time per segment)
+        Vector3D incoming = handles_[i].point - prior;
+        float incomingMag = std::sqrt(Vector3D::dotProduct(incoming, incoming));
+        if (incomingMag > 0) {
+            handles_[i].leftControl = (incoming / incomingMag) * (incomingMag * 0.5f); // Half for endpoint control
+        }
+
+        // Outgoing tangent: Along current-to-next, length = local segment distance
+        Vector3D outgoing = next - handles_[i].point;
+        float outgoingMag = std::sqrt(Vector3D::dotProduct(outgoing, outgoing));
+        if (outgoingMag > 0) {
+            handles_[i].rightControl = (outgoing / outgoingMag) * (outgoingMag * 0.5f);
+        }
+    }
+}
+
+Vector3D BezierCurve::getAnchor(int index) const {
+    if(handles_.empty())
+        return Vector3D();
+
+    if (m_isClosed) {
+        index = (index + handles_.size()) % handles_.size();
+    } else {
+        index = index < 0 ? 0 : index;
+        index = index >= handles_.size() ? handles_.size()-1 : index;
+    }
+    return handles_[index].point;
+}
+
+void BezierCurve::smoothAuto(bool loop)
+{
+
+
+
+    for(int i=0; i<handles_.size(); i++)
+    {
+        /*
+                get prior, current and nex handles, for each current set the tangents
+                */
+        BezierControl *prior = i>0 ? &handles_[i-1] : nullptr;
+        BezierControl &current   = handles_[i];
+        BezierControl *next   = i+1 < handles_.size() ? &handles_[i+1] : nullptr;
+
+        /*
+        if(li.next())
+            next   = &(**(li.next()));
+        else if(loop)
+            next = &(**(m_handleList.start()));
+
+        if(li.prior())
+            prior = &(**(li.prior()));
+        else if(loop)
+            prior =  &(**(m_handleList.last()));
+        */
+
+
+
+        Vector3D seg1;
+        Vector3D seg2;
+
+        Vector3D midpoint1, midpoint2;
+
+        if(prior)
+        {
+            seg1 =  current.point - prior->point;
+            //midpoint1 = prior->position() + seg1 * 0.5;
+            midpoint1 = prior->point;
+        }
+        else
+            midpoint1 = current.point;
+
+        if(next)
+        {
+            seg2 = next->point - current.point;
+            //midpoint2 = current.position() +  seg2 * 0.5;
+            midpoint2 = next->point;
+        }
+        else
+            midpoint2 = current.point;
+
+
+
+
+
+        //float tangentMag = tangentEdge.magnitude();
+
+        // compute proportion factor for left and right tangents
+        float seg1Mag = seg1.magnitude();
+        float seg2Mag = seg2.magnitude();
+
+
+
+        //float totalMag = seg1Mag + seg2Mag;
+        /*
+                float factor1 = seg1Mag / totalMag;
+                float factor2 = seg2Mag / totalMag;
+                */
+
+
+
+        seg1.normalize();
+        seg2.normalize();
+
+
+        //
+        // New smppth model compute tanget normal based on the angle
+        if(prior && next)
+        {
+            if( seg1Mag < seg2Mag)
+            {
+                midpoint2 = current.point + seg2 * seg1Mag;
+                seg2Mag = seg1Mag;
+            }
+            else if(seg1Mag > seg2Mag)
+            {
+                midpoint1 = current.point - seg1 * seg2Mag;
+                seg1Mag = seg2Mag;
+            }
+
+        }
+        //
+
+        Vector3D tangentEdge = midpoint2 - midpoint1;
+        Vector3D tangentNormal = Vector3D::normal(tangentEdge);
+
+        /*
+                float dot1 = Vector3D::dotProduct(seg1, seg2);
+
+                //Log::info("dot %f\n", dot1);
+                float factor1 = 0.5 * (1. - SmoothPath.getValue(dot1));
+                float factor2 = 0.5 * (1. - SmoothPath.getValue(dot1));
+
+                current.leftTangent()  = -tangentNormal * (factor1 * seg1Mag);
+                current.rightTangent() =  tangentNormal * (factor2 * seg2Mag);
+                */
+        current.leftControl = -tangentNormal * (seg1Mag*0.5f);
+        current.rightControl =  tangentNormal * (seg2Mag*0.5f);
+
+
+
+
+    }
+
+    //print();
+    //exit(0);
+
+    //smoothTangents(normal);
+}
+
+void BezierCurve::smooth2(float smoothIn, float smoothOut)
+{
+    //ListIterator <BezierHandle> li(m_handleList);
+
+    for(int i=1; i<handles_.size()-1; i++)
+    //while(!li.end())
+    {
+        //if(li.prior())
+        {
+            //BezierControl prior = 0;
+            BezierControl &current   = handles_[i];
+            //BezierControl *next   = 0;
+
+            //if(li.next())
+                BezierControl &next   = handles_[i+1];
+            //else
+            //    next = &(**(m_handleList.start()));
+
+            //if(li.prior())
+                BezierControl &prior = handles_[i-1];
+           // else
+            //    prior =  &(**(m_handleList.last()));
+
+
+            /*************/
+
+            Vector3D vdistance = current.point - prior.point;
+            Vector3D vhalfD    = vdistance * 0.5;
+
+            prior.leftControl = vhalfD * smoothIn;
+            current.rightControl = -vhalfD * smoothOut;
+
+            //continue;
+
+            /**********/
+
+            /*
+
+            float distance = handle.position().x() - prior.position().x();
+            float halfD = distance * 0.5;
+            prior.rightTangent()[0] = -halfD * smoothIn;
+            handle.leftTangent().x() = halfD * smoothOut;
+
+            float distanceZ = handle.position().z() - prior.position().z();
+            float halfDZ = distanceZ * 0.5;
+            prior.rightTangent().z() = halfDZ * smoothIn;
+            handle.leftTangent().z() = -halfDZ * smoothOut;
+                */
+        }
+        //li++;
+    }
+
+    //smoothTangents(normal);
+}
+
+void BezierCurve::smooth(float strength, bool loop) {
+    if (handles_.size() < 2) return; // No-op for <2 points
+
+    m_isClosed = loop;
+
+    for (int i = 0; i < handles_.size(); ++i){
+        BezierControl &handle = handles_[i];
+        handle.leftControl= Vector3D();
+        handle.rightControl= Vector3D();
+    }
+
+    for (int i = 0; i < handles_.size(); ++i) {
+        Vector3D prior = getAnchor(i - 1);
+        Vector3D current = handles_[i].point;
+        Vector3D next = getAnchor(i + 1);
+
+        handles_[i].leftControl = Vector3D::distance(prior, current) * 0.5 * Vector3D(-1,0,0) - prior;
+        handles_[i].rightControl = Vector3D();
+
+        return;
+
+        // Segment vectors
+        Vector3D seg1 = current - prior;
+        Vector3D seg2 = next - current;
+
+        // Magnitudes for local proportional scaling (uniform time per segment)
+        float seg1Mag = std::sqrt(Vector3D::dotProduct(seg1, seg1));
+        float seg2Mag = std::sqrt(Vector3D::dotProduct(seg2, seg2));
+
+        // Adjust midpoints for unequal segments (inspired by your smoothAuto for symmetry)
+        Vector3D midpoint1 = prior;
+        Vector3D midpoint2 = next;
+        if (seg1Mag > 0 && seg2Mag > 0) {
+            if (seg1Mag < seg2Mag) {
+                midpoint2 = current + (seg2 / seg2Mag) * seg1Mag;
+                seg2Mag = seg1Mag;
+            } else if (seg1Mag > seg2Mag) {
+                midpoint1 = current - (seg1 / seg1Mag) * seg2Mag;
+                seg1Mag = seg2Mag;
+            }
+        }
+
+        // Tangent edge and perpendicular normal (direction for smoothness)
+        Vector3D tangentEdge = midpoint2 - midpoint1;
+        float tangentEdgeMag = std::sqrt(Vector3D::dotProduct(tangentEdge, tangentEdge));
+        Vector3D tangentNormal;
+        if (tangentEdgeMag > 0) {
+            tangentNormal = perpendicular(tangentEdge / tangentEdgeMag); // Normalize direction
+        } else {
+            tangentNormal = Vector3D(0, 1); // Fallback (arbitrary perpendicular)
+        }
+
+        // Set symmetric smooth tangents: Per-segment scaling for equal time pace
+        // Length: local segment mag * strength * 0.5 (half for in/out balance)
+        handles_[i].leftControl = -tangentNormal * (seg1Mag * strength * 0.5f);
+        handles_[i].rightControl = tangentNormal * (seg2Mag * strength * 0.5f);
+    }
+}
+
 } // namespace GameFusion
