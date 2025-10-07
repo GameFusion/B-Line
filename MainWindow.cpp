@@ -4540,7 +4540,7 @@ void MainWindow::onTimeCursorMoved(double time)
 
         if(theShot){
             long panelStartTime = theShot->startTime + currentPanel->startTime;
-            paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraAnimation.frames);
+            paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraAnimation);
             cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraAnimation.frames);
         }
 
@@ -4561,7 +4561,7 @@ void MainWindow::onTimeCursorMoved(double time)
     currentPanel = newPanel;
 
     if(theShot) {
-        paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraAnimation.frames);
+        paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraAnimation);
 
         if (!isPlaying) {
             populateLayerList(currentPanel);
@@ -5124,7 +5124,7 @@ void MainWindow::deleteCamera(QString uuid, double cursorTime)
 
     qreal fps = projectJson["fps"].toDouble();
     long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
-    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation.frames);
+    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation);
     cameraSidePanel->setCameraList(panelContext.panel->uuid.c_str(), panelContext.shot->cameraAnimation.frames);
     timeLineView->setTimeCursor(cursorTime);
 
@@ -5151,7 +5151,7 @@ void MainWindow::newCamera(const GameFusion::CameraFrame newCamera, double curre
     panelContext.shot->cameraAnimation.frames.push_back(newCamera);
     panelContext.scene->dirty = true;
 
-    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation.frames);
+    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation);
     cameraSidePanel->setCameraList(panelContext.panel->uuid.c_str(), panelContext.shot->cameraAnimation.frames);
     timeLineView->setTimeCursor(currentTime);
 }
@@ -5230,7 +5230,7 @@ void MainWindow::renameCamera(const QString& uuid, const QString& newName, doubl
     if (panelContext.isValid()) {
         long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
         qreal fps = projectJson["fps"].toDouble();
-        paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation.frames);
+        paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation);
     }
 
     // Update side panel
@@ -6261,7 +6261,7 @@ void MainWindow::timelineCameraUpdate(const QString& uuid, long frameOffset, con
                 //--- A CAMERA WAS ADDED TO CURRENT PANEL
                 long panelStartTime = cameraCtx.shot->startTime + currentPanel->startTime;
                 float fps = projectJson["fps"].toDouble();
-                paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, cameraCtx.shot->cameraAnimation.frames);
+                paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, cameraCtx.shot->cameraAnimation);
                 cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), cameraCtx.shot->cameraAnimation.frames);
             }
 
@@ -6271,7 +6271,7 @@ void MainWindow::timelineCameraUpdate(const QString& uuid, long frameOffset, con
                 if(panelContext.isValid()){
                     long panelStartTime = panelContext.shot->startTime + currentPanel->startTime;
                     float fps = projectJson["fps"].toDouble();
-                    paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, panelContext.shot->cameraAnimation.frames);
+                    paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, panelContext.shot->cameraAnimation);
                     cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), panelContext.shot->cameraAnimation.frames);
                 }
             }
@@ -8301,7 +8301,7 @@ void MainWindow::applyLayerOrder(const std::vector<QString>& orderUuids, const Q
     long panelStartTime = panelCtx.shot->startTime + panelCtx.panel->startTime;
     float fps = projectJson["fps"].toDouble();
 
-    paint->getPaintArea()->setPanel(*panelCtx.panel, panelStartTime, fps, panelCtx.shot->cameraAnimation.frames);
+    paint->getPaintArea()->setPanel(*panelCtx.panel, panelStartTime, fps, panelCtx.shot->cameraAnimation);
     paint->getPaintArea()->invalidateAllLayers();
     paint->getPaintArea()->updateCompositeImage();
     updateLayerListWidget(orderUuids); // Sync UI
@@ -8323,7 +8323,7 @@ void MainWindow::addLayer(const GameFusion::Layer& layer, const QString& panelUu
     long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
     float fps = projectJson["fps"].toDouble();
 
-    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation.frames);
+    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation);
 
     // Update Layer Panel
     populateLayerList(panelContext.panel);
@@ -8348,7 +8348,7 @@ void MainWindow::removeLayer(const QString& layerUuid, const QString& panelUuid)
     long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
     float fps = projectJson["fps"].toDouble();
 
-    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation.frames);
+    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation);
 
     // Update Layer Panel
     populateLayerList(panelContext.panel);
@@ -8394,7 +8394,7 @@ void MainWindow::setLayerImage(const QString& layerUuid, const QString& panelUui
 
         long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
         float fps = projectJson["fps"].toDouble();
-        paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation.frames);
+        paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation);
         populateLayerList(panelContext.panel);
     }
 }
