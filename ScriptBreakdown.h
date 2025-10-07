@@ -236,6 +236,44 @@ struct Panel {
 
 };
 
+enum class CameraInterpolation {
+    Linear,     // Straight lines
+    AutoSmooth,     // Evenly curved interpolation, automatically recomputed tangents
+    Manual      // User-defined tangents
+};
+
+inline std::string interpolationToString(CameraInterpolation mode) {
+    switch (mode) {
+    case CameraInterpolation::Linear: return "Linear";
+    case CameraInterpolation::AutoSmooth: return "AutoSmooth";
+    case CameraInterpolation::Manual: return "Manual";
+    }
+    return "Linear";
+}
+
+inline CameraInterpolation interpolationFromString(const std::string& s) {
+    if (s == "AutoSmooth") return CameraInterpolation::AutoSmooth;
+    if (s == "Manual") return CameraInterpolation::Manual;
+    return CameraInterpolation::Linear;
+}
+
+struct CameraAnimation {
+    std::vector<CameraFrame> frames;     // Discrete camera keyframes
+    GameFusion::BezierCurve motionPath;  // Continuous path (optional)
+    CameraInterpolation interpolation = CameraInterpolation::Linear;
+
+    // extensions:
+    bool useMotionPath = false;                // If true, follow motionPath; otherwise use frames
+    float duration = 0.0f;               // Optional duration in seconds
+    bool loop = false;                   // Optional loop flag
+    // Tangent / easing controls can be added later
+
+    CameraAnimation() = default;
+
+    // For editor state: (may be redundant...Manual)
+    bool autoUpdateTangents = true;        // If true, AutoSmooth re-applies when handles move
+};
+
 struct Shot {
     std::string name; // e.g., SHOT_0010
     std::string type; // e.g., CLOSE, MEDIUM, WIDE
@@ -256,8 +294,9 @@ struct Shot {
     std::vector<CharacterDialog> characters;
     std::vector<Panel> panels;
 
-    std::vector<CameraFrame> cameraFrames; // Global across panels, time-based
+    //std::vector<CameraFrame> cameraFrames; // Global across panels, time-based
     GameFusion::BezierCurve cameraMotionPath; // Bézier for camera trajectory
+    CameraAnimation cameraAnimation;  // camera & camera motion info, global per shot
 
     std::string uuid;
     int startTime=-1;

@@ -298,6 +298,7 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
     }
 
     // CameraFrames JSON
+    // Deprecated cameraFrames
     if (obj.contains("cameraFrames") && obj["cameraFrames"].isArray()) {
         QJsonArray framesArray = obj["cameraFrames"].toArray();
         for (const QJsonValue& value : framesArray) {
@@ -316,9 +317,58 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
                 if(frameObj.contains("easing"))
                     frame.easing = fromString(frameObj["easing"].toString().toStdString());
 
-                shot.cameraFrames.push_back(frame);
+                //shot.cameraFrames.push_back(frame);
+                shot.cameraAnimation.frames.push_back(frame);
             }
         }
+    }
+
+    // CameraAnimation JSON
+    if (obj.contains("cameraAnimation") && obj["cameraAnimation"].isObject()) {
+        QJsonObject animObj = obj["cameraAnimation"].toObject();
+
+        // --- frames ---
+        if (animObj.contains("frames") && animObj["frames"].isArray()) {
+            QJsonArray framesArray = animObj["frames"].toArray();
+            for (const QJsonValue& value : framesArray) {
+                if (!value.isObject()) continue;
+                QJsonObject frameObj = value.toObject();
+                GameFusion::CameraFrame frame;
+                frame.name = frameObj["name"].toString().toStdString();
+                frame.uuid = frameObj["uuid"].toString().toStdString();
+                frame.time = frameObj["time"].toInt();
+                frame.x = static_cast<float>(frameObj["x"].toDouble());
+                frame.y = static_cast<float>(frameObj["y"].toDouble());
+                frame.zoom = static_cast<float>(frameObj["zoom"].toDouble());
+                frame.rotation = static_cast<float>(frameObj["rotation"].toDouble());
+                frame.panelUuid = frameObj["panelUuid"].toString().toStdString();
+                frame.frameOffset = frameObj["frameOffset"].toInt();
+                if (frameObj.contains("easing"))
+                    frame.easing = fromString(frameObj["easing"].toString().toStdString());
+                shot.cameraAnimation.frames.push_back(frame);
+            }
+        }
+
+        // --- motionPath ---
+        if (animObj.contains("motionPath") && animObj["motionPath"].isObject()) {
+            QJsonObject pathObj = animObj["motionPath"].toObject();
+            shot.cameraAnimation.motionPath.fromJson(pathObj);
+        }
+
+        // --- interpolation ---
+        if (animObj.contains("interpolation"))
+            shot.cameraAnimation.interpolation =
+                interpolationFromString(animObj["interpolation"].toString().toStdString());
+
+        // --- flags / values ---
+        if (animObj.contains("useMotionPath"))
+            shot.cameraAnimation.useMotionPath = animObj["useMotionPath"].toBool();
+        if (animObj.contains("duration"))
+            shot.cameraAnimation.duration = static_cast<float>(animObj["duration"].toDouble());
+        if (animObj.contains("loop"))
+            shot.cameraAnimation.loop = animObj["loop"].toBool();
+        if (animObj.contains("autoUpdateTangents"))
+            shot.cameraAnimation.autoUpdateTangents = animObj["autoUpdateTangents"].toBool();
     }
 
     // If no panels provided, add default one
@@ -1047,7 +1097,9 @@ void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
                 }
                 shotObj["panels"] = panelArray;
 
+                // DEPRECATED
                 QJsonArray framesArray;
+                /***
                 for (const auto& frame : shot.cameraFrames) {
                     QJsonObject cameraFrameObj;
                     cameraFrameObj["name"] = QString::fromStdString(frame.name);
@@ -1064,6 +1116,44 @@ void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
                     framesArray.append(cameraFrameObj);
                 }
                 shotObj["cameraFrames"] = framesArray;
+                ***/
+                // END DEPRECATED
+
+                // Camera Animation
+                // --- frames ---
+                //QJsonArray framesArray;
+                //framesArray = QJsonArray();
+                for (const auto& frame : shot.cameraAnimation.frames) {
+                    QJsonObject frameObj;
+                    frameObj["name"] = QString::fromStdString(frame.name);
+                    frameObj["uuid"] = QString::fromStdString(frame.uuid);
+                    frameObj["time"] = frame.time;
+                    frameObj["x"] = frame.x;
+                    frameObj["y"] = frame.y;
+                    frameObj["zoom"] = frame.zoom;
+                    frameObj["rotation"] = frame.rotation;
+                    frameObj["panelUuid"] = QString::fromStdString(frame.panelUuid);
+                    frameObj["frameOffset"] = frame.frameOffset;
+                    frameObj["easing"] = QString::fromStdString(toString(frame.easing));
+                    framesArray.append(frameObj);
+                }
+                QJsonObject animObj;
+                animObj["frames"] = framesArray;
+
+                // --- motionPath ---
+                QJsonObject pathObj;
+                shot.cameraAnimation.motionPath.toJson(pathObj);
+                animObj["motionPath"] = pathObj;
+
+                // --- metadata ---
+                animObj["interpolation"] =
+                    QString::fromStdString(interpolationToString(shot.cameraAnimation.interpolation));
+                animObj["useMotionPath"] = shot.cameraAnimation.useMotionPath;
+                animObj["duration"] = shot.cameraAnimation.duration;
+                animObj["loop"] = shot.cameraAnimation.loop;
+                animObj["autoUpdateTangents"] = shot.cameraAnimation.autoUpdateTangents;
+
+                shotObj["cameraAnimation"] = animObj;
 
                 shotsArray.append(shotObj);
             }
@@ -1098,7 +1188,8 @@ void ScriptBreakdown::addCameraFrame(const CameraFrame& frame) {
         for(GameFusion::Shot & shot: scene.shots)
             for(GameFusion::Panel & panel: shot.panels)
                 if(panel.uuid == frame.panelUuid) {
-                    shot.cameraFrames.push_back(frame);
+                    //shot.cameraFrames.push_back(frame);// deprecated
+                    shot.cameraAnimation.frames.push_back(frame);
                     scene.dirty = true;
                     return;
                 }
@@ -1108,33 +1199,34 @@ bool ScriptBreakdown::updateCameraFrame(const CameraFrame& frame) {
 
     for(GameFusion::Scene &scene: scenes)
         for(GameFusion::Shot & shot: scene.shots)
+            for (GameFusion::CameraFrame& existing : shot.cameraAnimation.frames)
+                if (existing.uuid == frame.uuid) {
+                    existing = frame;
+                    scene.dirty = true;
+                    return true;
+                }
+    /***
             for(GameFusion::CameraFrame &cameraFrame : shot.cameraFrames)
                 if(cameraFrame.uuid == frame.uuid){
                     cameraFrame = frame;
                     scene.dirty = true;
                     return true;
                 }
-    /*
-    auto it = std::find_if(cameraFrames.begin(), cameraFrames.end(),
-                           [&](const CameraFrame& f) { return f.uuid == frame.uuid; });
-
-    if (it != cameraFrames.end()) {
-        *it = frame;
-        return true;
-    }*/
+   ***/
     return false;
 }
 
 bool ScriptBreakdown::deleteCameraFrame(const std::string& uuid) {
     for (GameFusion::Scene& scene : scenes) {
         for (GameFusion::Shot& shot : scene.shots) {
-            auto it = std::remove_if(shot.cameraFrames.begin(), shot.cameraFrames.end(),
-                                     [&](const GameFusion::CameraFrame& frame) {
-                                         return frame.uuid == uuid;
-                                     });
+            auto it = std::remove_if(
+                shot.cameraAnimation.frames.begin(),
+                shot.cameraAnimation.frames.end(),
+                [&](const GameFusion::CameraFrame& f) { return f.uuid == uuid; });
 
-            if (it != shot.cameraFrames.end()) {
-                shot.cameraFrames.erase(it, shot.cameraFrames.end());
+            if (it != shot.cameraAnimation.frames.end()) {
+                shot.cameraAnimation.frames.erase(it, shot.cameraAnimation.frames.end());
+                scene.dirty = true;
                 return true;
             }
         }

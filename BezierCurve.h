@@ -16,6 +16,13 @@ struct StrokePoint {
 };
 
 struct BezierControl {
+
+    enum class HandleMode {
+        AutoSmooth,     // Automatically smoothed tangent
+        Linear,         // Straight-line interpolation
+        Manual          // Explicitly user-controlled
+    };
+
     Vector3D point;      // Anchor point
     Vector3D leftControl; // Left control point (relative to point)
     Vector3D rightControl; // Right control point (relative to point)
@@ -24,6 +31,9 @@ struct BezierControl {
     Vector3D tangentNormal; // tangent normal to the curve
 
     int indexPoint = -1;
+
+    HandleMode leftMode = HandleMode::Manual;
+    HandleMode rightMode = HandleMode::Manual;
 
     BezierControl(const Vector3D& p, const Vector3D& left, const Vector3D& right)
         : point(p), leftControl(left), rightControl(right) {}

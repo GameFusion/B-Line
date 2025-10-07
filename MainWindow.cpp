@@ -2494,7 +2494,7 @@ void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices sho
         for (auto& allScene : scriptBreakdown->getScenes()) {
             for (auto& allShot : allScene.shots) {
                 if (allShot.startTime >= insertedShot.endTime) {
-                    for (auto& camera : allShot.cameraFrames) {
+                    for (auto& camera : allShot.cameraAnimation.frames) {
                         CameraKeyFrame *cameraKeyFrame = timeLineView->getCameraKeyFrame(camera.uuid.c_str());
                         if(cameraKeyFrame){
                             long oldTime = cameraKeyFrame->timeMs;
@@ -2511,7 +2511,7 @@ void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices sho
         }
 
         // Add new camera keyframes
-        for(auto &camera: insertedShot.cameraFrames) {
+        for(auto &camera: insertedShot.cameraAnimation.frames) {
             QString panelUuid = camera.panelUuid.c_str();
             long timeMs = -1;
             for (const auto& panel : insertedShot.panels) {
@@ -2562,7 +2562,7 @@ ShotIndices MainWindow::deleteShotSegment(ShotContext &shotContext, double curre
         shotIndex = static_cast<int>(std::distance(shots.begin(), it));
 
         // Remove camera keyframes
-        for (const auto& camera : it->cameraFrames) {
+        for (const auto& camera : it->cameraAnimation.frames) {
             timeLineView->removeCameraKeyFrame(camera.uuid.c_str());
             GameFusion::Log().debug() << "Removed camera keyframe " << camera.uuid.c_str();
         }
@@ -2581,7 +2581,7 @@ ShotIndices MainWindow::deleteShotSegment(ShotContext &shotContext, double curre
     for (auto& scene : scriptBreakdown->getScenes()) {
         for (auto& shot : scene.shots) {
             if (shot.startTime >= toDelete.startTime) {
-                for (auto& camera : shot.cameraFrames) {
+                for (auto& camera : shot.cameraAnimation.frames) {
                     CameraKeyFrame *cameraKeyFrame = timeLineView->getCameraKeyFrame(camera.uuid.c_str());
                     if(cameraKeyFrame){
                         long oldTime = cameraKeyFrame->timeMs;
@@ -2696,7 +2696,7 @@ void MainWindow::addTimelineKeyFrames(const GameFusion::Shot& shot) {
     qreal fps = projectJson["fps"].toDouble(24.0);
     qreal mspf = 1000.0f / fps;
 
-    for (const auto& camera : shot.cameraFrames) {
+    for (const auto& camera : shot.cameraAnimation.frames) {
         GameFusion::Log().debug() << "Processing camera for shot " << shot.startTime;
         QString panelUuid = camera.panelUuid.c_str();
         long timeMs = -1;
@@ -3604,7 +3604,7 @@ CameraContext MainWindow::findCameraForTime(double time) {
     }
 
 
-    std::vector<CameraFrame> sortedFrames = panelContext.shot->cameraFrames;
+    std::vector<CameraFrame> sortedFrames = panelContext.shot->cameraAnimation.frames;
     std::sort(sortedFrames.begin(), sortedFrames.end(), [](const CameraFrame& a, const CameraFrame& b) {
         return a.frameOffset < b.frameOffset;
     });
@@ -3613,7 +3613,7 @@ CameraContext MainWindow::findCameraForTime(double time) {
     qreal mspf = 1000.0f / fps;
 
     GameFusion::CameraFrame *currentCamera = nullptr;
-    for(auto &camera: panelContext.shot->cameraFrames){
+    for(auto &camera: panelContext.shot->cameraAnimation.frames){
         double shotTime = panelContext.shot->startTime;
         double cameraTime = shotTime + camera.frameOffset * mspf;
         if(cameraTime <= time)
@@ -3633,7 +3633,7 @@ CameraContext MainWindow::findCameraByUuid(const std::string& uuid) {
     auto& scenes = scriptBreakdown->getScenes();
     for (auto& scene : scenes) {
         for (auto& shot : scene.shots) {
-            for (auto& cameraFrame : shot.cameraFrames) {
+            for (auto& cameraFrame : shot.cameraAnimation.frames) {
                 if (cameraFrame.uuid == uuid) {
                     PanelContext panelContext = findPanelByUuid(cameraFrame.panelUuid);
                     return { &scene, &shot, &cameraFrame };
@@ -4540,8 +4540,8 @@ void MainWindow::onTimeCursorMoved(double time)
 
         if(theShot){
             long panelStartTime = theShot->startTime + currentPanel->startTime;
-            paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraFrames);
-            cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraFrames);
+            paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraAnimation.frames);
+            cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraAnimation.frames);
         }
 
 
@@ -4561,11 +4561,11 @@ void MainWindow::onTimeCursorMoved(double time)
     currentPanel = newPanel;
 
     if(theShot) {
-        paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraFrames);
+        paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraAnimation.frames);
 
         if (!isPlaying) {
             populateLayerList(currentPanel);
-            cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraFrames);
+            cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraAnimation.frames);
         }
     }
 }
@@ -5124,8 +5124,8 @@ void MainWindow::deleteCamera(QString uuid, double cursorTime)
 
     qreal fps = projectJson["fps"].toDouble();
     long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
-    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraFrames);
-    cameraSidePanel->setCameraList(panelContext.panel->uuid.c_str(), panelContext.shot->cameraFrames);
+    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation.frames);
+    cameraSidePanel->setCameraList(panelContext.panel->uuid.c_str(), panelContext.shot->cameraAnimation.frames);
     timeLineView->setTimeCursor(cursorTime);
 
     panelContext.scene->dirty = true;
@@ -5148,11 +5148,11 @@ void MainWindow::newCamera(const GameFusion::CameraFrame newCamera, double curre
 
     long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
 
-    panelContext.shot->cameraFrames.push_back(newCamera);
+    panelContext.shot->cameraAnimation.frames.push_back(newCamera);
     panelContext.scene->dirty = true;
 
-    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraFrames);
-    cameraSidePanel->setCameraList(panelContext.panel->uuid.c_str(), panelContext.shot->cameraFrames);
+    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation.frames);
+    cameraSidePanel->setCameraList(panelContext.panel->uuid.c_str(), panelContext.shot->cameraAnimation.frames);
     timeLineView->setTimeCursor(currentTime);
 }
 
@@ -5230,12 +5230,12 @@ void MainWindow::renameCamera(const QString& uuid, const QString& newName, doubl
     if (panelContext.isValid()) {
         long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
         qreal fps = projectJson["fps"].toDouble();
-        paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraFrames);
+        paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation.frames);
     }
 
     // Update side panel
     cameraSidePanel->setCameraList(QString::fromStdString(cameraContext.camera->panelUuid),
-                                   cameraContext.shot->cameraFrames);
+                                   cameraContext.shot->cameraAnimation.frames);
 
     // Update timeline cursor and scene
     timeLineView->setTimeCursor(cursorTime);
@@ -5256,7 +5256,7 @@ void MainWindow::onCameraFrameAddedFromPaint(const GameFusion::CameraFrame& fram
         for (auto& shot : scene.shots) {
             for(auto &panel : shot.panels){
                 if(panel.uuid == frame.panelUuid){
-                    cameraSidePanel->setCameraList(frame.panelUuid.c_str(), shot.cameraFrames);
+                    cameraSidePanel->setCameraList(frame.panelUuid.c_str(), shot.cameraAnimation.frames);
 
 
                     return;
@@ -5542,12 +5542,12 @@ void MainWindow::exportStoryboardPDF() {
                 int imageHeight = panelHeight;
 
 
-                if(!imageRef.isNull() && shot.cameraFrames.size() > 1) {
+                if(!imageRef.isNull() && shot.cameraAnimation.frames.size() > 1) {
                     // For camera movement, span two columns and adjust height
                     imageWidth = panelWidth * 2;
                     // Assume bounding box height is the max of camera frame heights
                     qreal maxHeight = 0;
-                    for (const auto& frame : shot.cameraFrames) {
+                    for (const auto& frame : shot.cameraAnimation.frames) {
                         QRect rect(frame.x, frame.y, screenWidth*frame.zoom, screenHeight*frame.zoom);
                         maxHeight = maxHeight > rect.height() ? maxHeight : rect.height();
 
@@ -5557,7 +5557,7 @@ void MainWindow::exportStoryboardPDF() {
 
                 }
 
-                if(shot.cameraFrames.size() > 1)
+                if(shot.cameraAnimation.frames.size() > 1)
                     pageColumn += 2;
                 else
                     pageColumn ++;
@@ -5608,12 +5608,12 @@ void MainWindow::exportStoryboardPDF() {
                     painter.drawText(x, textY, QString("%1").arg(QString::fromStdString(character.dialogue)));
                     textY += 15 * 2;
                 }
-                if (!shot.cameraFrames.empty()) {
+                if (!shot.cameraAnimation.frames.empty()) {
                     painter.drawText(x, textY, QString("Camera Motion: Pos(%1,%2) Rot:%3 Scale:%4")
-                                         .arg(shot.cameraFrames[0].x)
-                                         .arg(shot.cameraFrames[0].y)
-                                         .arg(shot.cameraFrames[0].rotation)
-                                         .arg(shot.cameraFrames[0].zoom));
+                                         .arg(shot.cameraAnimation.frames[0].x)
+                                         .arg(shot.cameraAnimation.frames[0].y)
+                                         .arg(shot.cameraAnimation.frames[0].rotation)
+                                         .arg(shot.cameraAnimation.frames[0].zoom));
                     textY += 15 * 2;
                 }
 
@@ -5698,7 +5698,7 @@ void MainWindow::exportStoryboardPDF2() {
                     continue;
         for (const auto& shot : scene.shots) {
             for (const auto& panel : shot.panels) {
-                bool spansTwoColumns = !shot.cameraFrames.empty() && shot.cameraFrames.size() > 1;
+                bool spansTwoColumns = !shot.cameraAnimation.frames.empty() && shot.cameraAnimation.frames.size() > 1;
                 totalPanels += spansTwoColumns ? 2 : 1;
             }
         }
@@ -5721,7 +5721,7 @@ void MainWindow::exportStoryboardPDF2() {
 
                 panelNumber ++;
                 // --- Determine if camera spans two columns ---
-                bool spansTwoColumns = !shot.cameraFrames.empty() && shot.cameraFrames.size() > 1;
+                bool spansTwoColumns = !shot.cameraAnimation.frames.empty() && shot.cameraAnimation.frames.size() > 1;
 
                 if ((panelCountOnPage+spansTwoColumns) >= panelsPerPage) {
                     pdf.newPage();
@@ -5964,7 +5964,7 @@ void MainWindow::exportStoryboardPDF3() {
         for (const auto& shot : scene.shots) {
             for (const auto& panel : shot.panels) {
                 // Determine if this panel spans one or two columns
-                bool isDoubleColumn = !shot.cameraFrames.empty(); // or (shot.cameraFrames.size() > 1)
+                bool isDoubleColumn = !shot.cameraAnimation.frames.empty(); // or (shot.cameraAnimation.frames.size() > 1)
                 int panelWidth = isDoubleColumn ? columnWidth * 2 : columnWidth;
 
                 // Determine panel height based on image aspect ratio or default
@@ -6237,7 +6237,7 @@ void MainWindow::timelineCameraUpdate(const QString& uuid, long frameOffset, con
 
             //--- make a copy of the camera data that will be deleted (to be able to insert it again)
             CameraFrame movedCamera = *cameraCtx.camera;
-            auto& oldFrames = cameraCtx.shot->cameraFrames;
+            auto& oldFrames = cameraCtx.shot->cameraAnimation.frames;
             oldFrames.erase(
                 std::remove_if(oldFrames.begin(), oldFrames.end(),
                                [&](const GameFusion::CameraFrame& cam) { return cam.uuid == cameraCtx.camera->uuid; }),
@@ -6245,8 +6245,8 @@ void MainWindow::timelineCameraUpdate(const QString& uuid, long frameOffset, con
                 );
 
             // Add to new shot
-            newCtx.shot->cameraFrames.push_back(movedCamera);
-            cameraCtx.camera = &newCtx.shot->cameraFrames.back();
+            newCtx.shot->cameraAnimation.frames.push_back(movedCamera);
+            cameraCtx.camera = &newCtx.shot->cameraAnimation.frames.back();
             cameraCtx.shot = newCtx.shot;
             cameraCtx.scene = newCtx.scene;
 
@@ -6261,8 +6261,8 @@ void MainWindow::timelineCameraUpdate(const QString& uuid, long frameOffset, con
                 //--- A CAMERA WAS ADDED TO CURRENT PANEL
                 long panelStartTime = cameraCtx.shot->startTime + currentPanel->startTime;
                 float fps = projectJson["fps"].toDouble();
-                paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, cameraCtx.shot->cameraFrames);
-                cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), cameraCtx.shot->cameraFrames);
+                paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, cameraCtx.shot->cameraAnimation.frames);
+                cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), cameraCtx.shot->cameraAnimation.frames);
             }
 
             if(oldPanelUuid == currentPanel->uuid){
@@ -6271,8 +6271,8 @@ void MainWindow::timelineCameraUpdate(const QString& uuid, long frameOffset, con
                 if(panelContext.isValid()){
                     long panelStartTime = panelContext.shot->startTime + currentPanel->startTime;
                     float fps = projectJson["fps"].toDouble();
-                    paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, panelContext.shot->cameraFrames);
-                    cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), panelContext.shot->cameraFrames);
+                    paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, panelContext.shot->cameraAnimation.frames);
+                    cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), panelContext.shot->cameraAnimation.frames);
                 }
             }
         }
@@ -6314,7 +6314,7 @@ void MainWindow::timelineCameraDeleted(const QString& uuid) {
     QString panelUuid = cameraCtx.camera->panelUuid.c_str();
 
     // 2. Remove the camera from its shot
-    auto& cameraFrames = cameraCtx.shot->cameraFrames;
+    auto& cameraFrames = cameraCtx.shot->cameraAnimation.frames;
     auto it = std::remove_if(
         cameraFrames.begin(), cameraFrames.end(),
         [&](const GameFusion::CameraFrame& cam) { return cam.uuid == cameraCtx.camera->uuid; }
@@ -6879,7 +6879,7 @@ void MainWindow::onDuplicateScene() {
             panel.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
 
             // Update camera frame UUIDs
-            for (auto& camera : shot.cameraFrames) {
+            for (auto& camera : shot.cameraAnimation.frames) {
                 // update camera panel uuid
                 if(camera.panelUuid == oldPanelUuid){
                     camera.panelUuid = panel.uuid;
@@ -7104,7 +7104,7 @@ void MainWindow::onDuplicateShot() {
         panel.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
 
         // Update camera frame UUIDs
-        for (auto& camera : dupShot.cameraFrames) {
+        for (auto& camera : dupShot.cameraAnimation.frames) {
             // update camera panel uuid
             if(camera.panelUuid == oldPanelUuid){
                 camera.panelUuid = panel.uuid;
@@ -7540,7 +7540,7 @@ void MainWindow::onPastePanel()
             layer.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
         }
 
-    for (auto& cameraFrame : updatedShot.cameraFrames) {
+    for (auto& cameraFrame : updatedShot.cameraAnimation.frames) {
         if(cameraFrame.panelUuid == ctx.panel->uuid){
             //cameraFrame.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
             cameraFrame.panelUuid = pastePanel.uuid;
@@ -8301,7 +8301,7 @@ void MainWindow::applyLayerOrder(const std::vector<QString>& orderUuids, const Q
     long panelStartTime = panelCtx.shot->startTime + panelCtx.panel->startTime;
     float fps = projectJson["fps"].toDouble();
 
-    paint->getPaintArea()->setPanel(*panelCtx.panel, panelStartTime, fps, panelCtx.shot->cameraFrames);
+    paint->getPaintArea()->setPanel(*panelCtx.panel, panelStartTime, fps, panelCtx.shot->cameraAnimation.frames);
     paint->getPaintArea()->invalidateAllLayers();
     paint->getPaintArea()->updateCompositeImage();
     updateLayerListWidget(orderUuids); // Sync UI
@@ -8323,7 +8323,7 @@ void MainWindow::addLayer(const GameFusion::Layer& layer, const QString& panelUu
     long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
     float fps = projectJson["fps"].toDouble();
 
-    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraFrames);
+    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation.frames);
 
     // Update Layer Panel
     populateLayerList(panelContext.panel);
@@ -8348,7 +8348,7 @@ void MainWindow::removeLayer(const QString& layerUuid, const QString& panelUuid)
     long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
     float fps = projectJson["fps"].toDouble();
 
-    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraFrames);
+    paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation.frames);
 
     // Update Layer Panel
     populateLayerList(panelContext.panel);
@@ -8394,7 +8394,7 @@ void MainWindow::setLayerImage(const QString& layerUuid, const QString& panelUui
 
         long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
         float fps = projectJson["fps"].toDouble();
-        paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraFrames);
+        paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation.frames);
         populateLayerList(panelContext.panel);
     }
 }
