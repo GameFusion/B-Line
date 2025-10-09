@@ -238,6 +238,7 @@ public slots:
     void onDuplicateShot();
 
     void onNewPanel();
+    void onInsertPanel();
     void onEditPanel();
     void onRenamePanel();
     void onDuplicatePanel();
@@ -272,9 +273,20 @@ public slots:
     void onLayerFX();
     void onLayerAdd();
     void onLayerDelete();
+    void onLayerClear();
     void onLayerMoveUp();
     void onLayerMoveDown();
     void onLayerDuplicate();
+    void onLayerDuplicateThroughShot();
+    void onLayerInstanceToSelectedPanels();
+    void onLayerInstanceThroughShot();
+    void onLayerCopy();
+    void onLayerPasteAsInstance();
+    void onLayerPasteAsDuplicate();
+    void onLayerRename();
+    void onLayerProperties();
+    void onGroupLayers();
+    void onUngroupLayers();
     void onLayerReordered(const QModelIndex &parent,
                                       int start, int end,
                                       const QModelIndex &destination, int row);
@@ -326,6 +338,13 @@ public slots:
                            const std::variant<int, double, GameFusion::BlendMode>& value);
     void duplicateLayer(const QString &sourceLayerUuid, const QString &duplicateLayerUuid);
     void updateLayer(const QString& layerUuid, const QString& panelUuid, const GameFusion::Layer& layer);    // this is used for undo/redo layer strokes from painter, this can be fine tuned
+    void duplicateLayerThroughShot(const QString& layerUuid);
+    void instanceLayerToPanels(const QString& layerUuid, const std::vector<QString>& panelUuids);
+    void renameLayer(const QString& layerUuid, const QString& newName, bool propagateToInstances);
+    bool hasLayerInstances(const std::string& layerUuid) const;
+    void groupLayers(const std::vector<QString>& layerUuids, const QString& panelUuid);
+    void ungroupLayers(const QString& groupUuid, const QString& panelUuid);
+
 
     // Auto save and related timer functions
     void onCheckDirtyTimer();
@@ -439,6 +458,7 @@ protected:
     QAction *duplicateShotAct;
 
     QAction *newPanelAct;
+    QAction *insertPanelAct;
     QAction *editPanelAct;
     QAction *renamePanelAct;
     QAction *duplicatePanelAct;
@@ -459,6 +479,9 @@ protected:
 
     GameFusion::CameraFrame clipboardCamera;
     bool hasClipboardCamera = false;
+
+    GameFusion::Layer clipboardLayer;
+    bool hasClipboardLayer = false;
 
 private:
     void loadSettings();

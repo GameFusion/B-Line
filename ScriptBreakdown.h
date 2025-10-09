@@ -127,9 +127,12 @@ struct CharacterDialog {
     std::string dialogue;
 };
 
+
+
 struct Layer {
     std::string uuid;
     std::string name;
+    std::string aliasUuid; // UUID of the original layer if this is an alias, empty otherwise
     std::string thumbnail;
 
     float opacity = 1.0f;
@@ -141,6 +144,9 @@ struct Layer {
     float rotation = 0.0f;
     BlendMode blendMode = BlendMode::Opacity;
     std::string fx;
+
+    std::string sourceUuid; // UUID of original layer if this is an instance
+    std::vector<Layer> layers; // For groups
 
     struct KeyFrame {
         KeyFrame() {
@@ -187,7 +193,12 @@ struct Layer {
         uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
     }
 
+    // brutally simple system for handling layers and groups
+    bool isInstance() {return !sourceUuid.empty();}
+    bool isGroup() {return !layers.empty();}
+
 };
+
 
 struct Panel {
     std::string uuid;

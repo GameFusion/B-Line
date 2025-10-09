@@ -642,6 +642,110 @@ private:
 };
 
 
+class InstanceLayerCommand : public QUndoCommand {
+public:
+    InstanceLayerCommand(const QString& originalLayerUuid, const QString& instanceLayerUuid,
+                         const QString& panelUuid, MainWindow* mainWindow)
+        : m_originalLayerUuid(originalLayerUuid), m_instanceLayerUuid(instanceLayerUuid),
+          m_panelUuid(panelUuid), m_mainWindow(mainWindow) {
+        setText("Instance Layer");
+    }
+
+    void undo() override {
+        m_mainWindow->removeLayer(m_instanceLayerUuid, m_panelUuid);
+    }
+
+    void redo() override {
+        LayerContext layerContext = m_mainWindow->findLayerByUuid(m_originalLayerUuid.toStdString().c_str());
+        if (!layerContext.isValid()) return;
+
+        GameFusion::Layer instanceLayer = *layerContext.layer;
+        instanceLayer.uuid = m_instanceLayerUuid.toStdString();
+        instanceLayer.name = layerContext.layer->name + " (Instance)";
+        instanceLayer.sourceUuid = m_originalLayerUuid.toStdString();
+        instanceLayer.layers.clear(); // Instances don't have nested layers
+
+        m_mainWindow->addLayer(instanceLayer, m_panelUuid);
+    }
+
+private:
+    QString m_originalLayerUuid;
+    QString m_instanceLayerUuid;
+    QString m_panelUuid;
+    MainWindow* m_mainWindow;
+};
+
+class CopyPasteLayerCommand : public QUndoCommand {
+public:
+    CopyPasteLayerCommand(const GameFusion::Layer& layer, const QString& panelUuid, bool asAlias, MainWindow* mainWindow)
+        : m_layer(layer), m_panelUuid(panelUuid), m_asAlias(asAlias), m_mainWindow(mainWindow) {
+        setText(asAlias ? "Paste Layer as Alias" : "Paste Layer as Duplicate");
+    }
+
+    void undo() override {
+        m_mainWindow->removeLayer(QString::fromStdString(m_layer.uuid), m_panelUuid);
+    }
+
+    void redo() override {
+        m_mainWindow->addLayer(m_layer, m_panelUuid);
+    }
+
+private:
+    GameFusion::Layer m_layer;
+    QString m_panelUuid;
+    bool m_asAlias;
+    MainWindow* m_mainWindow;
+};
+
+class RenameLayerCommand : public QUndoCommand {
+public:
+    RenameLayerCommand(const QString& layerUuid, const QString& oldName, const QString& newName,
+                       bool propagateToAliases, const QString& panelUuid, MainWindow* mainWindow)
+        : m_layerUuid(layerUuid), m_oldName(oldName), m_newName(newName),
+          m_propagateToAliases(propagateToAliases), m_panelUuid(panelUuid), m_mainWindow(mainWindow) {
+        setText("Rename Layer");
+    }
+
+    void undo() override {
+        m_mainWindow->renameLayer(m_layerUuid, m_oldName, m_propagateToAliases);
+    }
+
+    void redo() override {
+        m_mainWindow->renameLayer(m_layerUuid, m_newName, m_propagateToAliases);
+    }
+
+private:
+    QString m_layerUuid;
+    QString m_oldName;
+    QString m_newName;
+    bool m_propagateToAliases;
+    QString m_panelUuid;
+    MainWindow* m_mainWindow;
+};
+
+class GroupLayersCommand : public QUndoCommand {
+public:
+    GroupLayersCommand(const std::vector<QString>& layerUuids, const QString& groupUuid,
+                       const QString& panelUuid, MainWindow* mainWindow)
+        : m_layerUuids(layerUuids), m_groupUuid(groupUuid), m_panelUuid(panelUuid), m_mainWindow(mainWindow) {
+        setText("Group Layers");
+    }
+
+    void undo() override {
+        m_mainWindow->ungroupLayers(m_groupUuid, m_panelUuid);
+    }
+
+    void redo() override {
+        m_mainWindow->groupLayers(m_layerUuids, m_panelUuid);
+    }
+
+private:
+    std::vector<QString> m_layerUuids;
+    QString m_groupUuid;
+    QString m_panelUuid;
+    MainWindow* m_mainWindow;
+};
+
 class LayerFXCommand : public QUndoCommand {
 public:
     LayerFXCommand(const QString& layerUuid, const QString& panelUuid, const std::string& oldFX, const std::string& newFX, MainWindow* mainWindow)
@@ -796,6 +900,31 @@ public:
 private:
     GameFusion::Layer m_originalLayer;
     GameFusion::Layer m_modifiedLayer;
+    QString m_layerUuid;
+    QString m_panelUuid;
+    MainWindow* m_mainWindow;
+};
+
+class ClearLayerCommand : public QUndoCommand {
+public:
+    ClearLayerCommand(const GameFusion::Layer& originalLayer, const GameFusion::Layer& clearedLayer,
+                      const QString& layerUuid, const QString& panelUuid, MainWindow* mainWindow)
+        : m_originalLayer(originalLayer), m_clearedLayer(clearedLayer),
+          m_layerUuid(layerUuid), m_panelUuid(panelUuid), m_mainWindow(mainWindow) {
+        setText("Clear Layer");
+    }
+
+    void undo() override {
+        m_mainWindow->updateLayer(m_layerUuid, m_panelUuid, m_originalLayer);
+    }
+
+    void redo() override {
+        m_mainWindow->updateLayer(m_layerUuid, m_panelUuid, m_clearedLayer);
+    }
+
+private:
+    GameFusion::Layer m_originalLayer;
+    GameFusion::Layer m_clearedLayer;
     QString m_layerUuid;
     QString m_panelUuid;
     MainWindow* m_mainWindow;
@@ -1407,6 +1536,7 @@ MainWindow::MainWindow(QWidget *parent)
     // Panel menu
     QMenu *panelMenu = storyboardMenu->addMenu(tr("Panel"));
     newPanelAct = panelMenu->addAction(tr("New Panel"));
+    insertPanelAct = panelMenu->addAction(tr("Insert Panel"));
     editPanelAct = panelMenu->addAction(tr("Edit Panel"));
     renamePanelAct = panelMenu->addAction(tr("Rename Panel"));
     duplicatePanelAct = panelMenu->addAction(tr("Duplicate Panel"));
@@ -1422,6 +1552,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 
     newPanelAct->setEnabled(false);
+    insertPanelAct->setEnabled(false);
     editPanelAct->setEnabled(false);
     renamePanelAct->setEnabled(false);
     duplicatePanelAct->setEnabled(false);
@@ -1431,7 +1562,84 @@ MainWindow::MainWindow(QWidget *parent)
     clearPanelAct->setEnabled(false);
     deletePanelAct->setEnabled(false);
 
-    // Existing camera actions
+    // --- Layer menu
+
+    // Create Layer submenu
+    QMenu* layerMenu = new QMenu("Layer", storyboardMenu);
+    storyboardMenu->addMenu(layerMenu);
+
+    // New Layer
+    QAction* newLayerAction = new QAction("New Layer...", layerMenu);
+    layerMenu->addAction(newLayerAction);
+    connect(newLayerAction, &QAction::triggered, this, &MainWindow::onLayerAdd);
+
+    // Clear Layer
+    QAction* clearLayerAction = new QAction("Clear Layer", layerMenu);
+    layerMenu->addAction(clearLayerAction);
+    connect(clearLayerAction, &QAction::triggered, this, &MainWindow::onLayerClear);
+
+    // Duplicate Layer submenu
+    QMenu* duplicateLayerMenu = new QMenu("Duplicate Layer", layerMenu);
+    layerMenu->addMenu(duplicateLayerMenu);
+    QAction* duplicateCurrentPanelAction = new QAction("Current Panel", duplicateLayerMenu);
+    QAction* duplicateThroughShotAction = new QAction("Through Shot", duplicateLayerMenu);
+    duplicateLayerMenu->addAction(duplicateCurrentPanelAction);
+    duplicateLayerMenu->addAction(duplicateThroughShotAction);
+    connect(duplicateCurrentPanelAction, &QAction::triggered, this, &MainWindow::onLayerDuplicate);
+    connect(duplicateThroughShotAction, &QAction::triggered, this, &MainWindow::onLayerDuplicateThroughShot);
+
+    // Alias Layer submenu
+    QMenu* aliasLayerMenu = new QMenu("Instance Layer", layerMenu);
+    layerMenu->addMenu(aliasLayerMenu);
+    QAction* aliasToSelectedPanelsAction = new QAction("To Selected Panels", aliasLayerMenu);
+    QAction* aliasThroughShotAction = new QAction("Through Shot", aliasLayerMenu);
+    aliasLayerMenu->addAction(aliasToSelectedPanelsAction);
+    aliasLayerMenu->addAction(aliasThroughShotAction);
+    connect(aliasToSelectedPanelsAction, &QAction::triggered, this, &MainWindow::onLayerInstanceToSelectedPanels);
+    connect(aliasThroughShotAction, &QAction::triggered, this, &MainWindow::onLayerInstanceThroughShot);
+
+    // Copy and Paste
+    QAction* copyLayerAction = new QAction("Copy Layer", layerMenu);
+    QMenu* pasteLayerMenu = new QMenu("Paste Layer As...", layerMenu);
+    layerMenu->addAction(copyLayerAction);
+    layerMenu->addMenu(pasteLayerMenu);
+    QAction* pasteAsAliasAction = new QAction("Instance", pasteLayerMenu);
+    QAction* pasteAsDuplicateAction = new QAction("Duplicate", pasteLayerMenu);
+    pasteLayerMenu->addAction(pasteAsAliasAction);
+    pasteLayerMenu->addAction(pasteAsDuplicateAction);
+    connect(copyLayerAction, &QAction::triggered, this, &MainWindow::onLayerCopy);
+    connect(pasteAsAliasAction, &QAction::triggered, this, &MainWindow::onLayerPasteAsInstance);
+    connect(pasteAsDuplicateAction, &QAction::triggered, this, &MainWindow::onLayerPasteAsDuplicate);
+
+    // Rename and Delete
+    QAction* renameLayerAction = new QAction("Rename Layer...", layerMenu);
+    QAction* deleteLayerAction = new QAction("Delete Layer", layerMenu);
+    layerMenu->addAction(renameLayerAction);
+    layerMenu->addAction(deleteLayerAction);
+    connect(renameLayerAction, &QAction::triggered, this, &MainWindow::onLayerRename);
+    connect(deleteLayerAction, &QAction::triggered, this, &MainWindow::onLayerDelete);
+
+    // Layer Properties
+    QAction* layerPropertiesAction = new QAction("Layer Properties...", layerMenu);
+    layerMenu->addAction(layerPropertiesAction);
+    connect(layerPropertiesAction, &QAction::triggered, this, &MainWindow::onLayerProperties);
+
+    // Group and Ungroup
+    QAction* groupLayersAction = new QAction("Group Layers", layerMenu);
+    QAction* ungroupLayersAction = new QAction("Ungroup Layers", layerMenu);
+    layerMenu->addAction(groupLayersAction);
+    layerMenu->addAction(ungroupLayersAction);
+    connect(groupLayersAction, &QAction::triggered, this, &MainWindow::onGroupLayers);
+    connect(ungroupLayersAction, &QAction::triggered, this, &MainWindow::onUngroupLayers);
+
+    connect(ui->layerListWidget->model(), &QAbstractItemModel::rowsMoved, this, &MainWindow::onLayerReordered);
+    connect(ui->toolButton_layerDup, &QToolButton::clicked, this, &MainWindow::onLayerDuplicate);
+    //connect(paint, &PaintArea::layerModified, this, &MainWindow::onPaintAreaLayerModified);
+    //connect(paint, &PaintArea::keyFramePositionChanged, this, &MainWindow::onKeyFramePositionChanged);
+
+    //
+    // --- Existing camera actions
+    //
     QMenu *cameraMenu = storyboardMenu->addMenu(tr("Camera"));
     newCameraAct = cameraMenu->addAction(tr("New Camera"));
     renameCameraAct = cameraMenu->addAction(tr("Rename Camera "));
@@ -1464,6 +1672,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Connect panel actions
     connect(newPanelAct, &QAction::triggered, this, &MainWindow::onNewPanel);
+    connect(insertPanelAct, &QAction::triggered, this, &MainWindow::onInsertPanel);
     connect(editPanelAct, &QAction::triggered, this, &MainWindow::onEditPanel);
     connect(renamePanelAct, &QAction::triggered, this, &MainWindow::onRenamePanel);
     connect(duplicatePanelAct, &QAction::triggered, this, &MainWindow::onDuplicatePanel);
@@ -4442,6 +4651,7 @@ void MainWindow::onTimeCursorMoved(double time)
     deleteShotAct->setEnabled(false);
 
     newPanelAct->setEnabled(false);
+    insertPanelAct->setEnabled(false);
     editPanelAct->setEnabled(false);
     renamePanelAct->setEnabled(false);
     duplicatePanelAct->setEnabled(false);
@@ -4518,6 +4728,7 @@ void MainWindow::onTimeCursorMoved(double time)
     deleteShotAct->setEnabled(theShot);
 
     newPanelAct->setEnabled(theShot);
+    insertPanelAct->setEnabled(theShot);
     editPanelAct->setEnabled(theShot);
     renamePanelAct->setEnabled(theShot);
     duplicatePanelAct->setEnabled(theShot);
@@ -7320,6 +7531,82 @@ void MainWindow::onNewPanel()
         undoStack->push(new PanelCommand(this, originalShot, updatedShot, currentTime, "New Panel"));
 }
 
+void MainWindow::onInsertPanel() {
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available";
+        QMessageBox::warning(this, "Error", "No ScriptBreakdown available.");
+        return;
+    }
+
+    double currentTime = timeLineView->getCursorTime();
+    PanelContext ctx = findPanelForTime(currentTime);
+    if (!ctx.isValid()) {
+        QMessageBox::warning(this, "Error", "No valid shot selected. Please select a time in the timeline.");
+        return;
+    }
+
+    qreal fps = projectJson["fps"].toDouble(24.0);
+    GameFusion::Panel newPanel;
+    newPanel.name = "Panel " + std::to_string(ctx.shot->panels.size() + 1);
+    newPanel.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    newPanel.durationTime = 1000.0; // Default 1 second
+    GameFusion::Layer bg;
+    bg.name = "BG";
+    bg.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    GameFusion::Layer l1;
+    l1.name = "Layer 1";
+    l1.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    newPanel.layers.push_back(l1);
+    newPanel.layers.push_back(bg);
+
+    GameFusion::Shot originalShot = *ctx.shot;
+    GameFusion::Shot updatedShot = originalShot;
+    int panelIndex = findPanelIndex(ctx);
+
+    if (panelIndex >= 0) {
+        double relativeTime = currentTime - originalShot.startTime;
+        auto& panel = originalShot.panels[panelIndex];
+        double splitTime = relativeTime - panel.startTime;
+        if (splitTime > 0 && splitTime < panel.durationTime) {
+            // Split current panel
+            GameFusion::Panel firstHalf = panel;
+            firstHalf.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+            firstHalf.startTime = panel.startTime + splitTime;
+            firstHalf.durationTime = panel.durationTime - splitTime;
+
+            int newPaneDuration = panel.durationTime - splitTime;
+            panel.durationTime = splitTime;
+
+            newPanel.startTime = panel.startTime + splitTime;
+            newPanel.durationTime = newPaneDuration;
+            updatedShot.panels[panelIndex] = panel;
+            updatedShot.panels.insert(updatedShot.panels.begin() + panelIndex + 1, newPanel);
+
+
+            for (size_t i = panelIndex + 3; i < updatedShot.panels.size(); ++i) {
+                updatedShot.panels[i].startTime += newPanel.durationTime;
+            }
+        } else {
+            // Insert after current panel
+            newPanel.startTime = panel.startTime + panel.durationTime;
+            updatedShot.panels.insert(updatedShot.panels.begin() + panelIndex + 1, newPanel);
+            for (size_t i = panelIndex + 2; i < updatedShot.panels.size(); ++i) {
+                updatedShot.panels[i].startTime += newPanel.durationTime;
+            }
+        }
+    } else {
+        // Append to shot
+        newPanel.startTime = originalShot.panels.empty() ? 0.0 : originalShot.panels.back().startTime + originalShot.panels.back().durationTime;
+        updatedShot.panels.push_back(newPanel);
+    }
+
+    updatedShot.endTime = updatedShot.startTime + (updatedShot.panels.empty() ? 0.0 :
+        updatedShot.panels.back().startTime + updatedShot.panels.back().durationTime);
+    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * fps / 1000.0);
+
+    undoStack->push(new PanelCommand(this, originalShot, updatedShot, currentTime, "Insert Panel"));
+}
+
 void MainWindow::onEditPanel()
 {
     if (!scriptBreakdown) {
@@ -8586,3 +8873,269 @@ void MainWindow::showEvent(QShowEvent *event) {
     QMainWindow::showEvent(event);
     emit windowShown();
 }
+
+
+void MainWindow::duplicateLayerThroughShot(const QString& layerUuid) {
+    if (!currentPanel) return;
+    PanelContext panelContext = findPanelByUuid(currentPanel->uuid);
+    if (!panelContext.isValid()) return;
+
+    LayerContext layerContext = findLayerByUuid(layerUuid.toStdString().c_str());
+    if (!layerContext.isValid()) return;
+
+    int originalIndex = -1;
+    for (size_t i = 0; i < layerContext.panel->layers.size(); ++i) {
+        if (layerContext.panel->layers[i].uuid == layerUuid.toStdString()) {
+            originalIndex = static_cast<int>(i);
+            break;
+        }
+    }
+    if (originalIndex == -1) return;
+
+    for (auto& panel : panelContext.shot->panels) {
+        if (panel.uuid == currentPanel->uuid) continue;
+        QString duplicatedLayerUuid = QUuid::createUuid().toString();
+        undoStack->push(new LayerDuplicateCommand(layerUuid, duplicatedLayerUuid,
+                                                 QString::fromStdString(panel.uuid), this));
+    }
+}
+
+void MainWindow::instanceLayerToPanels(const QString& layerUuid, const std::vector<QString>& panelUuids) {
+    LayerContext layerContext = findLayerByUuid(layerUuid.toStdString().c_str());
+    if (!layerContext.isValid()) return;
+
+    for (const auto& panelUuid : panelUuids) {
+        QString aliasLayerUuid = QUuid::createUuid().toString();
+        undoStack->push(new InstanceLayerCommand(layerUuid, aliasLayerUuid, panelUuid, this));
+    }
+}
+
+void MainWindow::renameLayer(const QString& layerUuid, const QString& newName, bool propagateToAliases) {
+    LayerContext layerContext = findLayerByUuid(layerUuid.toStdString().c_str());
+    if (!layerContext.isValid()) return;
+
+    QString oldName = QString::fromStdString(layerContext.layer->name);
+    layerContext.layer->name = newName.toStdString();
+    if (propagateToAliases) {
+        for (auto& shot : layerContext.scene->shots) {
+            for (auto& panel : shot.panels) {
+                for (auto& layer : panel.layers) {
+                    if (layer.aliasUuid == layerUuid.toStdString()) {
+                        layer.name = newName.toStdString();
+                    }
+                }
+            }
+        }
+    }
+    layerContext.scene->dirty = true;
+    updateWindowTitle(true);
+    populateLayerList(layerContext.panel);
+    paint->getPaintArea()->invalidateAllLayers();
+    paint->getPaintArea()->updateCompositeImage();
+}
+
+bool MainWindow::hasLayerInstances(const std::string& layerUuid) const {
+    for(auto &scene :scriptBreakdown->getScenes()) {
+        for(auto &shot : scene.shots) {
+            for(auto &panel : shot.panels) {
+                for(auto &layer : panel.layers) {
+                    if(layer.uuid == layerUuid)
+                        return true;
+                    for(auto &sublayer: layer.layers){
+                        if(sublayer.uuid == layerUuid)
+                            return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+void MainWindow::groupLayers(const std::vector<QString>& layerUuids, const QString& panelUuid) {
+    PanelContext panelContext = findPanelByUuid(panelUuid.toStdString());
+    if (!panelContext.isValid() || layerUuids.size() < 2) return;
+
+    GameFusion::Layer groupLayer;
+    groupLayer.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    groupLayer.name = "Group " + std::to_string(panelContext.panel->layers.size() + 1);
+
+    std::vector<GameFusion::Layer> groupedLayers;
+    for (const auto& uuid : layerUuids) {
+        LayerContext layerContext = findLayerByUuid(uuid.toStdString().c_str());
+        if (layerContext.isValid()) {
+            groupedLayers.push_back(*layerContext.layer);
+            removeLayer(uuid, panelUuid);
+        }
+    }
+    groupLayer.layers = groupedLayers;
+
+    addLayer(groupLayer, panelUuid);
+}
+
+void MainWindow::ungroupLayers(const QString& layerUuid, const QString& panelUuid) {
+    PanelContext panelContext = findPanelByUuid(panelUuid.toStdString());
+    if (!panelContext.isValid()) return;
+
+    LayerContext layerContext = findLayerByUuid(layerUuid.toStdString().c_str());
+    if (!layerContext.isValid() || !layerContext.layer->isGroup()) return;
+
+    int index = -1;
+    for (size_t i = 0; i < panelContext.panel->layers.size(); ++i) {
+        if (panelContext.panel->layers[i].uuid == layerUuid.toStdString()) {
+            index = static_cast<int>(i);
+            break;
+        }
+    }
+    if (index == -1) return;
+
+    for (const auto& subLayer : layerContext.layer->layers) {
+        addLayer(subLayer, panelUuid, index++);
+    }
+    removeLayer(layerUuid, panelUuid);
+}
+
+void MainWindow::onLayerDuplicateThroughShot() {
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    if (selectedLayers.isEmpty() || !currentPanel) return;
+
+    QString layerUuid = selectedLayers.first()->data(Qt::UserRole).toString();
+    duplicateLayerThroughShot(layerUuid);
+}
+
+void MainWindow::onLayerInstanceToSelectedPanels() {
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    if (selectedLayers.isEmpty() || !currentPanel) return;
+
+    QString layerUuid = selectedLayers.first()->data(Qt::UserRole).toString();
+    std::vector<QString> panelUuids; // TODO: Implement panel selection logic
+    instanceLayerToPanels(layerUuid, panelUuids);
+}
+
+void MainWindow::onLayerInstanceThroughShot() {
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    if (selectedLayers.isEmpty() || !currentPanel) return;
+
+    QString layerUuid = selectedLayers.first()->data(Qt::UserRole).toString();
+    PanelContext panelContext = findPanelByUuid(currentPanel->uuid);
+    if (!panelContext.isValid()) return;
+
+    std::vector<QString> panelUuids;
+    for (const auto& panel : panelContext.shot->panels) {
+        if (panel.uuid != currentPanel->uuid) {
+            panelUuids.push_back(QString::fromStdString(panel.uuid));
+        }
+    }
+    instanceLayerToPanels(layerUuid, panelUuids);
+}
+
+void MainWindow::onLayerCopy() {
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    if (selectedLayers.isEmpty() || !currentPanel) return;
+
+    QString layerUuid = selectedLayers.first()->data(Qt::UserRole).toString();
+    LayerContext layerContext = findLayerByUuid(layerUuid.toStdString().c_str());
+    if (!layerContext.isValid()) return;
+
+    clipboardLayer = *layerContext.layer;
+    hasClipboardLayer = true;
+}
+
+void MainWindow::onLayerPasteAsInstance() {
+    if (!hasClipboardLayer || !currentPanel) return;
+
+    GameFusion::Layer instanceLayer = clipboardLayer;
+    QString instanceLayerUuid = QUuid::createUuid().toString();
+    instanceLayer.uuid = instanceLayerUuid.toStdString();
+    instanceLayer.name = clipboardLayer.name + " (Instance)";
+    instanceLayer.aliasUuid = clipboardLayer.uuid;
+
+    undoStack->push(new CopyPasteLayerCommand(instanceLayer, QString::fromStdString(currentPanel->uuid), true, this));
+}
+
+void MainWindow::onLayerPasteAsDuplicate() {
+    if (!hasClipboardLayer || !currentPanel) return;
+
+    GameFusion::Layer duplicateLayer = clipboardLayer;
+    duplicateLayer.uuid = QUuid::createUuid().toString().toStdString();
+    duplicateLayer.name = clipboardLayer.name + " (Copy)";
+    duplicateLayer.aliasUuid = "";
+
+    undoStack->push(new CopyPasteLayerCommand(duplicateLayer, QString::fromStdString(currentPanel->uuid), false, this));
+}
+
+void MainWindow::onLayerRename() {
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    if (selectedLayers.isEmpty() || !currentPanel) return;
+
+    QString layerUuid = selectedLayers.first()->data(Qt::UserRole).toString();
+    LayerContext layerContext = findLayerByUuid(layerUuid.toStdString().c_str());
+    if (!layerContext.isValid()) return;
+
+    bool propagate = false;
+    if (hasLayerInstances(layerUuid.toStdString())) {
+        int result = QMessageBox::question(this, "Propagate Rename",
+                                          "Propagate rename to instanced layers?",
+                                          QMessageBox::Yes | QMessageBox::No);
+        propagate = (result == QMessageBox::Yes);
+    }
+
+    bool ok;
+    QString newName = QInputDialog::getText(this, "Rename Layer",
+                                            "Layer name:", QLineEdit::Normal,
+                                            QString::fromStdString(layerContext.layer->name), &ok);
+    if (ok && !newName.isEmpty()) {
+        undoStack->push(new RenameLayerCommand(layerUuid, QString::fromStdString(layerContext.layer->name),
+                                               newName, propagate, QString::fromStdString(currentPanel->uuid), this));
+        renameLayer(layerUuid, newName, propagate);
+    }
+}
+
+void MainWindow::onLayerProperties() {
+    // TODO: Implement LayerPropertiesDialog
+    qDebug() << "Layer Properties not implemented yet";
+}
+
+void MainWindow::onGroupLayers() {
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    if (selectedLayers.size() < 2 || !currentPanel) return;
+
+    std::vector<QString> layerUuids;
+    for (const auto& item : selectedLayers) {
+        layerUuids.push_back(item->data(Qt::UserRole).toString());
+    }
+
+    QString groupUuid = QUuid::createUuid().toString();
+    undoStack->push(new GroupLayersCommand(layerUuids, groupUuid, QString::fromStdString(currentPanel->uuid), this));
+    groupLayers(layerUuids, QString::fromStdString(currentPanel->uuid));
+}
+
+void MainWindow::onUngroupLayers() {
+    // TODO: Implement group selection logic
+    QString groupUuid; // Assume group UUID from selection
+    if (!currentPanel || groupUuid.isEmpty()) return;
+
+    undoStack->push(new GroupLayersCommand(std::vector<QString>{}, groupUuid, QString::fromStdString(currentPanel->uuid), this));
+    ungroupLayers(groupUuid, QString::fromStdString(currentPanel->uuid));
+}
+
+void MainWindow::onLayerClear() {
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    if (selectedLayers.isEmpty() || !currentPanel) return;
+
+    QString layerUuid = selectedLayers.first()->data(Qt::UserRole).toString();
+    LayerContext layerContext = findLayerByUuid(layerUuid.toStdString().c_str());
+    if (!layerContext.isValid()) return;
+
+    GameFusion::Layer originalLayer = *layerContext.layer;
+    GameFusion::Layer clearedLayer = originalLayer;
+    clearedLayer.strokes.clear();
+    clearedLayer.motionKeyframes.clear();
+    clearedLayer.opacityKeyframes.clear();
+    clearedLayer.imageFilePath.clear();
+
+    undoStack->push(new ClearLayerCommand(originalLayer, clearedLayer, layerUuid,
+                                         QString::fromStdString(currentPanel->uuid), this));
+    //updateLayer(layerUuid, QString::fromStdString(currentPanel->uuid), clearedLayer);
+}
+
