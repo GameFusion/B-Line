@@ -20,7 +20,7 @@ struct StrokeProperties {
     };
 
     float smoothness=20; // 0.0 to 1.0
-    double maxWidth=4; // Max width in pixels
+    double maxWidth=4; // Max width in pixels -- TODO rename thickness
     double minWidth=1; // Min width in pixels
     VariableWidthMode variableWidthMode=Uniform;
     int stepCount=20; // Bézier sampling steps

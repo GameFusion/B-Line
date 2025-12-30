@@ -2,15 +2,20 @@
 <ui version="4.0">
  <class>NewProjectDialog</class>
  <widget class="QDialog" name="NewProjectDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>461</width>
+    <height>699</height>
+   </rect>
+  </property>
   <property name="windowTitle">
    <string>Create New Project</string>
   </property>
-  <layout class="QVBoxLayout" name="mainLayout">
-
-   <!-- Form Layout for all fields except Notes -->
+  <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <layout class="QFormLayout" name="formLayout">
-
      <item row="0" column="0">
       <widget class="QLabel" name="labelProjectName">
        <property name="text">
@@ -21,15 +26,24 @@
      <item row="0" column="1">
       <widget class="QLineEdit" name="projectNameEdit"/>
      </item>
-
      <item row="1" column="0">
+      <widget class="QLabel" name="label">
+       <property name="text">
+        <string>Subtitle</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <widget class="QLineEdit" name="subtitleEdit"/>
+     </item>
+     <item row="2" column="0">
       <widget class="QLabel" name="labelLocation">
        <property name="text">
         <string>Location</string>
        </property>
       </widget>
      </item>
-     <item row="1" column="1">
+     <item row="2" column="1">
       <layout class="QHBoxLayout" name="locationLayout">
        <item>
         <widget class="QLineEdit" name="locationEdit"/>
@@ -43,107 +57,336 @@
        </item>
       </layout>
      </item>
-
-     <item row="2" column="0">
+     <item row="3" column="0">
       <widget class="QLabel" name="labelFPS">
        <property name="text">
         <string>FPS</string>
        </property>
       </widget>
      </item>
-     <item row="2" column="1">
-      <widget class="QComboBox" name="fpsComboBox">
-       <item><property name="text"><string>12</string></property></item>
-       <item><property name="text"><string>24</string></property></item>
-       <item><property name="text"><string>25</string></property></item>
-       <item><property name="text"><string>30</string></property></item>
-       <item><property name="text"><string>60</string></property></item>
-      </widget>
+     <item row="3" column="1">
+      <layout class="QHBoxLayout" name="horizontalLayout_6">
+       <item>
+        <widget class="QComboBox" name="fpsComboBox">
+         <item>
+          <property name="text">
+           <string>12</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>24</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>25</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>30</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>60</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item>
+        <spacer name="horizontalSpacer_5">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
      </item>
-
-     <item row="3" column="0">
+     <item row="4" column="0">
       <widget class="QLabel" name="labelResolution">
        <property name="text">
         <string>Resolution Format</string>
        </property>
       </widget>
      </item>
-     <item row="3" column="1">
-      <widget class="QComboBox" name="resolutionComboBox">
-       <item><property name="text"><string>1280x720</string></property></item>
-       <item><property name="text"><string>1920x1080</string></property></item>
-       <item><property name="text"><string>3840x2160</string></property></item>
-      </widget>
+     <item row="4" column="1">
+      <layout class="QHBoxLayout" name="horizontalLayout_5">
+       <item>
+        <widget class="QComboBox" name="resolutionComboBox">
+         <item>
+          <property name="text">
+           <string>1280x720</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>1920x1080</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>3840x2160</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item>
+        <spacer name="horizontalSpacer_4">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
      </item>
-
-     <item row="4" column="0">
+     <item row="5" column="0">
       <widget class="QLabel" name="labelSafeFrame">
        <property name="text">
         <string>Safe Frame</string>
        </property>
       </widget>
      </item>
-     <item row="4" column="1">
-      <widget class="QComboBox" name="safeFrameComboBox">
-       <item><property name="text"><string>80%</string></property></item>
-       <item><property name="text"><string>90%</string></property></item>
-       <item><property name="text"><string>93%</string></property></item>
-       <item><property name="text"><string>Custom</string></property></item>
+     <item row="5" column="1">
+      <layout class="QHBoxLayout" name="horizontalLayout_4">
+       <item>
+        <widget class="QComboBox" name="safeFrameComboBox">
+         <item>
+          <property name="text">
+           <string>80%</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>90%</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>93%</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Custom</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item>
+        <spacer name="horizontalSpacer_3">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </item>
+     <item row="6" column="0">
+      <widget class="QLabel" name="labelCanvasMargin">
+       <property name="text">
+        <string>Canvas Overscan Margin (%)</string>
+       </property>
       </widget>
      </item>
-
-     <item row="5" column="0">
+     <item row="6" column="1">
+      <layout class="QHBoxLayout" name="horizontalLayout">
+       <item>
+        <widget class="QComboBox" name="canvasMarginComboBox">
+         <item>
+          <property name="text">
+           <string>0% (No Margin)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>10%</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>20% (Recommended)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>30%</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>50%</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Custom</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="canvasMarginCustomEdit"/>
+       </item>
+      </layout>
+     </item>
+     <item row="7" column="0">
       <widget class="QLabel" name="labelEstimatedDuration">
        <property name="text">
         <string>Estimated Duration (min)</string>
        </property>
       </widget>
      </item>
-     <item row="5" column="1">
+     <item row="7" column="1">
       <widget class="QLineEdit" name="estimatedDurationEdit"/>
      </item>
-
-     <item row="6" column="0">
+     <item row="8" column="0">
       <widget class="QLabel" name="labelAspectRatio">
        <property name="text">
         <string>Aspect Ratio</string>
        </property>
       </widget>
      </item>
-     <item row="6" column="1">
-      <widget class="QComboBox" name="aspectRatioComboBox">
-       <item><property name="text"><string>16:9</string></property></item>
-       <item><property name="text"><string>2.35:1</string></property></item>
-       <item><property name="text"><string>4:3</string></property></item>
-      </widget>
+     <item row="8" column="1">
+      <layout class="QHBoxLayout" name="horizontalLayout_3">
+       <item>
+        <widget class="QComboBox" name="aspectRatioComboBox">
+         <item>
+          <property name="text">
+           <string>16:9</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>2.35:1</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>4:3</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item>
+        <spacer name="horizontalSpacer">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
      </item>
-
-     <item row="7" column="0">
+     <item row="9" column="0">
       <widget class="QLabel" name="labelProjectCode">
        <property name="text">
         <string>Project Code</string>
        </property>
       </widget>
      </item>
-     <item row="7" column="1">
+     <item row="9" column="1">
       <widget class="QLineEdit" name="projectCodeEdit"/>
      </item>
-
-     <item row="8" column="0">
+     <item row="10" column="0">
       <widget class="QLabel" name="labelDirector">
        <property name="text">
         <string>Director / Creator</string>
        </property>
       </widget>
      </item>
-     <item row="8" column="1">
+     <item row="10" column="1">
       <widget class="QLineEdit" name="directorEdit"/>
      </item>
-
+     <item row="11" column="0">
+      <widget class="QLabel" name="label_2">
+       <property name="text">
+        <string>Episode Format</string>
+       </property>
+      </widget>
+     </item>
+     <item row="11" column="1">
+      <layout class="QHBoxLayout" name="horizontalLayout_2">
+       <item>
+        <widget class="QComboBox" name="episodeFormatComboBox">
+         <item>
+          <property name="text">
+           <string>Short</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>TV Series</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Feature Film</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item>
+        <spacer name="horizontalSpacer_2">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </item>
+     <item row="12" column="0">
+      <widget class="QLabel" name="label_3">
+       <property name="text">
+        <string>Copyright</string>
+       </property>
+      </widget>
+     </item>
+     <item row="12" column="1">
+      <widget class="QLineEdit" name="copyrightEdit"/>
+     </item>
+     <item row="13" column="0">
+      <widget class="QLabel" name="label_4">
+       <property name="text">
+        <string>Start Timecode</string>
+       </property>
+      </widget>
+     </item>
+     <item row="13" column="1">
+      <widget class="QLineEdit" name="startTCEdit"/>
+     </item>
     </layout>
    </item>
-
-   <!-- Notes Section -->
    <item>
     <widget class="QLabel" name="labelNotes">
      <property name="text">
@@ -154,19 +397,16 @@
    <item>
     <widget class="QPlainTextEdit" name="notesEdit"/>
    </item>
-
-   <!-- Buttons -->
    <item>
     <widget class="QDialogButtonBox" name="buttonBox">
      <property name="orientation">
-      <enum>Qt::Horizontal</enum>
+      <enum>Qt::Orientation::Horizontal</enum>
      </property>
      <property name="standardButtons">
-      <set>QDialogButtonBox::Ok|QDialogButtonBox::Cancel</set>
+      <set>QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Ok</set>
      </property>
     </widget>
    </item>
-
   </layout>
  </widget>
  <resources/>

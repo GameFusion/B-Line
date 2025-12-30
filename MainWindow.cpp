@@ -226,12 +226,14 @@ public:
 
     void undo() override
     {
-        mainWindow_->editShotSegment(oldShot_, cursorTime_);
+        bool updateTime = text() == "Insert Panel";
+        mainWindow_->editShotSegment(oldShot_, cursorTime_, updateTime);
     }
 
     void redo() override
     {
-        mainWindow_->editShotSegment(newShot_, cursorTime_);
+        bool updateTime = text() == "Insert Panel";
+        mainWindow_->editShotSegment(newShot_, cursorTime_, updateTime);
     }
 
 private:
@@ -1040,15 +1042,6 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     QToolButton *deletePanelButton = new QToolButton(&parent);
     deletePanelButton->setText(QChar(0xf146));  // Shift left icon
     deletePanelButton->setFont(fontAwesome);
-/*
-    QToolButton *addSegmentButton = new QToolButton(&parent);
-    addSegmentButton->setText(QChar(0xf126));  // Shift left icon
-    addSegmentButton->setFont(fontAwesome);
-
-    QToolButton *deleteSegmentButton = new QToolButton(&parent);
-    deleteSegmentButton->setText(QChar(0xf1f8));  // Shift left icon
-    deleteSegmentButton->setFont(fontAwesome);
-*/
 
     QToolButton *shiftLeftButton = new QToolButton(&parent);
     shiftLeftButton->setText(QChar(0xf2f6));  // Shift left icon
@@ -1057,11 +1050,7 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     QToolButton *shiftRightButton = new QToolButton(&parent);
     shiftRightButton->setText(QChar(0xf337));  // Group selection icon
     shiftRightButton->setFont(fontAwesome);
-/*
-    QToolButton *phonemeButton = new QToolButton(&parent);
-    phonemeButton->setText(QChar(0xf1dd));  // Single selection icon
-    phonemeButton->setFont(fontAwesome);
-*/
+
     QToolButton *editButton = new QToolButton(&parent);
     editButton->setText(QChar(0xf044));  // Area selection icon
     editButton->setFont(fontAwesome);
@@ -1069,12 +1058,6 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     QToolButton *trashButton = new QToolButton(&parent);
     trashButton->setText(QChar(0xf1f8));  // Area selection icon
     trashButton->setFont(fontAwesome);
-/*
-    QToolButton *anotateButton = new QToolButton(&parent);
-    anotateButton->setText(QChar(0xf3c5));  // Area selection icon
-    // or pin with F3C5
-    anotateButton->setFont(fontAwesome);
-    */
 
     QToolButton *backwardFastButton = new QToolButton(&parent);
     backwardFastButton->setText(QChar(0xf049));  // Area selection icon
@@ -1350,16 +1333,11 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
 
     hlayout->addWidget(addPanelButton);
     hlayout->addWidget(deletePanelButton);
-    //hlayout->addWidget(addSegmentButton);
-    //hlayout->addWidget(deleteSegmentButton);
-
 
     hlayout->addWidget(shiftLeftButton);
     hlayout->addWidget(shiftRightButton);
-    //hlayout->addWidget(phonemeButton);
     hlayout->addWidget(editButton);
     hlayout->addWidget(trashButton);
-    //hlayout->addWidget(anotateButton);
     hlayout->addWidget(backwardFastButton);
     hlayout->addWidget(backwardStepButton);
     hlayout->addWidget(playButton);
@@ -1368,8 +1346,6 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     hlayout->addWidget(forwardFastButton);
     hlayout->addWidget(settingsButton);
     hlayout->addWidget(viewModeButton); // Add toggle button
-    //hlayout->addWidget(singleSelectionButton);
-    //hlayout->addWidget(areaSelectionButton);
 
     hlayout->addSpacerItem(spacer);
     gfxlayout->addWidget(timelineView);
@@ -1460,6 +1436,16 @@ MainWindow::MainWindow(QWidget *parent)
     undoStack = new QUndoStack(this); // Initialize undo stack
 
     ui->setupUi(this);
+
+    ProjectContext::instance().projectJson()["resolution"] = QJsonArray{1920, 1080};
+    ProjectContext::instance().projectJson()["canvas_margin"] = QString("20");
+    ProjectContext::instance().projectJson()["canvas_percent"] = 20;
+    ProjectContext::instance().projectJson()["canvas"] = QJsonArray{2304, 1296}; // For 20% margin: 1920 + 384, etc.
+
+    paintCanvas = new PaintCanvas();
+    paintCanvas->show();
+
+
 
     logger->setServerConfig("http://localhost:50000", "your-secret-token-here");
     // Undo & Redo actions, menu system
@@ -1722,6 +1708,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     QObject::connect(ui->actionOpen, SIGNAL(triggered()), this, SLOT(loadProject()));
     QObject::connect(ui->actionNew, SIGNAL(triggered()), this, SLOT(newProject()));
+    QObject::connect(ui->actionEdit_Project, SIGNAL(triggered()), this, SLOT(editProject()));
     QObject::connect(ui->actionSave, SIGNAL(triggered()), this, SLOT(saveProject()));
     QObject::connect(ui->actionAuto_Save, SIGNAL(triggered()), this, SLOT(toggleProject()));
     QObject::connect(ui->actionPost_issue, SIGNAL(triggered()), this, SLOT(postIssue()));
@@ -1820,7 +1807,7 @@ MainWindow::MainWindow(QWidget *parent)
     newItem->setIcon(1, QIcon("2018-09-15 (4).png"));
     //newItem->setSizeHint(1, QSize(256, 144));
 
-    projectJson["fps"] = 25.0;
+    ProjectContext::instance().projectJson()["fps"] = 25.0;
 
     //shotTree->addTopLeveItem(newItem);
 
@@ -1998,6 +1985,9 @@ MainWindow::MainWindow(QWidget *parent)
     connect(strokeDock, &StrokeAttributeDockWidget::strokePropertiesChanged,
             paint->getPaintArea(), &PaintArea::setStrokeProperties);
 
+    connect(strokeDock, &StrokeAttributeDockWidget::strokePropertiesChanged,
+            paintCanvas, &PaintCanvas::setStrokeProperties);
+
     strokeDock->setStyleSheet("QLabel { font-size: 10px; } QSlider, QComboBox, QSpinBox { margin-bottom: 4px; }");
 
     strokeDock->setStyleSheet(R"(
@@ -2090,6 +2080,13 @@ QComboBox, QSpinBox {
 
     setTabletTracking(true);
 
+    paint->getPaintArea()->setOutputResolution(
+                ProjectContext::instance().projectJson()["resolution"].toArray()[0].toInt(),
+                ProjectContext::instance().projectJson()["resolution"].toArray()[1].toInt());
+
+    paint->getPaintArea()->setCanvasSize(
+                ProjectContext::instance().projectJson()["canvas"].toArray()[0].toInt(),
+                ProjectContext::instance().projectJson()["canvas"].toArray()[1].toInt());
     return;
     //
     QList <int> list;
@@ -2422,7 +2419,7 @@ void MainWindow::importScript()
     GameScript* dictionary = NULL;
     GameScript* dictionaryCustom = NULL;
 
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
 
     scriptBreakdown = new ScriptBreakdown(fileName.toStdString().c_str(), fps, dictionary, dictionaryCustom, llamaClient, logger);
 
@@ -2524,7 +2521,7 @@ void MainWindow::updateShots(){
 
     ui->shotsTreeWidget->clear();
 
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
 
     const auto& shots = scriptBreakdown->getShots();
     for (const auto& shot : shots) {
@@ -2540,7 +2537,7 @@ void MainWindow::updateScenes(){
 
     ui->shotsTreeWidget->clear();
 
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
 
     const auto& scenes = scriptBreakdown->getScenes();
     for (const auto& scene : scenes) {
@@ -2562,7 +2559,7 @@ void MainWindow::updateScenes(){
 
 // In MainWindow.cpp
 ShotSegment* MainWindow::createShotSegment(GameFusion::Shot& shot, GameFusion::Scene& scene, CursorItem* sceneMarker) {
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal mspf = 1000.0f / fps;
 
     // Calculate shot timing
@@ -2571,6 +2568,7 @@ ShotSegment* MainWindow::createShotSegment(GameFusion::Shot& shot, GameFusion::S
 
     // Create ShotSegment
     ShotSegment* segment = new ShotSegment(timeLineView->scene(), shotTimeStart, shotDuration);
+
     segment->setUuid(shot.uuid.c_str());
     if (sceneMarker) {
         segment->setSceneMarker(sceneMarker);
@@ -2652,7 +2650,7 @@ void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices sho
 
     bool createSceneMarker = false;
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal mspf = 1000.0f / fps;
 
     // TODO if scene does not exist then we need to create it - not sure about this
@@ -2693,8 +2691,12 @@ void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices sho
         // Create and insert ShotSegment
         ShotSegment* shotSegment = createShotSegment(insertedShot, *scene, sceneMarker);
         TrackItem* track = timeLineView->getTrack(0);
-        int segmentIndex = track->insertSegmentAtIndex(shotIndices.segmentIndex, shotSegment);
+       // int segmentIndex = track->insertSegmentAtIndex(shotIndices.segmentIndex, shotSegment);
 
+        int segmentIndex = shotIndices.segmentIndex;
+        track->addSegment(shotSegment);
+        track->updateSegmentPositions();
+        track->update();
 
 
         // Shift camera keyframes for subsequent shots
@@ -2750,7 +2752,7 @@ void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices sho
     return;
 }
 
-ShotIndices MainWindow::deleteShotSegment(ShotContext &shotContext, double currentTime) {
+ShotIndices MainWindow::deleteShotSegment(ShotContext &shotContext, double currentTime, bool updateTime) {
     if(!shotContext.isValid()){
         GameFusion::Log().warning() << "Invalid ShotContext provided";
         return {-1, -1};
@@ -2784,7 +2786,7 @@ ShotIndices MainWindow::deleteShotSegment(ShotContext &shotContext, double curre
     }
 
     TrackItem* track = timeLineView->getTrack(0);
-    int segmentIndex = track->deleteSegment(toDelete.uuid.c_str());
+    int segmentIndex = track->deleteSegment(toDelete.uuid.c_str(), updateTime);
 
     // Shift camera keyframes for subsequent shots
     for (auto& scene : scriptBreakdown->getScenes()) {
@@ -2821,7 +2823,7 @@ ShotIndices MainWindow::deleteShotSegment(ShotContext &shotContext, double curre
 }
 
 void MainWindow::addLayerKeyFrames(TrackItem* track, long panelStartTime, const GameFusion::Panel& panel) {
-    qreal mspf = 1000.0f / projectJson["fps"].toDouble(24.0);
+    qreal mspf = 1000.0f / ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     QString panelUuid = QString::fromStdString(panel.uuid);
     QString panelName = QString::fromStdString(panel.name);
     for (const auto& layer : panel.layers) {
@@ -2902,7 +2904,7 @@ void MainWindow::addLayerKeyFrames(TrackItem* track, long panelStartTime, const 
 
 void MainWindow::addTimelineKeyFrames(const GameFusion::Shot& shot) {
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal mspf = 1000.0f / fps;
 
     for (const auto& camera : shot.cameraAnimation.frames) {
@@ -2930,7 +2932,7 @@ QSet<double> MainWindow::getAllKeyframeGlobalTimes() const {
     if(!scriptBreakdown)
         return times;
 
-    double fps = projectJson["fps"].toDouble(24.0);
+    double fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     double mspf = 1000.0 / fps;
     for (const auto& scene : scriptBreakdown->getScenes()) {
         for (const auto& shot : scene.shots) {
@@ -2995,7 +2997,7 @@ void MainWindow::updateKeyframeDisplay() {
     track->setSeletedLayerName(selectedLayerName);
     timeLineView->updateHeaders();
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal mspf = 1000.0 / fps;
 
     AttributeTrackItem *motion = track->getAttributeTrack("motion");
@@ -3140,7 +3142,7 @@ void MainWindow::updateTimeline(){
     //gfxscene->clear();
 
     qreal fps = 25;
-    fps = projectJson["fps"].toDouble();
+    fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     qreal mspf = 1000.f/fps;
     //long startTimeFrame = episodeDuration.frameCount;
     long startTime = 0;
@@ -3390,12 +3392,19 @@ void MainWindow::loadProject(QString projectDir){
 
     // Validate required fields
     //QJsonObject projectObj = projectDoc.object();
-    projectJson = projectDoc.object();
+    ProjectContext::instance().projectJson() = projectDoc.object();
     QStringList requiredFields = { "projectName", "fps" };
     QStringList missingFields;
 
+    ProjectContext::instance().projectJson()["projectPath"] = projectDir;
+    /*
+    ProjectContext::instance().projectJson()["resolution"] = QJsonArray{1920, 1080};
+    ProjectContext::instance().projectJson()["canvas_margin"] = QString("20");
+    ProjectContext::instance().projectJson()["canvas_percent"] = 20;
+    ProjectContext::instance().projectJson()["canvas"] = QJsonArray{2304, 1296}; // For 20% margin: 1920 + 384, etc.
+*/
     for (const QString &field : requiredFields) {
-        if (!projectJson.contains(field)) {
+        if (!ProjectContext::instance().projectJson().contains(field)) {
             missingFields << field;
         }
     }
@@ -3410,15 +3419,23 @@ void MainWindow::loadProject(QString projectDir){
     }
 
     // (Optional) Store project metadata
-    ProjectContext::instance().setCurrentProjectName( projectJson["projectName"].toString() );
+    ProjectContext::instance().setCurrentProjectName( ProjectContext::instance().projectJson()["projectName"].toString() );
     ProjectContext::instance().setCurrentProjectPath( projectDir );
 
     // Set project path in logger
     logger->setProjectPath(projectDir);
 
     paint->getPaintArea()->setProjectPath(projectDir);
+    int newCanvasW = ProjectContext::instance().projectJson()["canvas"].toArray()[0].toInt();
+    int newCanvasH = ProjectContext::instance().projectJson()["canvas"].toArray()[1].toInt();
+    int newResW = ProjectContext::instance().projectJson()["resolution"].toArray()[0].toInt();
+    int newResH = ProjectContext::instance().projectJson()["resolution"].toArray()[1].toInt();
+    paint->getPaintArea()->setCanvasSize(newCanvasW, newCanvasH);
+    paint->getPaintArea()->setOutputResolution(newResW, newResH);
+    paint->getPaintArea()->update();
 
-    float fps = projectJson["fps"].toDouble();
+
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     //scriptBreakdown = new ScriptBreakdown("", fps);
     loadScript();
 
@@ -3522,7 +3539,7 @@ void MainWindow::loadProject(QString projectDir){
         qint64 earliestTime = -1;
         QTreeWidgetItem* targetItem = nullptr;
         QTreeWidgetItemIterator it(ui->shotsTreeWidget);
-        float fps = projectJson["fps"].toDouble();
+        float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
         float mspf = fps > 0 ? 1000.0 / fps : 1.0;
 
         while (*it) {
@@ -3555,13 +3572,13 @@ void MainWindow::loadScript() {
     if(scriptBreakdown)
         delete scriptBreakdown;
 
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     GameScript* dictionary = NULL;
     GameScript* dictionaryCustom = NULL;
 
     QString fileName;
-    if(projectJson.contains("script")) {
-        fileName = ProjectContext::instance().currentProjectPath() + "/" + projectJson["script"].toString();
+    if(ProjectContext::instance().projectJson().contains("script")) {
+        fileName = ProjectContext::instance().currentProjectPath() + "/" + ProjectContext::instance().projectJson()["script"].toString();
         scriptBreakdown = new ScriptBreakdown(fileName.toStdString().c_str(), fps, dictionary, dictionaryCustom, llamaClient, logger);
 
         if(!scriptBreakdown->load()) {
@@ -3818,7 +3835,7 @@ CameraContext MainWindow::findCameraForTime(double time) {
         return a.frameOffset < b.frameOffset;
     });
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal mspf = 1000.0f / fps;
 
     GameFusion::CameraFrame *currentCamera = nullptr;
@@ -3943,7 +3960,7 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     timeLineView->setTimeCursor((long)(shot->startTime + panel->startTime));
 
     // Update the panel UI
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     shotPanel->setPanelInfo(scene, shot, panel, fps);
 
     // TODO set panel info for
@@ -4585,6 +4602,7 @@ void MainWindow::newProject()
     // Write project metadata
     //QJsonObject projectJson;
 
+    QJsonObject &projectJson = ProjectContext::instance().projectJson();
     projectJson = QJsonObject();
 
     projectJson["aspectRatio"] = dialog.aspectRatio();
@@ -4601,6 +4619,28 @@ void MainWindow::newProject()
     projectJson["saveFormat"] = "compact";
     projectJson["scenesPath"] = "scenes";
     projectJson["projectId"] = name;
+    projectJson["subtitle"] = dialog.subtitle();
+    projectJson["episode_format"] = dialog.episodeFormat();
+    projectJson["copyright"] = dialog.copyright();
+    projectJson["start_tc"] = dialog.startTC();  // Use in timeline (e.g., offset TC display)
+
+    QString canvasMargin = dialog.canvasMargin();
+
+    int marginPct = 0;
+    if(canvasMargin == "Custom")
+        marginPct = dialog.canvasMarginCustom().toInt();
+    else
+        marginPct = dialog.canvasMargin().toInt();  // 0 if empty/invalid
+
+    int marginW = resWidth * marginPct / 100;  // Total extra (split left/right)
+    int marginH = resHeight * marginPct / 100;
+    int canvasWidth = resWidth + marginW;
+    int canvasHeight = resHeight + marginH;
+
+    projectJson["canvas_margin"] = canvasMargin;
+    projectJson["canvas_percent"] = marginPct;  // For reference/editing
+    projectJson["canvas"] = QJsonArray{canvasWidth, canvasHeight};
+
 
     QFile metadataFile(fullPath + "/project.json");
     if (!metadataFile.open(QIODevice::WriteOnly)) {
@@ -4616,6 +4656,87 @@ void MainWindow::newProject()
 
     // Optional: load project into workspace
     loadProject(fullPath);
+}
+
+void MainWindow::editProject(){
+    QJsonObject &projectJson = ProjectContext::instance().projectJson();
+
+    if (projectJson.isEmpty()) {
+        QMessageBox::warning(this, tr("Error"), tr("No project is currently loaded."));
+        return;
+    }
+
+    NewProjectDialog dialog(this);
+    dialog.setEditMode(true);  // Set to edit mode
+    dialog.setProjectData(projectJson);  // Populate with current projectJson
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;  // User canceled
+    }
+
+    // Update projectJson with new values
+    QString name = dialog.projectName();
+    QString location = dialog.location();
+    QString fullPath = location + "/" + name;
+
+    // Parse resolution
+    QString resString = dialog.resolution();
+    QStringList resParts = resString.split('x');
+    int resWidth = resParts.value(0).toInt();
+    int resHeight = resParts.value(1).toInt();
+
+    // Parse canvas margin and compute canvas size
+    QString canvasMargin = dialog.canvasMargin();
+
+    int marginPct = dialog.canvasMargin().toInt();
+    if(canvasMargin == "Custom")
+        marginPct = dialog.canvasMarginCustom().toInt();
+
+    int marginW = resWidth * marginPct / 100;
+    int marginH = resHeight * marginPct / 100;
+    int canvasWidth = resWidth + marginW;
+    int canvasHeight = resHeight + marginH;
+
+    // Update projectJson
+    projectJson["projectName"] = name;
+    projectJson["aspectRatio"] = dialog.aspectRatio();
+    projectJson["director"] = dialog.director();
+    projectJson["estimatedDuration"] = dialog.estimatedDuration();
+    projectJson["fps"] = dialog.fps();
+    projectJson["notes"] = dialog.notes();
+    projectJson["projectCode"] = dialog.projectCode();
+    projectJson["resolution"] = QJsonArray{resWidth, resHeight};
+    projectJson["safeFrame"] = dialog.safeFrame();
+    projectJson["canvas"] = QJsonArray{canvasWidth, canvasHeight};
+    projectJson["canvas_percent"] = marginPct;
+    projectJson["subtitle"] = dialog.subtitle();
+    projectJson["episode_format"] = dialog.episodeFormat();
+    projectJson["copyright"] = dialog.copyright();
+    projectJson["start_tc"] = dialog.startTC();
+
+    // Save to project.json
+    QFile metadataFile(ProjectContext::instance().currentProjectPath() + "/project.json");
+    if (!metadataFile.open(QIODevice::WriteOnly)) {
+        QMessageBox::warning(this, tr("Error"), tr("Failed to save project metadata."));
+        return;
+    }
+
+    QJsonDocument doc(projectJson);
+    metadataFile.write(doc.toJson());
+    metadataFile.close();
+
+    // Update PaintArea if canvas/resolution changed
+    if (paint->getPaintArea()) {
+        int newCanvasW = projectJson["canvas"].toArray()[0].toInt();
+        int newCanvasH = projectJson["canvas"].toArray()[1].toInt();
+        int newResW = projectJson["resolution"].toArray()[0].toInt();
+        int newResH = projectJson["resolution"].toArray()[1].toInt();
+        paint->getPaintArea()->setCanvasSize(newCanvasW, newCanvasH);
+        paint->getPaintArea()->setOutputResolution(newResW, newResH);
+        paint->getPaintArea()->update();
+    }
+
+    QMessageBox::information(this, tr("Success"), tr("Project updated successfully."));
 }
 
 void MainWindow::onTimeCursorMoved(double time)
@@ -4672,7 +4793,7 @@ void MainWindow::onTimeCursorMoved(double time)
 
     long timeCounter = 0;
 
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     if(fps <= 0)
     {
         Log().info() << "Invalid project fps " << fps << "\n";
@@ -5302,7 +5423,7 @@ void MainWindow::onNewCamera() {
     if(!panelContext.isValid())
         return;
 
-    qreal fps = projectJson["fps"].toDouble();
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     qreal mspf = 1000.0f / fps;
     GameFusion::CameraFrame newCamera;
 
@@ -5333,7 +5454,7 @@ void MainWindow::deleteCamera(QString uuid, double cursorTime)
     timeLineView->removeCameraKeyFrame(uuid);
     scriptBreakdown->deleteCameraFrame(uuidStr);
 
-    qreal fps = projectJson["fps"].toDouble();
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
     paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation);
     cameraSidePanel->setCameraList(panelContext.panel->uuid.c_str(), panelContext.shot->cameraAnimation.frames);
@@ -5352,7 +5473,7 @@ void MainWindow::newCamera(const GameFusion::CameraFrame newCamera, double curre
     if (!cameraTrack)
         return;
 
-    qreal fps = projectJson["fps"].toDouble();
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     qreal mspf = 1000./fps;
     cameraTrack->addKeyFrame(newCamera.uuid.c_str(), panelContext.shot->startTime + newCamera.frameOffset*mspf, panelContext.panel->uuid.c_str());
     timeLineView->update();
@@ -5440,7 +5561,7 @@ void MainWindow::renameCamera(const QString& uuid, const QString& newName, doubl
     PanelContext panelContext = findPanelByUuid(cameraContext.camera->panelUuid);
     if (panelContext.isValid()) {
         long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
-        qreal fps = projectJson["fps"].toDouble();
+        qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble();
         paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation);
     }
 
@@ -5515,7 +5636,7 @@ void MainWindow::onCameraFrameDeleted(const QString& uuid) {
 }
 
 void MainWindow::updateWindowTitle(bool isModified) {
-    QString projectName = projectJson["projectName"].toString("Untitled Project");
+    QString projectName = ProjectContext::instance().projectJson()["projectName"].toString("Untitled Project");
     QString title = projectName;
 
     if (isModified) {
@@ -6299,7 +6420,7 @@ void MainWindow::exportMovie() {
 
     // Pre-scan to compute total duration
     qint64 totalDurationMs = 0;
-    float fps = projectJson["fps"].toDouble(25.0);  // Default to 25 if not set
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble(25.0);  // Default to 25 if not set
     const auto& scenes = scriptBreakdown->getScenes();
     for (const auto& scene : scenes) {
         if(scene.markedForDeletion)
@@ -6471,7 +6592,7 @@ void MainWindow::timelineCameraUpdate(const QString& uuid, long frameOffset, con
             if(newPanelUuid.toStdString() == currentPanel->uuid){
                 //--- A CAMERA WAS ADDED TO CURRENT PANEL
                 long panelStartTime = cameraCtx.shot->startTime + currentPanel->startTime;
-                float fps = projectJson["fps"].toDouble();
+                float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
                 paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, cameraCtx.shot->cameraAnimation);
                 cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), cameraCtx.shot->cameraAnimation.frames);
             }
@@ -6481,7 +6602,7 @@ void MainWindow::timelineCameraUpdate(const QString& uuid, long frameOffset, con
                 PanelContext panelContext = findPanelByUuid(currentPanel->uuid);
                 if(panelContext.isValid()){
                     long panelStartTime = panelContext.shot->startTime + currentPanel->startTime;
-                    float fps = projectJson["fps"].toDouble();
+                    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
                     paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, panelContext.shot->cameraAnimation);
                     cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), panelContext.shot->cameraAnimation.frames);
                 }
@@ -6623,7 +6744,7 @@ void MainWindow::exportEDL() {
     out << "TITLE: " << projectName << "\n";
     out << "FCM: NON-DROP FRAME\n\n";
 
-    float fps = projectJson["fps"].toDouble(25.0);
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble(25.0);
     const auto& scenes = scriptBreakdown->getScenes();
 
     auto msToTimecode = [fps](qint64 ms) -> QString {
@@ -6760,7 +6881,7 @@ void MainWindow::onNewScene()
     }
 
     double currentTime = timeLineView->getCursorTime();
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     NewSceneDialog dialog(fps, this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
@@ -7137,7 +7258,7 @@ void MainWindow::onNewShot()
 
     // Show dialog to get user input
     QString shotName = "SHOT_" + QString::number(currentCtx.scene->shots.size() * 10);
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     NewShotDialog dialog(fps, shotName, this);
     if (dialog.exec() != QDialog::Accepted) {
         return; // User canceled
@@ -7361,7 +7482,7 @@ void MainWindow::onEditShot()
         return;
     }
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     NewShotDialog dialog(fps, NewShotDialog::Mode::Edit,
                          QString::fromStdString(currentCtx.shot->name),
                          currentCtx.shot->endTime - currentCtx.shot->startTime,
@@ -7416,12 +7537,12 @@ void MainWindow::onEditShot()
     undoStack->push(new EditShotCommand(this, oldShot, newShot, currentTime));
 }
 
-void MainWindow::editShotSegment(const GameFusion::Shot &editShot, double cursorTime){
+void MainWindow::editShotSegment(const GameFusion::Shot &editShot, double cursorTime, bool updateTime){
     ShotContext shotContext = findShotByUuid(editShot.uuid);
     if(!shotContext.isValid())
         return;
 
-    ShotIndices shotIndecies = deleteShotSegment(shotContext, cursorTime);
+    ShotIndices shotIndecies = deleteShotSegment(shotContext, cursorTime, updateTime);
     CursorItem *sceneMarker = nullptr;
     insertShotSegment(editShot, shotIndecies, *shotContext.scene, cursorTime, sceneMarker);
 }
@@ -7462,7 +7583,7 @@ void MainWindow::onNewPanel()
             return;
         }
 
-        qreal fps = projectJson["fps"].toDouble(24.0);
+        qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
         NewPanelDialog dialog(fps, NewPanelDialog::Mode::Create, "", 1000.0, this);
         if (dialog.exec() != QDialog::Accepted) {
             return;
@@ -7545,7 +7666,7 @@ void MainWindow::onInsertPanel() {
         return;
     }
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     GameFusion::Panel newPanel;
     newPanel.name = "Panel " + std::to_string(ctx.shot->panels.size() + 1);
     newPanel.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
@@ -7628,7 +7749,7 @@ void MainWindow::onEditPanel()
         return;
     }
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     const auto& panel = ctx.shot->panels[panelIndex];
     NewPanelDialog dialog(fps, NewPanelDialog::Mode::Edit, QString::fromStdString(panel.name),
                          panel.durationTime, this);
@@ -7729,7 +7850,7 @@ void MainWindow::onDuplicatePanel()
     }
     updatedShot.endTime = updatedShot.startTime + (updatedShot.panels.empty() ? 0.0 :
         updatedShot.panels.back().startTime + updatedShot.panels.back().durationTime);
-    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * projectJson["fps"].toDouble(24.0) / 1000.0);
+    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * ProjectContext::instance().projectJson()["fps"].toDouble(24.0) / 1000.0);
 
     undoStack->push(new PanelCommand(this, originalShot, updatedShot, currentTime, "Duplicate Panel"));
 }
@@ -7794,7 +7915,7 @@ void MainWindow::onCutPanel()
     }
     updatedShot.endTime = updatedShot.startTime + (updatedShot.panels.empty() ? 0.0 :
         updatedShot.panels.back().startTime + updatedShot.panels.back().durationTime);
-    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * projectJson["fps"].toDouble(24.0) / 1000.0);
+    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * ProjectContext::instance().projectJson()["fps"].toDouble(24.0) / 1000.0);
 
     undoStack->push(new PanelCommand(this, originalShot, updatedShot, currentTime, "Cut Panel"));
     GameFusion::Log().info() << "Cut panel " << clipboardPanel.uuid.c_str();
@@ -7862,7 +7983,7 @@ void MainWindow::onPastePanel()
 
     updatedShot.endTime = updatedShot.startTime + (updatedShot.panels.empty() ? 0.0 :
         updatedShot.panels.back().startTime + updatedShot.panels.back().durationTime);
-    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * projectJson["fps"].toDouble(24.0) / 1000.0);
+    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * ProjectContext::instance().projectJson()["fps"].toDouble(24.0) / 1000.0);
 
     undoStack->push(new PanelCommand(this, originalShot, updatedShot, currentTime, "Paste Panel"));
     GameFusion::Log().info() << "Pasted panel " << pastePanel.uuid.c_str();
@@ -7935,7 +8056,7 @@ void MainWindow::onDeletePanel()
     }
     updatedShot.endTime = updatedShot.startTime + (updatedShot.panels.empty() ? 0.0 :
         updatedShot.panels.back().startTime + updatedShot.panels.back().durationTime);
-    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * projectJson["fps"].toDouble(24.0) / 1000.0);
+    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * ProjectContext::instance().projectJson()["fps"].toDouble(24.0) / 1000.0);
 
     undoStack->push(new PanelCommand(this, originalShot, updatedShot, currentTime, "Delete Panel"));
     GameFusion::Log().info() << "Deleted panel at index " << panelIndex;
@@ -7975,7 +8096,7 @@ void MainWindow::onPastCamera(){
     if(!panelContext.isValid())
         return;
 
-    qreal fps = projectJson["fps"].toDouble();
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     qreal mspf = 1000.0f / fps;
     GameFusion::CameraFrame newCamera(clipboardCamera);
     newCamera.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
@@ -8191,7 +8312,7 @@ void MainWindow::onKeyframeAdded(const QString& attribute, double timeMs, const 
 
     qreal panelStartMs = panelCtx.shot->startTime + panelCtx.panel->startTime;
     qreal relativeMs = timeMs - panelStartMs;
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal keyTime = qRound((relativeMs / 1000.0) * fps);
 
     QVariantMap valueMap = value.toMap();
@@ -8296,7 +8417,7 @@ QVariantMap MainWindow::getKeyframeValueMap(const KeyframeContext& keyframeConte
     valueMap["layerName"] = QString::fromStdString(keyframeContext.layer->name);
     valueMap["sceneUuid"] = QString::fromStdString(keyframeContext.scene->uuid);
     valueMap["sceneName"] = QString::fromStdString(keyframeContext.scene->name);
-    valueMap["timeMs"] = keyframeContext.keyframe->time * (1000.0 / projectJson["fps"].toDouble(24.0)); // Convert frames to ms
+    valueMap["timeMs"] = keyframeContext.keyframe->time * (1000.0 / ProjectContext::instance().projectJson()["fps"].toDouble(24.0)); // Convert frames to ms
     valueMap["time"] = keyframeContext.keyframe->time; // Convert frames to ms
     valueMap["uuid"] = QString::fromStdString(keyframeContext.keyframe->uuid);
 
@@ -8335,7 +8456,7 @@ void MainWindow::onKeyframeUpdated(const QString& kfUuid, double globalMs, const
     paint->getPaintArea()->updateLayer(*keyframeContext.layer);
 
     float localMs = globalMs - (keyframeContext.shot->startTime + keyframeContext.panel->startTime);
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal mspf = 1000.0 / fps;
     float localFr = static_cast<qreal>(localMs / mspf);
     undoStack->push(new KeyframeUpdateCommand(kfUuid, keyframeContext.keyframe->time, oldValueMap, localFr, newValueMap, layerUuid, panelUuid, newValueMap["shotUuid"].toString(), this));
@@ -8365,7 +8486,7 @@ void MainWindow::onGroupedKeyframeUpdated(const QString& uuid1, double globalMs1
     }
     QVariantMap oldValueMap2 = getKeyframeValueMap(keyframeCtx2);
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal mspf = 1000.0 / fps;
 
     float localMs1 = globalMs1 - (keyframeCtx1.shot->startTime + keyframeCtx1.panel->startTime);
@@ -8388,7 +8509,7 @@ void MainWindow::updateKeyframe(const QString& kfUuid, double localFr, const QVa
     if(!keyframeCtx.isValid())
         return;
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal mspf = 1000.0 / fps;
 
     if (keyframeCtx.isMotion) {
@@ -8586,7 +8707,7 @@ void MainWindow::applyLayerOrder(const std::vector<QString>& orderUuids, const Q
     updateWindowTitle(true);
 
     long panelStartTime = panelCtx.shot->startTime + panelCtx.panel->startTime;
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
 
     paint->getPaintArea()->setPanel(*panelCtx.panel, panelStartTime, fps, panelCtx.shot->cameraAnimation);
     paint->getPaintArea()->invalidateAllLayers();
@@ -8608,7 +8729,7 @@ void MainWindow::addLayer(const GameFusion::Layer& layer, const QString& panelUu
     updateWindowTitle(true);
 
     long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
 
     paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation);
 
@@ -8633,7 +8754,7 @@ void MainWindow::removeLayer(const QString& layerUuid, const QString& panelUuid)
     updateWindowTitle(true);
 
     long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
 
     paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation);
 
@@ -8680,7 +8801,7 @@ void MainWindow::setLayerImage(const QString& layerUuid, const QString& panelUui
         }
 
         long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
-        float fps = projectJson["fps"].toDouble();
+        float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
         paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation);
         populateLayerList(panelContext.panel);
     }
@@ -8844,7 +8965,7 @@ void MainWindow::setKeyFramePosition(const QString& layerUuid, const QString& pa
     TrackItem *track = timeLineView->getTrack(0);
     double panelStartTime = layerContext.panel->startTime;
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     float mspf = fps > 0 ? 1000./fps : 1;
     long timeMs = panelStartTime + kf.time * mspf;
     track->addKeyframeToAttribute("motion", timeMs, valueMap);

@@ -194,6 +194,7 @@ QT += opengl
 QT += widgets
 QT += network
 QT += concurrent
+QT += openglwidgets
 CONFIG += qt thread release
 
 # Input
@@ -239,6 +240,9 @@ HEADERS += ../ProjectContext.h
 
 SOURCES += ../ColorPaletteWidget.cpp
 HEADERS += ../ColorPaletteWidget.h
+
+SOURCES += ../PaintCanvas.cpp
+HEADERS += ../PaintCanvas.h
 
 # Input source files
 SOURCES +=  \
@@ -307,11 +311,14 @@ HEADERS       += $$GF/Applications/plugandpaint/app/interfaces.h \
                  $$GF/Applications/plugandpaint/app/mainwindowpaint.h \
                  $$GF/Applications/plugandpaint/app/paintarea.h \
                  $$GF/Applications/plugandpaint/app/plugindialog.h \
+                 $$GF/Applications/plugandpaint/app/Worker.h \
+                 $$GF/Applications/plugandpaint/app/PaintTypes.h \
                  $$GF/Applications/CommonQt/ConsoleDialog.h
 				 
 SOURCES       += $$GF/Applications/plugandpaint/app/mainwindowpaint.cpp \
                  $$GF/Applications/plugandpaint/app/paintarea.cpp \
                  $$GF/Applications/plugandpaint/app/plugindialog.cpp \
+                 $$GF/Applications/plugandpaint/app/Worker.cpp \
 				 $$GF/GameEngine/Demos/Draw/FitCurves.c \
                                  $$GF/GameEngine/Demos/Draw/GraphicsGems.c \
                                  $$GF/Applications/CommonQt/ConsoleDialog.cpp

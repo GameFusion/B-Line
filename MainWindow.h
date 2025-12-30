@@ -14,6 +14,7 @@
 #include "LlamaClient.h"
 #include "StrokeAttributeDockWidget.h"
 #include "paintarea.h"
+#include "PaintCanvas.h"
 
 class LlamaModel;
 class TimeLineView;
@@ -149,9 +150,9 @@ public:
 
     ShotSegment* createShotSegment(GameFusion::Shot& shot, GameFusion::Scene& scene, CursorItem* sceneMarker);
     void insertShotSegment(const GameFusion::Shot& shot, ShotIndices shotIndices, const GameFusion::Scene sceneRef, double cursorTime, CursorItem *sceneMarker);
-    void editShotSegment(const GameFusion::Shot &editShot, double cursorTime);
+    void editShotSegment(const GameFusion::Shot &editShot, double cursorTime, bool updateTime=true);
     void renameShotSegment(const QString &shotUuid, QString newName);
-    ShotIndices deleteShotSegment(ShotContext &shotContext, double cursorTime);
+    ShotIndices deleteShotSegment(ShotContext &shotContext, double cursorTime, bool updateTime=true);
     void addTimelineKeyFrames(const GameFusion::Shot& shot);
     void addLayerKeyFrames(TrackItem* track, long panelStartTime, const GameFusion::Panel& panel);
 
@@ -191,6 +192,7 @@ signals:
 public slots:
 
     void newProject();
+    void editProject();
     void loadProject();
     void saveProject();
 	void update();
@@ -408,7 +410,7 @@ protected:
 
     GameFusion::Panel *currentPanel = nullptr;
 
-    QJsonObject projectJson;
+    // QJsonObject projectJson; // moved to ProjectContext
 
     ShotPanelWidget *shotPanel = nullptr;
 
@@ -492,6 +494,8 @@ private:
     bool autoSave = false;
     bool savePending = false;
     //QAction *autoSaveAction;
+
+    PaintCanvas *paintCanvas = nullptr;
 };
 
 

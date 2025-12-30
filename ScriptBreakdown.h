@@ -313,6 +313,11 @@ struct Shot {
     int startTime=-1;
     int endTime=-1;
 
+    int resolutionWidth = 0;     // Override project resolution (0 = use project)
+    int resolutionHeight = 0;
+    int canvasWidth = 0;  // Override project canvas (0 = use project)
+    int canvasHeight = 0;
+
     Shot() {
         uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
     }

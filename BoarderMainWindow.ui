@@ -41,6 +41,8 @@
     <addaction name="actionOpen"/>
     <addaction name="actionSave"/>
     <addaction name="separator"/>
+    <addaction name="actionEdit_Project"/>
+    <addaction name="separator"/>
     <addaction name="actionAuto_Save"/>
     <addaction name="separator"/>
     <addaction name="actionLogin"/>
@@ -1108,6 +1110,11 @@
    </property>
    <property name="text">
     <string>Auto Save</string>
+   </property>
+  </action>
+  <action name="actionEdit_Project">
+   <property name="text">
+    <string>Edit Project...</string>
    </property>
   </action>
  </widget>
