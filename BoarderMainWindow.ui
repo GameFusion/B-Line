@@ -65,6 +65,7 @@
     </property>
     <addaction name="actionConsole_Log"/>
     <addaction name="actionPerfect_Script"/>
+    <addaction name="actionColor_Palette"/>
    </widget>
    <widget class="QMenu" name="menuHelp">
     <property name="title">
@@ -1115,6 +1116,11 @@
   <action name="actionEdit_Project">
    <property name="text">
     <string>Edit Project...</string>
+   </property>
+  </action>
+  <action name="actionColor_Palette">
+   <property name="text">
+    <string>Color Palette...</string>
    </property>
   </action>
  </widget>

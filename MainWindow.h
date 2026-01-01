@@ -353,6 +353,7 @@ public slots:
     void onAutoSaveTimer();
     void toggleAutoSave(bool checked);
 
+    void colorPalette();
 
 protected:
 

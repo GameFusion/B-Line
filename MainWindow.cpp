@@ -1728,6 +1728,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->actionExport_EDL, &QAction::triggered, this, &MainWindow::exportEDL);
 
 
+    connect(ui->actionColor_Palette, &QAction::triggered, this, &MainWindow::colorPalette);
+
 /*
     ShotPanelWidget *shotPanel = new ShotPanelWidget;
     ui->splitter->insertWidget(0, shotPanel);
@@ -2039,27 +2041,12 @@ QComboBox, QSpinBox {
 
     this->setDockNestingEnabled(true);
 
-
-    //this->tabifyDockWidget(ui->dockCameras, strokeDock);
-
     ui->dockCameras->setVisible(false);
 
     this->splitDockWidget(ui->dockLayers, strokeDock, Qt::Horizontal);
 
     ui->dockCameras->setMaximumWidth(350);
     strokeDock->setMaximumWidth(350);
-
-    /******************************/
-    QDockWidget *dock = new QDockWidget("Color Palette", this);
-            ColorPaletteWidget *paletteWidget = new ColorPaletteWidget();
-            dock->setWidget(paletteWidget);
-            addDockWidget(Qt::RightDockWidgetArea, dock);
-
-            connect(paletteWidget, &ColorPaletteWidget::colorPicked, this, [](const QColor &color){
-                qDebug() << "Selected color:" << color;
-            });
-
-    /******************************/
 
     // Load settings
     loadSettings();
@@ -9260,3 +9247,32 @@ void MainWindow::onLayerClear() {
     //updateLayer(layerUuid, QString::fromStdString(currentPanel->uuid), clearedLayer);
 }
 
+void MainWindow::colorPalette() {
+    ColorPaletteWidget *colorPalette = nullptr;
+
+    // Create only once – reuse if already exists
+    if (!colorPalette) {
+        colorPalette = new ColorPaletteWidget();  // parented to dock for proper cleanup
+        colorPalette->setWindowModality(Qt::WindowModal);  // blocks rest of app
+        colorPalette->setWindowTitle("Color Palette");
+
+        // Optional: set reasonable size
+        colorPalette->resize(400, 360);
+
+        // Connect the color selection signal
+        connect(colorPalette, &ColorPaletteWidget::colorPicked,
+                this, [this, colorPalette](const QColor &color) {
+
+                    colorPalette->close();  // auto-close on pick (nice UX)
+                });
+    }
+
+    // Update palette to current color before showing
+    //colorPalette->setCurrentColor(foregroundColor);
+
+    // Show centered over the main window (or dock)
+    colorPalette->move(mapToGlobal(rect().center()) - QPoint(colorPalette->width()/2, colorPalette->height()/2));
+    colorPalette->show();
+    colorPalette->raise();
+    colorPalette->activateWindow();
+}
