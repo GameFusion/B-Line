@@ -892,6 +892,7 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
 
     ///
     int fontId = QFontDatabase::addApplicationFont(":/fa-regular-400.ttf");
+
     printf("fond Id %d\n", fontId);
 
     QString fontFamily = "Helvetica";
@@ -901,7 +902,9 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     else
         fontFamily = QFontDatabase::applicationFontFamilies(fontId).at(0);
 
-    QFont fontAwesome(fontFamily);
+    //QFont fontAwesome(fontFamily);
+    QFont fontAwesome(FontAwesomeViewer::fontAwesomeSolid);
+
 
     // Create buttons
     QToolButton *addPanelButton = new QToolButton(&parent);
@@ -1777,9 +1780,34 @@ MainWindow::MainWindow(QWidget *parent)
     ui->toolButton_layerMoveUp->setText(QChar(0xf062));
     ui->toolButton_layerMoveDown->setText(QChar(0xf063));
 
+    // Load the font explicitly
+        int fontId = QFontDatabase::addApplicationFont("resources/fonts/fa-solid-900.ttf");
+        if (fontId == -1) {
+            qDebug() << "Failed to load Font Awesome font!";
+
+        }
+
+        QStringList families = QFontDatabase::applicationFontFamilies(fontId);
+        if (families.isEmpty()) {
+            qDebug() << "No font families found!";
+
+        }
+
+        QString fontFamily = families.at(0);
+        qDebug() << "Using font family:" << fontFamily;
+
+        QFont faFont(fontFamily);
+        faFont.setPointSize(16);  // Try large size
+
+
     QFont toolFonts = FontAwesomeViewer::fontAwesomeSolid;
-    toolFonts.setPixelSize(14);
-    paint->createTools(&toolFonts);
+    //toolFonts.setPixelSize(14);
+    //paint->createTools(&toolFonts);
+    //paint->createTools(&FontAwesomeViewer::fontAwesomeSolid);
+    QTimer::singleShot(5000, this, [ this]() {
+            GameFusion::Log().info("create tools post\n");
+            paint->createTools(&FontAwesomeViewer::fontAwesomeSolid);
+        });
 
     //
 
@@ -1863,6 +1891,8 @@ QComboBox, QSpinBox {
     /******************************/
 
     // Load settings
+
+
     loadSettings();
     //autoSaveAction->setChecked(autoSave);
 

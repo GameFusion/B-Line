@@ -24,7 +24,7 @@ CONFIG += no_batch
 DEPENDPATH += .
 INCLUDEPATH += ..
 INCLUDEPATH += $$GF/GameEngine/SoundServer $$GF/GameEngine/InputDevice $$GF/GameEngine/WindowDevice $$GF/GameEngine/DataStructures $$GF/GameEngine/GameCore $$GF/GameEngine/SceneGraph $$GF/GameEngine/Math3D $$GF/GameEngine/MaterialLighting $$GF/GameEngine/Geometry $$GF/GameEngine/AssetManagement $$GF/GameEngine/Texture $$GF/GameEngine/GraphicsDevice/GraphicsDeviceCore $$GF/GameEngine/GraphicsDevice/GraphicsDeviceOpenGL $$GF/GameEngine/Character $$GF/GameEngine/GameFramework $$GF/GameEngine/GUI/GUICore $$GF/GameEngine/GUI/GUIGame $$GF/GameEngine/GUI/GUIQT $$GF/GameEngine/Animation $$GF/GameEngine/GameLevel $$GF/GameEngine/GameThread $$GF/GameEngine/FontEngine
-INCLUDEPATH += $$GF/GameEngine/LightmapFramework
+#INCLUDEPATH += $$GF/GameEngine/LightmapFramework
 INCLUDEPATH += $$GF/GameEngine/GamePlay
 INCLUDEPATH += $$GF/GameEngine/HarmonicCoordinates
 INCLUDEPATH += $$GF/GameEngine/Applications/CharacterHarmonics
@@ -102,31 +102,42 @@ CONFIG(debug, debug|release) {
 
 
 unix:!macx{
+
+           CONFIG += c++17
+
   # linux only
-    LIBS += -L../../GameEngine/Libs/LinuxGCC/ -L../../ExternalLibs/harmonicBlender/
-    LIBS += -L../../ExternalLibs/x264/
-    LIBS += -L../../ExternalLibs/ffmpeg/libavcodec/
-    LIBS += -L../../ExternalLibs/ffmpeg/libavfilter/
-    LIBS += -L../../ExternalLibs/ffmpeg/libavformat/
-    LIBS += -L../../ExternalLibs/ffmpeg/libavutil/
-    LIBS += -L../../ExternalLibs/ffmpeg/libswscale/
-    LIBS += -lGamePlay -lharmonicBlender -lHarmonicCoordinates -lGameFramework -lCloth -lGameLevel -lEz -lEzRun -lGameNetwork  -lLightmapFramework -lGUIGame -lGUICore -lVideo -lSceneGraph -lGameCore -lParticleSystems -lCharacter -lAnimation -lFontEngine -lPhonemeRecognizer -lVisualFFT -lSoundServer -lGameThread -lGeometry -lTexture -lMaterialLighting -lInputDevice -lWindowDevice -lGraphicsDeviceOpenGL -lGraphicsDeviceCore -lAssetManagement -lMath3D -lDataStructures 
-    LIBS += -lavformat -lavcodec -lavutil -lswscale -lx264 -lbz2 -lz
+    LIBS += -L$$GF/GameEngine/Libs/LinuxGCC/ -L$$GF/ExternalLibs/harmonicBlender/
+    LIBS += -L$$GF/ExternalLibs/x264/
+    LIBS += -L$$GF/ExternalLibs/ffmpeg/libavcodec/
+    LIBS += -L$$GF/ExternalLibs/ffmpeg/libavfilter/
+    LIBS += -L$$GF/ExternalLibs/ffmpeg/libavformat/
+    LIBS += -L$$GF/ExternalLibs/ffmpeg/libavutil/
+    LIBS += -L$$GF/ExternalLibs/ffmpeg/libswscale/
+    LIBS += -lGamePlay -lGameFramework -lCloth -lGameLevel -lEz -lEzRun -lGameNetwork  -lLightmapFramework -lGUIGame -lGUICore -lVideo -lSceneGraph -lGameCore -lParticleSystems -lCharacter -lAnimation -lFontEngine -lPhonemeRecognizer -lVisualFFT -lSoundServer -lGameThread -lGeometry -lTexture -lMaterialLighting -lInputDevice -lWindowDevice -lGraphicsDeviceOpenGL -lGraphicsDeviceCore -lAssetManagement -lMath3D -lDataStructures
+    LIBS += -L$$GF/english2phoneme/LinuxGCC/
+    LIBS += -lPhonetizer
+    LIBS += -lavformat -lavcodec -lavutil -lswscale  -lbz2 -lz
+    #LIBS += -lx264
     LIBS += -lhpdf
     LIBS += -lpng -ljpeg
     LIBS += -lGLU -lGL
     LIBS += -lasound
+    LIBS += -lpulse -lpulse-simple
     LIBS += -lstdc++
     
-    SOURCES += ../../GameEngine/GenericDevice/GenericDevice.cpp
-    SOURCES += ../../GameEngine/GenericDevice/GenericInput.cpp
+    #SOURCES += ../../GameEngine/GenericDevice/GenericDevice.cpp
+    #SOURCES += ../../GameEngine/GenericDevice/GenericInput.cpp
+    SOURCES += $$GF/GameEngine/GenericDevice/GenericDevice.cpp
+    SOURCES += $$GF/GameEngine/GenericDevice/GenericInput.cpp
+    SOURCES += $$GF/GameEngine/Ez/dparser.cpp
+#HEADERS += $$GF/GameEngine/SoundServer/Decibel.h
 
     DEFINES += Linux
     DEFINES += LINUX
-	QMAKE_CXXFLAGS += -std=c++11
+        QMAKE_CXXFLAGS += -std=c++17
 	
-	SOURCES += ../../Projects/PhoneDEC/dec_phone_corr/DEC.cpp
-	SOURCES += ../../Projects/PhoneDEC/dec_phone_corr/Phone.cpp
+        SOURCES += $$GF/Projects/PhoneDEC/dec_phone_corr/DEC.cpp
+        SOURCES += $$GF/Projects/PhoneDEC/dec_phone_corr/Phone.cpp
 }
 
 
