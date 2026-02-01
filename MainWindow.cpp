@@ -1730,33 +1730,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(ui->actionColor_Palette, &QAction::triggered, this, &MainWindow::colorPalette);
 
-/*
-    ShotPanelWidget *shotPanel = new ShotPanelWidget;
-    ui->splitter->insertWidget(0, shotPanel);
-    shotPanel->show();
-*/
-
-    // Create and configure shotPanel inside a scroll area
-    shotPanel = new ShotPanelWidget;
-    shotPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-
-    QScrollArea *scrollArea = new QScrollArea;
-    scrollArea->setWidget(shotPanel);
-    scrollArea->setWidgetResizable(true);
-    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-
-    // Create PerfectScript widget
-    perfectScript = new PerfectScriptWidget(this);
-
-    // Create tab widget and add both panels as tabs
-    QTabWidget *tabWidget = new QTabWidget;
-    tabWidget->addTab(scrollArea, tr("Shots"));
-    tabWidget->addTab(perfectScript, tr("Script"));
-
-    // Insert the tab widget into the splitter at position 0
-    ui->splitter->insertWidget(0, tabWidget);
-    /***/
+    setupDockPanels();
 
     paint = new MainWindowPaint;
     ui->splitter->insertWidget(1, paint);
@@ -2084,6 +2058,66 @@ QComboBox, QSpinBox {
     ui->splitter->setSizes(list);
 }
 
+void MainWindow::setupDockPanels()
+{
+    // Create and configure shotPanel inside a scroll area
+    shotPanel = new ShotPanelWidget;
+    shotPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+
+    QScrollArea *scrollArea = new QScrollArea;
+    scrollArea->setWidget(shotPanel);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
+
+    // 1. Ensure existing dockShots is set up
+    ui->dockShots->setFeatures(QDockWidget::DockWidgetMovable |
+                               QDockWidget::DockWidgetFloatable |
+                               QDockWidget::DockWidgetClosable);
+    ui->dockShots->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    addDockWidget(Qt::LeftDockWidgetArea, ui->dockShots);  // Dock to left if not already
+
+    // 2. Create new dock for Shots (scrollArea)
+    QDockWidget *dockShotsNew = new QDockWidget(tr("Shots Panel"), this);
+    dockShotsNew->setObjectName("dockShotsNew");
+    dockShotsNew->setFeatures(QDockWidget::DockWidgetMovable |
+                              QDockWidget::DockWidgetFloatable |
+                              QDockWidget::DockWidgetClosable);
+    dockShotsNew->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    dockShotsNew->setWidget(scrollArea);  // Assuming scrollArea is your shots/timeline widget
+
+    // 3. Create new dock for Script (perfectScript)
+    perfectScript = new PerfectScriptWidget(this);
+    QDockWidget *dockScript = new QDockWidget(tr("Script"), this);
+    dockScript->setObjectName("dockScript");
+    dockScript->setFeatures(QDockWidget::DockWidgetMovable |
+                             QDockWidget::DockWidgetFloatable |
+                             QDockWidget::DockWidgetClosable);
+    dockScript->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    dockScript->setWidget(perfectScript);
+
+    // 4. Dock both new docks to left and tabify them with existing dockShots
+    addDockWidget(Qt::LeftDockWidgetArea, dockShotsNew);
+    addDockWidget(Qt::LeftDockWidgetArea, dockScript);
+
+    // Tabify: Stack as tabs in the same area (order: dockShots on top, then Shots, then Script)
+    tabifyDockWidget(ui->dockShots, dockShotsNew);
+    tabifyDockWidget(dockShotsNew, dockScript);  // Chains them
+
+    // 5. Raise the first tab (dockShots) as default
+    ui->dockShots->raise();
+
+    // 6. Optional: Set initial sizes (adjust as needed)
+    ui->dockShots->setMinimumWidth(300);
+    dockShotsNew->setMinimumWidth(300);
+    dockScript->setMinimumWidth(300);
+
+    ui->dockShots->setWindowTitle("Shot List");
+
+    // Remove old splitter insertion if any
+    // (No longer needed since docks handle layout)
+}
 
 void MainWindow::setWhiteTheme()
 {

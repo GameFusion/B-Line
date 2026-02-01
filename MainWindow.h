@@ -386,7 +386,7 @@ protected:
 
     QVariantMap getKeyframeValueMap(const KeyframeContext& keyframeContext);
 
-
+    void setupDockPanels();
 
 protected:
 	Ui::MainWindowBoarder *ui;
