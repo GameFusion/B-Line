@@ -15,6 +15,10 @@ isEmpty(GF) {
 	GF=$$(GameFusion)
 }
 
+# Normalize to an absolute path so linker inputs are not emitted as fragile relative paths.
+GF = $$clean_path($$absolute_path($$GF, $$PWD))
+message(Using normalized GameFusion path $$GF)
+
 mac {
     GF=/Users/andreascarlen/GameFusion
 }
@@ -37,6 +41,7 @@ INCLUDEPATH += $$GF/GameEngine/Collision
 INCLUDEPATH += $$GF/GameEngine/GameWeb
 INCLUDEPATH += $$GF/Projects/PhoneDEC/dec_phone_corr/
 INCLUDEPATH += $$GF/GameEngine/Demos/Draw
+INCLUDEPATH += $$GF/Applications/LlamaEngine
 
 RESOURCES += $$GF/Applications/CommonQt/qdarkstyle/style.qrc
 RESOURCES += ../Boarder.qrc
@@ -139,6 +144,8 @@ win32 {
    
    CONFIG(debug, debug|release) {
 	   DEFINES += DEBUG
+	   QMAKE_CXXFLAGS_DEBUG += /Zi /Od
+	   QMAKE_LFLAGS_DEBUG += /DEBUG
 
 		LIBS += $$GF\GameEngine\build-vs2019\Debug\GameEngine.lib
          LIBS += $$GF\GameEngine\build-vs2019\Debug\GameEngineGL.lib $$GF\GameEngine\build-vs2019\Debug\GameFramework.lib
@@ -195,7 +202,7 @@ QT += widgets
 QT += network
 QT += concurrent
 QT += openglwidgets
-CONFIG += qt thread release
+CONFIG += qt thread
 
 # Input
 FORMS += ../BoarderMainWindow.ui ../ShotPanelWidget.ui \
