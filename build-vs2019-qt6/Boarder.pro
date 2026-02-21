@@ -337,9 +337,7 @@ SOURCES       += $$GF/Applications/plugandpaint/app/mainwindowpaint.cpp \
                  $$GF/Applications/plugandpaint/app/paintarea.cpp \
                  $$GF/Applications/plugandpaint/app/plugindialog.cpp \
                  $$GF/Applications/plugandpaint/app/Worker.cpp \
-				 $$GF/GameEngine/Demos/Draw/FitCurves.c \
-                                 $$GF/GameEngine/Demos/Draw/GraphicsGems.c \
-                                 $$GF/Applications/CommonQt/ConsoleDialog.cpp
+                 $$GF/Applications/CommonQt/ConsoleDialog.cpp
 
 FORMS         += $$GF/Applications/CommonQt/ConsoleDialog.ui
 
