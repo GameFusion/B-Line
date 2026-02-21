@@ -2,6 +2,7 @@
 #define PROJECTCONTEXT_H
 
 #include <QString>
+#include <QJsonObject>
 
 /*
  *
@@ -36,10 +37,13 @@ public:
     void setCurrentProjectName(const QString& name) { m_currentProjectName = name; }
     QString currentProjectName() const { return m_currentProjectName; }
 
+    QJsonObject &projectJson() { return m_projectJson; }
 private:
     ProjectContext() = default; // Private constructor for singleton
     QString m_currentProjectPath;
     QString m_currentProjectName;
+
+    QJsonObject m_projectJson;
 };
 
 #endif // PROJECTCONTEXT_H

@@ -10,6 +10,7 @@
 #include "Paragraph.h"
 #include "LlamaClient.h"
 #include "PromptLogger.h"
+#include "ProjectContext.h"
 
 namespace GameFusion {
 
@@ -129,8 +130,24 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
 
 
 
+    if(obj.contains("resolution")) {
+        shot.resolutionWidth = obj["resolution"].toArray()[0].toInt();
+        shot.resolutionHeight = obj["resolution"].toArray()[1].toInt();
+    }
+    else
+    {
+        shot.resolutionWidth = ProjectContext::instance().projectJson()["resolution"].toArray()[0].toInt();
+        shot.resolutionWidth = ProjectContext::instance().projectJson()["resolution"].toArray()[1].toInt();
+    }
 
-
+    if(obj.contains("canvas")) {
+        shot.canvasWidth = obj["canvas"].toArray()[0].toInt();
+        shot.canvasHeight = obj["canvas"].toArray()[1].toInt();
+    }
+    else {
+        shot.canvasWidth = ProjectContext::instance().projectJson()["canvas"].toArray()[0].toInt();
+        shot.canvasHeight = ProjectContext::instance().projectJson()["canvas"].toArray()[1].toInt();
+    }
 
     float mspf = fps > 0 ? 1000./fps : 1;
 
@@ -993,6 +1010,8 @@ void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
                 shotObj["startTime"] = shot.startTime;
                 shotObj["endTime"] = shot.endTime;
 
+                shotObj["resolution"] = QJsonArray{shot.resolutionWidth, shot.resolutionWidth};
+                shotObj["canvas"] = QJsonArray{shot.canvasWidth, shot.canvasHeight};
 
                 QJsonObject cameraObj;
                 cameraObj["movement"] = QString::fromStdString(shot.camera.movement);

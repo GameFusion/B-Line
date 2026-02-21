@@ -15,6 +15,9 @@ public:
     explicit NewProjectDialog(QWidget *parent = nullptr);
     ~NewProjectDialog();
 
+    void setProjectData(const QJsonObject& projectJson);
+    void setEditMode(bool isEdit);
+
     QString projectName() const;
     QString location() const;
     int fps() const;
@@ -25,6 +28,14 @@ public:
     QString projectCode() const;
     QString director() const;
     QString notes() const;
+
+
+    QString subtitle() const;
+    QString episodeFormat() const;
+    QString copyright() const;
+    QString startTC() const;
+    QString canvasMargin() const;
+    QString canvasMarginCustom() const;
 
 private slots:
     void browseLocation();

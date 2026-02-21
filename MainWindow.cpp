@@ -226,12 +226,14 @@ public:
 
     void undo() override
     {
-        mainWindow_->editShotSegment(oldShot_, cursorTime_);
+        bool updateTime = text() == "Insert Panel";
+        mainWindow_->editShotSegment(oldShot_, cursorTime_, updateTime);
     }
 
     void redo() override
     {
-        mainWindow_->editShotSegment(newShot_, cursorTime_);
+        bool updateTime = text() == "Insert Panel";
+        mainWindow_->editShotSegment(newShot_, cursorTime_, updateTime);
     }
 
 private:
@@ -642,6 +644,110 @@ private:
 };
 
 
+class InstanceLayerCommand : public QUndoCommand {
+public:
+    InstanceLayerCommand(const QString& originalLayerUuid, const QString& instanceLayerUuid,
+                         const QString& panelUuid, MainWindow* mainWindow)
+        : m_originalLayerUuid(originalLayerUuid), m_instanceLayerUuid(instanceLayerUuid),
+          m_panelUuid(panelUuid), m_mainWindow(mainWindow) {
+        setText("Instance Layer");
+    }
+
+    void undo() override {
+        m_mainWindow->removeLayer(m_instanceLayerUuid, m_panelUuid);
+    }
+
+    void redo() override {
+        LayerContext layerContext = m_mainWindow->findLayerByUuid(m_originalLayerUuid.toStdString().c_str());
+        if (!layerContext.isValid()) return;
+
+        GameFusion::Layer instanceLayer = *layerContext.layer;
+        instanceLayer.uuid = m_instanceLayerUuid.toStdString();
+        instanceLayer.name = layerContext.layer->name + " (Instance)";
+        instanceLayer.sourceUuid = m_originalLayerUuid.toStdString();
+        instanceLayer.layers.clear(); // Instances don't have nested layers
+
+        m_mainWindow->addLayer(instanceLayer, m_panelUuid);
+    }
+
+private:
+    QString m_originalLayerUuid;
+    QString m_instanceLayerUuid;
+    QString m_panelUuid;
+    MainWindow* m_mainWindow;
+};
+
+class CopyPasteLayerCommand : public QUndoCommand {
+public:
+    CopyPasteLayerCommand(const GameFusion::Layer& layer, const QString& panelUuid, bool asAlias, MainWindow* mainWindow)
+        : m_layer(layer), m_panelUuid(panelUuid), m_asAlias(asAlias), m_mainWindow(mainWindow) {
+        setText(asAlias ? "Paste Layer as Alias" : "Paste Layer as Duplicate");
+    }
+
+    void undo() override {
+        m_mainWindow->removeLayer(QString::fromStdString(m_layer.uuid), m_panelUuid);
+    }
+
+    void redo() override {
+        m_mainWindow->addLayer(m_layer, m_panelUuid);
+    }
+
+private:
+    GameFusion::Layer m_layer;
+    QString m_panelUuid;
+    bool m_asAlias;
+    MainWindow* m_mainWindow;
+};
+
+class RenameLayerCommand : public QUndoCommand {
+public:
+    RenameLayerCommand(const QString& layerUuid, const QString& oldName, const QString& newName,
+                       bool propagateToAliases, const QString& panelUuid, MainWindow* mainWindow)
+        : m_layerUuid(layerUuid), m_oldName(oldName), m_newName(newName),
+          m_propagateToAliases(propagateToAliases), m_panelUuid(panelUuid), m_mainWindow(mainWindow) {
+        setText("Rename Layer");
+    }
+
+    void undo() override {
+        m_mainWindow->renameLayer(m_layerUuid, m_oldName, m_propagateToAliases);
+    }
+
+    void redo() override {
+        m_mainWindow->renameLayer(m_layerUuid, m_newName, m_propagateToAliases);
+    }
+
+private:
+    QString m_layerUuid;
+    QString m_oldName;
+    QString m_newName;
+    bool m_propagateToAliases;
+    QString m_panelUuid;
+    MainWindow* m_mainWindow;
+};
+
+class GroupLayersCommand : public QUndoCommand {
+public:
+    GroupLayersCommand(const std::vector<QString>& layerUuids, const QString& groupUuid,
+                       const QString& panelUuid, MainWindow* mainWindow)
+        : m_layerUuids(layerUuids), m_groupUuid(groupUuid), m_panelUuid(panelUuid), m_mainWindow(mainWindow) {
+        setText("Group Layers");
+    }
+
+    void undo() override {
+        m_mainWindow->ungroupLayers(m_groupUuid, m_panelUuid);
+    }
+
+    void redo() override {
+        m_mainWindow->groupLayers(m_layerUuids, m_panelUuid);
+    }
+
+private:
+    std::vector<QString> m_layerUuids;
+    QString m_groupUuid;
+    QString m_panelUuid;
+    MainWindow* m_mainWindow;
+};
+
 class LayerFXCommand : public QUndoCommand {
 public:
     LayerFXCommand(const QString& layerUuid, const QString& panelUuid, const std::string& oldFX, const std::string& newFX, MainWindow* mainWindow)
@@ -801,6 +907,31 @@ private:
     MainWindow* m_mainWindow;
 };
 
+class ClearLayerCommand : public QUndoCommand {
+public:
+    ClearLayerCommand(const GameFusion::Layer& originalLayer, const GameFusion::Layer& clearedLayer,
+                      const QString& layerUuid, const QString& panelUuid, MainWindow* mainWindow)
+        : m_originalLayer(originalLayer), m_clearedLayer(clearedLayer),
+          m_layerUuid(layerUuid), m_panelUuid(panelUuid), m_mainWindow(mainWindow) {
+        setText("Clear Layer");
+    }
+
+    void undo() override {
+        m_mainWindow->updateLayer(m_layerUuid, m_panelUuid, m_originalLayer);
+    }
+
+    void redo() override {
+        m_mainWindow->updateLayer(m_layerUuid, m_panelUuid, m_clearedLayer);
+    }
+
+private:
+    GameFusion::Layer m_originalLayer;
+    GameFusion::Layer m_clearedLayer;
+    QString m_layerUuid;
+    QString m_panelUuid;
+    MainWindow* m_mainWindow;
+};
+
 class CompositeUndoCommand : public QUndoCommand {
 public:
     CompositeUndoCommand(const QString& text) {
@@ -914,15 +1045,6 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     QToolButton *deletePanelButton = new QToolButton(&parent);
     deletePanelButton->setText(QChar(0xf146));  // Shift left icon
     deletePanelButton->setFont(fontAwesome);
-/*
-    QToolButton *addSegmentButton = new QToolButton(&parent);
-    addSegmentButton->setText(QChar(0xf126));  // Shift left icon
-    addSegmentButton->setFont(fontAwesome);
-
-    QToolButton *deleteSegmentButton = new QToolButton(&parent);
-    deleteSegmentButton->setText(QChar(0xf1f8));  // Shift left icon
-    deleteSegmentButton->setFont(fontAwesome);
-*/
 
     QToolButton *shiftLeftButton = new QToolButton(&parent);
     shiftLeftButton->setText(QChar(0xf2f6));  // Shift left icon
@@ -931,11 +1053,7 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     QToolButton *shiftRightButton = new QToolButton(&parent);
     shiftRightButton->setText(QChar(0xf337));  // Group selection icon
     shiftRightButton->setFont(fontAwesome);
-/*
-    QToolButton *phonemeButton = new QToolButton(&parent);
-    phonemeButton->setText(QChar(0xf1dd));  // Single selection icon
-    phonemeButton->setFont(fontAwesome);
-*/
+
     QToolButton *editButton = new QToolButton(&parent);
     editButton->setText(QChar(0xf044));  // Area selection icon
     editButton->setFont(fontAwesome);
@@ -943,12 +1061,6 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     QToolButton *trashButton = new QToolButton(&parent);
     trashButton->setText(QChar(0xf1f8));  // Area selection icon
     trashButton->setFont(fontAwesome);
-/*
-    QToolButton *anotateButton = new QToolButton(&parent);
-    anotateButton->setText(QChar(0xf3c5));  // Area selection icon
-    // or pin with F3C5
-    anotateButton->setFont(fontAwesome);
-    */
 
     QToolButton *backwardFastButton = new QToolButton(&parent);
     backwardFastButton->setText(QChar(0xf049));  // Area selection icon
@@ -1224,16 +1336,11 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
 
     hlayout->addWidget(addPanelButton);
     hlayout->addWidget(deletePanelButton);
-    //hlayout->addWidget(addSegmentButton);
-    //hlayout->addWidget(deleteSegmentButton);
-
 
     hlayout->addWidget(shiftLeftButton);
     hlayout->addWidget(shiftRightButton);
-    //hlayout->addWidget(phonemeButton);
     hlayout->addWidget(editButton);
     hlayout->addWidget(trashButton);
-    //hlayout->addWidget(anotateButton);
     hlayout->addWidget(backwardFastButton);
     hlayout->addWidget(backwardStepButton);
     hlayout->addWidget(playButton);
@@ -1242,8 +1349,6 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     hlayout->addWidget(forwardFastButton);
     hlayout->addWidget(settingsButton);
     hlayout->addWidget(viewModeButton); // Add toggle button
-    //hlayout->addWidget(singleSelectionButton);
-    //hlayout->addWidget(areaSelectionButton);
 
     hlayout->addSpacerItem(spacer);
     gfxlayout->addWidget(timelineView);
@@ -1335,6 +1440,16 @@ MainWindow::MainWindow(QWidget *parent)
 
     ui->setupUi(this);
 
+    ProjectContext::instance().projectJson()["resolution"] = QJsonArray{1920, 1080};
+    ProjectContext::instance().projectJson()["canvas_margin"] = QString("20");
+    ProjectContext::instance().projectJson()["canvas_percent"] = 20;
+    ProjectContext::instance().projectJson()["canvas"] = QJsonArray{2304, 1296}; // For 20% margin: 1920 + 384, etc.
+
+    paintCanvas = new PaintCanvas();
+    paintCanvas->show();
+
+
+
     logger->setServerConfig("http://localhost:50000", "your-secret-token-here");
     // Undo & Redo actions, menu system
 
@@ -1410,6 +1525,7 @@ MainWindow::MainWindow(QWidget *parent)
     // Panel menu
     QMenu *panelMenu = storyboardMenu->addMenu(tr("Panel"));
     newPanelAct = panelMenu->addAction(tr("New Panel"));
+    insertPanelAct = panelMenu->addAction(tr("Insert Panel"));
     editPanelAct = panelMenu->addAction(tr("Edit Panel"));
     renamePanelAct = panelMenu->addAction(tr("Rename Panel"));
     duplicatePanelAct = panelMenu->addAction(tr("Duplicate Panel"));
@@ -1425,6 +1541,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 
     newPanelAct->setEnabled(false);
+    insertPanelAct->setEnabled(false);
     editPanelAct->setEnabled(false);
     renamePanelAct->setEnabled(false);
     duplicatePanelAct->setEnabled(false);
@@ -1434,7 +1551,84 @@ MainWindow::MainWindow(QWidget *parent)
     clearPanelAct->setEnabled(false);
     deletePanelAct->setEnabled(false);
 
-    // Existing camera actions
+    // --- Layer menu
+
+    // Create Layer submenu
+    QMenu* layerMenu = new QMenu("Layer", storyboardMenu);
+    storyboardMenu->addMenu(layerMenu);
+
+    // New Layer
+    QAction* newLayerAction = new QAction("New Layer...", layerMenu);
+    layerMenu->addAction(newLayerAction);
+    connect(newLayerAction, &QAction::triggered, this, &MainWindow::onLayerAdd);
+
+    // Clear Layer
+    QAction* clearLayerAction = new QAction("Clear Layer", layerMenu);
+    layerMenu->addAction(clearLayerAction);
+    connect(clearLayerAction, &QAction::triggered, this, &MainWindow::onLayerClear);
+
+    // Duplicate Layer submenu
+    QMenu* duplicateLayerMenu = new QMenu("Duplicate Layer", layerMenu);
+    layerMenu->addMenu(duplicateLayerMenu);
+    QAction* duplicateCurrentPanelAction = new QAction("Current Panel", duplicateLayerMenu);
+    QAction* duplicateThroughShotAction = new QAction("Through Shot", duplicateLayerMenu);
+    duplicateLayerMenu->addAction(duplicateCurrentPanelAction);
+    duplicateLayerMenu->addAction(duplicateThroughShotAction);
+    connect(duplicateCurrentPanelAction, &QAction::triggered, this, &MainWindow::onLayerDuplicate);
+    connect(duplicateThroughShotAction, &QAction::triggered, this, &MainWindow::onLayerDuplicateThroughShot);
+
+    // Alias Layer submenu
+    QMenu* aliasLayerMenu = new QMenu("Instance Layer", layerMenu);
+    layerMenu->addMenu(aliasLayerMenu);
+    QAction* aliasToSelectedPanelsAction = new QAction("To Selected Panels", aliasLayerMenu);
+    QAction* aliasThroughShotAction = new QAction("Through Shot", aliasLayerMenu);
+    aliasLayerMenu->addAction(aliasToSelectedPanelsAction);
+    aliasLayerMenu->addAction(aliasThroughShotAction);
+    connect(aliasToSelectedPanelsAction, &QAction::triggered, this, &MainWindow::onLayerInstanceToSelectedPanels);
+    connect(aliasThroughShotAction, &QAction::triggered, this, &MainWindow::onLayerInstanceThroughShot);
+
+    // Copy and Paste
+    QAction* copyLayerAction = new QAction("Copy Layer", layerMenu);
+    QMenu* pasteLayerMenu = new QMenu("Paste Layer As...", layerMenu);
+    layerMenu->addAction(copyLayerAction);
+    layerMenu->addMenu(pasteLayerMenu);
+    QAction* pasteAsAliasAction = new QAction("Instance", pasteLayerMenu);
+    QAction* pasteAsDuplicateAction = new QAction("Duplicate", pasteLayerMenu);
+    pasteLayerMenu->addAction(pasteAsAliasAction);
+    pasteLayerMenu->addAction(pasteAsDuplicateAction);
+    connect(copyLayerAction, &QAction::triggered, this, &MainWindow::onLayerCopy);
+    connect(pasteAsAliasAction, &QAction::triggered, this, &MainWindow::onLayerPasteAsInstance);
+    connect(pasteAsDuplicateAction, &QAction::triggered, this, &MainWindow::onLayerPasteAsDuplicate);
+
+    // Rename and Delete
+    QAction* renameLayerAction = new QAction("Rename Layer...", layerMenu);
+    QAction* deleteLayerAction = new QAction("Delete Layer", layerMenu);
+    layerMenu->addAction(renameLayerAction);
+    layerMenu->addAction(deleteLayerAction);
+    connect(renameLayerAction, &QAction::triggered, this, &MainWindow::onLayerRename);
+    connect(deleteLayerAction, &QAction::triggered, this, &MainWindow::onLayerDelete);
+
+    // Layer Properties
+    QAction* layerPropertiesAction = new QAction("Layer Properties...", layerMenu);
+    layerMenu->addAction(layerPropertiesAction);
+    connect(layerPropertiesAction, &QAction::triggered, this, &MainWindow::onLayerProperties);
+
+    // Group and Ungroup
+    QAction* groupLayersAction = new QAction("Group Layers", layerMenu);
+    QAction* ungroupLayersAction = new QAction("Ungroup Layers", layerMenu);
+    layerMenu->addAction(groupLayersAction);
+    layerMenu->addAction(ungroupLayersAction);
+    connect(groupLayersAction, &QAction::triggered, this, &MainWindow::onGroupLayers);
+    connect(ungroupLayersAction, &QAction::triggered, this, &MainWindow::onUngroupLayers);
+
+    connect(ui->layerListWidget->model(), &QAbstractItemModel::rowsMoved, this, &MainWindow::onLayerReordered);
+    connect(ui->toolButton_layerDup, &QToolButton::clicked, this, &MainWindow::onLayerDuplicate);
+    //connect(paint, &PaintArea::layerModified, this, &MainWindow::onPaintAreaLayerModified);
+    //connect(paint, &PaintArea::keyFramePositionChanged, this, &MainWindow::onKeyFramePositionChanged);
+
+    //
+    // --- Existing camera actions
+    //
     QMenu *cameraMenu = storyboardMenu->addMenu(tr("Camera"));
     newCameraAct = cameraMenu->addAction(tr("New Camera"));
     renameCameraAct = cameraMenu->addAction(tr("Rename Camera "));
@@ -1467,6 +1661,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Connect panel actions
     connect(newPanelAct, &QAction::triggered, this, &MainWindow::onNewPanel);
+    connect(insertPanelAct, &QAction::triggered, this, &MainWindow::onInsertPanel);
     connect(editPanelAct, &QAction::triggered, this, &MainWindow::onEditPanel);
     connect(renamePanelAct, &QAction::triggered, this, &MainWindow::onRenamePanel);
     connect(duplicatePanelAct, &QAction::triggered, this, &MainWindow::onDuplicatePanel);
@@ -1516,6 +1711,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     QObject::connect(ui->actionOpen, SIGNAL(triggered()), this, SLOT(loadProject()));
     QObject::connect(ui->actionNew, SIGNAL(triggered()), this, SLOT(newProject()));
+    QObject::connect(ui->actionEdit_Project, SIGNAL(triggered()), this, SLOT(editProject()));
     QObject::connect(ui->actionSave, SIGNAL(triggered()), this, SLOT(saveProject()));
     QObject::connect(ui->actionAuto_Save, SIGNAL(triggered()), this, SLOT(toggleProject()));
     QObject::connect(ui->actionPost_issue, SIGNAL(triggered()), this, SLOT(postIssue()));
@@ -1535,33 +1731,9 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->actionExport_EDL, &QAction::triggered, this, &MainWindow::exportEDL);
 
 
-/*
-    ShotPanelWidget *shotPanel = new ShotPanelWidget;
-    ui->splitter->insertWidget(0, shotPanel);
-    shotPanel->show();
-*/
+    connect(ui->actionColor_Palette, &QAction::triggered, this, &MainWindow::colorPalette);
 
-    // Create and configure shotPanel inside a scroll area
-    shotPanel = new ShotPanelWidget;
-    shotPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-
-    QScrollArea *scrollArea = new QScrollArea;
-    scrollArea->setWidget(shotPanel);
-    scrollArea->setWidgetResizable(true);
-    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-
-    // Create PerfectScript widget
-    perfectScript = new PerfectScriptWidget(this);
-
-    // Create tab widget and add both panels as tabs
-    QTabWidget *tabWidget = new QTabWidget;
-    tabWidget->addTab(scrollArea, tr("Shots"));
-    tabWidget->addTab(perfectScript, tr("Script"));
-
-    // Insert the tab widget into the splitter at position 0
-    ui->splitter->insertWidget(0, tabWidget);
-    /***/
+    setupDockPanels();
 
     paint = new MainWindowPaint;
     ui->splitter->insertWidget(1, paint);
@@ -1614,7 +1786,7 @@ MainWindow::MainWindow(QWidget *parent)
     newItem->setIcon(1, QIcon("2018-09-15 (4).png"));
     //newItem->setSizeHint(1, QSize(256, 144));
 
-    projectJson["fps"] = 25.0;
+    ProjectContext::instance().projectJson()["fps"] = 25.0;
 
     //shotTree->addTopLeveItem(newItem);
 
@@ -1817,6 +1989,9 @@ MainWindow::MainWindow(QWidget *parent)
     connect(strokeDock, &StrokeAttributeDockWidget::strokePropertiesChanged,
             paint->getPaintArea(), &PaintArea::setStrokeProperties);
 
+    connect(strokeDock, &StrokeAttributeDockWidget::strokePropertiesChanged,
+            paintCanvas, &PaintCanvas::setStrokeProperties);
+
     strokeDock->setStyleSheet("QLabel { font-size: 10px; } QSlider, QComboBox, QSpinBox { margin-bottom: 4px; }");
 
     strokeDock->setStyleSheet(R"(
@@ -1868,27 +2043,12 @@ QComboBox, QSpinBox {
 
     this->setDockNestingEnabled(true);
 
-
-    //this->tabifyDockWidget(ui->dockCameras, strokeDock);
-
     ui->dockCameras->setVisible(false);
 
     this->splitDockWidget(ui->dockLayers, strokeDock, Qt::Horizontal);
 
     ui->dockCameras->setMaximumWidth(350);
     strokeDock->setMaximumWidth(350);
-
-    /******************************/
-    QDockWidget *dock = new QDockWidget("Color Palette", this);
-            ColorPaletteWidget *paletteWidget = new ColorPaletteWidget();
-            dock->setWidget(paletteWidget);
-            addDockWidget(Qt::RightDockWidgetArea, dock);
-
-            connect(paletteWidget, &ColorPaletteWidget::colorPicked, this, [](const QColor &color){
-                qDebug() << "Selected color:" << color;
-            });
-
-    /******************************/
 
     // Load settings
 
@@ -1911,6 +2071,13 @@ QComboBox, QSpinBox {
 
     setTabletTracking(true);
 
+    paint->getPaintArea()->setOutputResolution(
+                ProjectContext::instance().projectJson()["resolution"].toArray()[0].toInt(),
+                ProjectContext::instance().projectJson()["resolution"].toArray()[1].toInt());
+
+    paint->getPaintArea()->setCanvasSize(
+                ProjectContext::instance().projectJson()["canvas"].toArray()[0].toInt(),
+                ProjectContext::instance().projectJson()["canvas"].toArray()[1].toInt());
     return;
     //
     QList <int> list;
@@ -1921,6 +2088,66 @@ QComboBox, QSpinBox {
     ui->splitter->setSizes(list);
 }
 
+void MainWindow::setupDockPanels()
+{
+    // Create and configure shotPanel inside a scroll area
+    shotPanel = new ShotPanelWidget;
+    shotPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+
+    QScrollArea *scrollArea = new QScrollArea;
+    scrollArea->setWidget(shotPanel);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
+
+    // 1. Ensure existing dockShots is set up
+    ui->dockShots->setFeatures(QDockWidget::DockWidgetMovable |
+                               QDockWidget::DockWidgetFloatable |
+                               QDockWidget::DockWidgetClosable);
+    ui->dockShots->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    addDockWidget(Qt::LeftDockWidgetArea, ui->dockShots);  // Dock to left if not already
+
+    // 2. Create new dock for Shots (scrollArea)
+    QDockWidget *dockShotsNew = new QDockWidget(tr("Shots Panel"), this);
+    dockShotsNew->setObjectName("dockShotsNew");
+    dockShotsNew->setFeatures(QDockWidget::DockWidgetMovable |
+                              QDockWidget::DockWidgetFloatable |
+                              QDockWidget::DockWidgetClosable);
+    dockShotsNew->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    dockShotsNew->setWidget(scrollArea);  // Assuming scrollArea is your shots/timeline widget
+
+    // 3. Create new dock for Script (perfectScript)
+    perfectScript = new PerfectScriptWidget(this);
+    QDockWidget *dockScript = new QDockWidget(tr("Script"), this);
+    dockScript->setObjectName("dockScript");
+    dockScript->setFeatures(QDockWidget::DockWidgetMovable |
+                             QDockWidget::DockWidgetFloatable |
+                             QDockWidget::DockWidgetClosable);
+    dockScript->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    dockScript->setWidget(perfectScript);
+
+    // 4. Dock both new docks to left and tabify them with existing dockShots
+    addDockWidget(Qt::LeftDockWidgetArea, dockShotsNew);
+    addDockWidget(Qt::LeftDockWidgetArea, dockScript);
+
+    // Tabify: Stack as tabs in the same area (order: dockShots on top, then Shots, then Script)
+    tabifyDockWidget(ui->dockShots, dockShotsNew);
+    tabifyDockWidget(dockShotsNew, dockScript);  // Chains them
+
+    // 5. Raise the first tab (dockShots) as default
+    ui->dockShots->raise();
+
+    // 6. Optional: Set initial sizes (adjust as needed)
+    ui->dockShots->setMinimumWidth(300);
+    dockShotsNew->setMinimumWidth(300);
+    dockScript->setMinimumWidth(300);
+
+    ui->dockShots->setWindowTitle("Shot List");
+
+    // Remove old splitter insertion if any
+    // (No longer needed since docks handle layout)
+}
 
 void MainWindow::setWhiteTheme()
 {
@@ -2243,7 +2470,7 @@ void MainWindow::importScript()
     GameScript* dictionary = NULL;
     GameScript* dictionaryCustom = NULL;
 
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
 
     scriptBreakdown = new ScriptBreakdown(fileName.toStdString().c_str(), fps, dictionary, dictionaryCustom, llamaClient, logger);
 
@@ -2345,7 +2572,7 @@ void MainWindow::updateShots(){
 
     ui->shotsTreeWidget->clear();
 
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
 
     const auto& shots = scriptBreakdown->getShots();
     for (const auto& shot : shots) {
@@ -2361,7 +2588,7 @@ void MainWindow::updateScenes(){
 
     ui->shotsTreeWidget->clear();
 
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
 
     const auto& scenes = scriptBreakdown->getScenes();
     for (const auto& scene : scenes) {
@@ -2383,7 +2610,7 @@ void MainWindow::updateScenes(){
 
 // In MainWindow.cpp
 ShotSegment* MainWindow::createShotSegment(GameFusion::Shot& shot, GameFusion::Scene& scene, CursorItem* sceneMarker) {
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal mspf = 1000.0f / fps;
 
     // Calculate shot timing
@@ -2392,6 +2619,7 @@ ShotSegment* MainWindow::createShotSegment(GameFusion::Shot& shot, GameFusion::S
 
     // Create ShotSegment
     ShotSegment* segment = new ShotSegment(timeLineView->scene(), shotTimeStart, shotDuration);
+
     segment->setUuid(shot.uuid.c_str());
     if (sceneMarker) {
         segment->setSceneMarker(sceneMarker);
@@ -2473,7 +2701,7 @@ void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices sho
 
     bool createSceneMarker = false;
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal mspf = 1000.0f / fps;
 
     // TODO if scene does not exist then we need to create it - not sure about this
@@ -2514,8 +2742,12 @@ void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices sho
         // Create and insert ShotSegment
         ShotSegment* shotSegment = createShotSegment(insertedShot, *scene, sceneMarker);
         TrackItem* track = timeLineView->getTrack(0);
-        int segmentIndex = track->insertSegmentAtIndex(shotIndices.segmentIndex, shotSegment);
+       // int segmentIndex = track->insertSegmentAtIndex(shotIndices.segmentIndex, shotSegment);
 
+        int segmentIndex = shotIndices.segmentIndex;
+        track->addSegment(shotSegment);
+        track->updateSegmentPositions();
+        track->update();
 
 
         // Shift camera keyframes for subsequent shots
@@ -2571,7 +2803,7 @@ void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices sho
     return;
 }
 
-ShotIndices MainWindow::deleteShotSegment(ShotContext &shotContext, double currentTime) {
+ShotIndices MainWindow::deleteShotSegment(ShotContext &shotContext, double currentTime, bool updateTime) {
     if(!shotContext.isValid()){
         GameFusion::Log().warning() << "Invalid ShotContext provided";
         return {-1, -1};
@@ -2605,7 +2837,7 @@ ShotIndices MainWindow::deleteShotSegment(ShotContext &shotContext, double curre
     }
 
     TrackItem* track = timeLineView->getTrack(0);
-    int segmentIndex = track->deleteSegment(toDelete.uuid.c_str());
+    int segmentIndex = track->deleteSegment(toDelete.uuid.c_str(), updateTime);
 
     // Shift camera keyframes for subsequent shots
     for (auto& scene : scriptBreakdown->getScenes()) {
@@ -2642,7 +2874,7 @@ ShotIndices MainWindow::deleteShotSegment(ShotContext &shotContext, double curre
 }
 
 void MainWindow::addLayerKeyFrames(TrackItem* track, long panelStartTime, const GameFusion::Panel& panel) {
-    qreal mspf = 1000.0f / projectJson["fps"].toDouble(24.0);
+    qreal mspf = 1000.0f / ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     QString panelUuid = QString::fromStdString(panel.uuid);
     QString panelName = QString::fromStdString(panel.name);
     for (const auto& layer : panel.layers) {
@@ -2723,7 +2955,7 @@ void MainWindow::addLayerKeyFrames(TrackItem* track, long panelStartTime, const 
 
 void MainWindow::addTimelineKeyFrames(const GameFusion::Shot& shot) {
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal mspf = 1000.0f / fps;
 
     for (const auto& camera : shot.cameraAnimation.frames) {
@@ -2751,7 +2983,7 @@ QSet<double> MainWindow::getAllKeyframeGlobalTimes() const {
     if(!scriptBreakdown)
         return times;
 
-    double fps = projectJson["fps"].toDouble(24.0);
+    double fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     double mspf = 1000.0 / fps;
     for (const auto& scene : scriptBreakdown->getScenes()) {
         for (const auto& shot : scene.shots) {
@@ -2816,7 +3048,7 @@ void MainWindow::updateKeyframeDisplay() {
     track->setSeletedLayerName(selectedLayerName);
     timeLineView->updateHeaders();
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal mspf = 1000.0 / fps;
 
     AttributeTrackItem *motion = track->getAttributeTrack("motion");
@@ -2961,7 +3193,7 @@ void MainWindow::updateTimeline(){
     //gfxscene->clear();
 
     qreal fps = 25;
-    fps = projectJson["fps"].toDouble();
+    fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     qreal mspf = 1000.f/fps;
     //long startTimeFrame = episodeDuration.frameCount;
     long startTime = 0;
@@ -3211,12 +3443,19 @@ void MainWindow::loadProject(QString projectDir){
 
     // Validate required fields
     //QJsonObject projectObj = projectDoc.object();
-    projectJson = projectDoc.object();
+    ProjectContext::instance().projectJson() = projectDoc.object();
     QStringList requiredFields = { "projectName", "fps" };
     QStringList missingFields;
 
+    ProjectContext::instance().projectJson()["projectPath"] = projectDir;
+    /*
+    ProjectContext::instance().projectJson()["resolution"] = QJsonArray{1920, 1080};
+    ProjectContext::instance().projectJson()["canvas_margin"] = QString("20");
+    ProjectContext::instance().projectJson()["canvas_percent"] = 20;
+    ProjectContext::instance().projectJson()["canvas"] = QJsonArray{2304, 1296}; // For 20% margin: 1920 + 384, etc.
+*/
     for (const QString &field : requiredFields) {
-        if (!projectJson.contains(field)) {
+        if (!ProjectContext::instance().projectJson().contains(field)) {
             missingFields << field;
         }
     }
@@ -3231,15 +3470,23 @@ void MainWindow::loadProject(QString projectDir){
     }
 
     // (Optional) Store project metadata
-    ProjectContext::instance().setCurrentProjectName( projectJson["projectName"].toString() );
+    ProjectContext::instance().setCurrentProjectName( ProjectContext::instance().projectJson()["projectName"].toString() );
     ProjectContext::instance().setCurrentProjectPath( projectDir );
 
     // Set project path in logger
     logger->setProjectPath(projectDir);
 
     paint->getPaintArea()->setProjectPath(projectDir);
+    int newCanvasW = ProjectContext::instance().projectJson()["canvas"].toArray()[0].toInt();
+    int newCanvasH = ProjectContext::instance().projectJson()["canvas"].toArray()[1].toInt();
+    int newResW = ProjectContext::instance().projectJson()["resolution"].toArray()[0].toInt();
+    int newResH = ProjectContext::instance().projectJson()["resolution"].toArray()[1].toInt();
+    paint->getPaintArea()->setCanvasSize(newCanvasW, newCanvasH);
+    paint->getPaintArea()->setOutputResolution(newResW, newResH);
+    paint->getPaintArea()->update();
 
-    float fps = projectJson["fps"].toDouble();
+
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     //scriptBreakdown = new ScriptBreakdown("", fps);
     loadScript();
 
@@ -3343,7 +3590,7 @@ void MainWindow::loadProject(QString projectDir){
         qint64 earliestTime = -1;
         QTreeWidgetItem* targetItem = nullptr;
         QTreeWidgetItemIterator it(ui->shotsTreeWidget);
-        float fps = projectJson["fps"].toDouble();
+        float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
         float mspf = fps > 0 ? 1000.0 / fps : 1.0;
 
         while (*it) {
@@ -3376,13 +3623,13 @@ void MainWindow::loadScript() {
     if(scriptBreakdown)
         delete scriptBreakdown;
 
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     GameScript* dictionary = NULL;
     GameScript* dictionaryCustom = NULL;
 
     QString fileName;
-    if(projectJson.contains("script")) {
-        fileName = ProjectContext::instance().currentProjectPath() + "/" + projectJson["script"].toString();
+    if(ProjectContext::instance().projectJson().contains("script")) {
+        fileName = ProjectContext::instance().currentProjectPath() + "/" + ProjectContext::instance().projectJson()["script"].toString();
         scriptBreakdown = new ScriptBreakdown(fileName.toStdString().c_str(), fps, dictionary, dictionaryCustom, llamaClient, logger);
 
         if(!scriptBreakdown->load()) {
@@ -3639,7 +3886,7 @@ CameraContext MainWindow::findCameraForTime(double time) {
         return a.frameOffset < b.frameOffset;
     });
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal mspf = 1000.0f / fps;
 
     GameFusion::CameraFrame *currentCamera = nullptr;
@@ -3764,7 +4011,7 @@ void MainWindow::onTreeItemClicked(QTreeWidgetItem* item, int column) {
     timeLineView->setTimeCursor((long)(shot->startTime + panel->startTime));
 
     // Update the panel UI
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     shotPanel->setPanelInfo(scene, shot, panel, fps);
 
     // TODO set panel info for
@@ -4406,6 +4653,7 @@ void MainWindow::newProject()
     // Write project metadata
     //QJsonObject projectJson;
 
+    QJsonObject &projectJson = ProjectContext::instance().projectJson();
     projectJson = QJsonObject();
 
     projectJson["aspectRatio"] = dialog.aspectRatio();
@@ -4422,6 +4670,28 @@ void MainWindow::newProject()
     projectJson["saveFormat"] = "compact";
     projectJson["scenesPath"] = "scenes";
     projectJson["projectId"] = name;
+    projectJson["subtitle"] = dialog.subtitle();
+    projectJson["episode_format"] = dialog.episodeFormat();
+    projectJson["copyright"] = dialog.copyright();
+    projectJson["start_tc"] = dialog.startTC();  // Use in timeline (e.g., offset TC display)
+
+    QString canvasMargin = dialog.canvasMargin();
+
+    int marginPct = 0;
+    if(canvasMargin == "Custom")
+        marginPct = dialog.canvasMarginCustom().toInt();
+    else
+        marginPct = dialog.canvasMargin().toInt();  // 0 if empty/invalid
+
+    int marginW = resWidth * marginPct / 100;  // Total extra (split left/right)
+    int marginH = resHeight * marginPct / 100;
+    int canvasWidth = resWidth + marginW;
+    int canvasHeight = resHeight + marginH;
+
+    projectJson["canvas_margin"] = canvasMargin;
+    projectJson["canvas_percent"] = marginPct;  // For reference/editing
+    projectJson["canvas"] = QJsonArray{canvasWidth, canvasHeight};
+
 
     QFile metadataFile(fullPath + "/project.json");
     if (!metadataFile.open(QIODevice::WriteOnly)) {
@@ -4437,6 +4707,87 @@ void MainWindow::newProject()
 
     // Optional: load project into workspace
     loadProject(fullPath);
+}
+
+void MainWindow::editProject(){
+    QJsonObject &projectJson = ProjectContext::instance().projectJson();
+
+    if (projectJson.isEmpty()) {
+        QMessageBox::warning(this, tr("Error"), tr("No project is currently loaded."));
+        return;
+    }
+
+    NewProjectDialog dialog(this);
+    dialog.setEditMode(true);  // Set to edit mode
+    dialog.setProjectData(projectJson);  // Populate with current projectJson
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;  // User canceled
+    }
+
+    // Update projectJson with new values
+    QString name = dialog.projectName();
+    QString location = dialog.location();
+    QString fullPath = location + "/" + name;
+
+    // Parse resolution
+    QString resString = dialog.resolution();
+    QStringList resParts = resString.split('x');
+    int resWidth = resParts.value(0).toInt();
+    int resHeight = resParts.value(1).toInt();
+
+    // Parse canvas margin and compute canvas size
+    QString canvasMargin = dialog.canvasMargin();
+
+    int marginPct = dialog.canvasMargin().toInt();
+    if(canvasMargin == "Custom")
+        marginPct = dialog.canvasMarginCustom().toInt();
+
+    int marginW = resWidth * marginPct / 100;
+    int marginH = resHeight * marginPct / 100;
+    int canvasWidth = resWidth + marginW;
+    int canvasHeight = resHeight + marginH;
+
+    // Update projectJson
+    projectJson["projectName"] = name;
+    projectJson["aspectRatio"] = dialog.aspectRatio();
+    projectJson["director"] = dialog.director();
+    projectJson["estimatedDuration"] = dialog.estimatedDuration();
+    projectJson["fps"] = dialog.fps();
+    projectJson["notes"] = dialog.notes();
+    projectJson["projectCode"] = dialog.projectCode();
+    projectJson["resolution"] = QJsonArray{resWidth, resHeight};
+    projectJson["safeFrame"] = dialog.safeFrame();
+    projectJson["canvas"] = QJsonArray{canvasWidth, canvasHeight};
+    projectJson["canvas_percent"] = marginPct;
+    projectJson["subtitle"] = dialog.subtitle();
+    projectJson["episode_format"] = dialog.episodeFormat();
+    projectJson["copyright"] = dialog.copyright();
+    projectJson["start_tc"] = dialog.startTC();
+
+    // Save to project.json
+    QFile metadataFile(ProjectContext::instance().currentProjectPath() + "/project.json");
+    if (!metadataFile.open(QIODevice::WriteOnly)) {
+        QMessageBox::warning(this, tr("Error"), tr("Failed to save project metadata."));
+        return;
+    }
+
+    QJsonDocument doc(projectJson);
+    metadataFile.write(doc.toJson());
+    metadataFile.close();
+
+    // Update PaintArea if canvas/resolution changed
+    if (paint->getPaintArea()) {
+        int newCanvasW = projectJson["canvas"].toArray()[0].toInt();
+        int newCanvasH = projectJson["canvas"].toArray()[1].toInt();
+        int newResW = projectJson["resolution"].toArray()[0].toInt();
+        int newResH = projectJson["resolution"].toArray()[1].toInt();
+        paint->getPaintArea()->setCanvasSize(newCanvasW, newCanvasH);
+        paint->getPaintArea()->setOutputResolution(newResW, newResH);
+        paint->getPaintArea()->update();
+    }
+
+    QMessageBox::information(this, tr("Success"), tr("Project updated successfully."));
 }
 
 void MainWindow::onTimeCursorMoved(double time)
@@ -4472,6 +4823,7 @@ void MainWindow::onTimeCursorMoved(double time)
     deleteShotAct->setEnabled(false);
 
     newPanelAct->setEnabled(false);
+    insertPanelAct->setEnabled(false);
     editPanelAct->setEnabled(false);
     renamePanelAct->setEnabled(false);
     duplicatePanelAct->setEnabled(false);
@@ -4492,7 +4844,7 @@ void MainWindow::onTimeCursorMoved(double time)
 
     long timeCounter = 0;
 
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     if(fps <= 0)
     {
         Log().info() << "Invalid project fps " << fps << "\n";
@@ -4548,6 +4900,7 @@ void MainWindow::onTimeCursorMoved(double time)
     deleteShotAct->setEnabled(theShot);
 
     newPanelAct->setEnabled(theShot);
+    insertPanelAct->setEnabled(theShot);
     editPanelAct->setEnabled(theShot);
     renamePanelAct->setEnabled(theShot);
     duplicatePanelAct->setEnabled(theShot);
@@ -5121,7 +5474,7 @@ void MainWindow::onNewCamera() {
     if(!panelContext.isValid())
         return;
 
-    qreal fps = projectJson["fps"].toDouble();
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     qreal mspf = 1000.0f / fps;
     GameFusion::CameraFrame newCamera;
 
@@ -5152,7 +5505,7 @@ void MainWindow::deleteCamera(QString uuid, double cursorTime)
     timeLineView->removeCameraKeyFrame(uuid);
     scriptBreakdown->deleteCameraFrame(uuidStr);
 
-    qreal fps = projectJson["fps"].toDouble();
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
     paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation);
     cameraSidePanel->setCameraList(panelContext.panel->uuid.c_str(), panelContext.shot->cameraAnimation.frames);
@@ -5171,7 +5524,7 @@ void MainWindow::newCamera(const GameFusion::CameraFrame newCamera, double curre
     if (!cameraTrack)
         return;
 
-    qreal fps = projectJson["fps"].toDouble();
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     qreal mspf = 1000./fps;
     cameraTrack->addKeyFrame(newCamera.uuid.c_str(), panelContext.shot->startTime + newCamera.frameOffset*mspf, panelContext.panel->uuid.c_str());
     timeLineView->update();
@@ -5259,7 +5612,7 @@ void MainWindow::renameCamera(const QString& uuid, const QString& newName, doubl
     PanelContext panelContext = findPanelByUuid(cameraContext.camera->panelUuid);
     if (panelContext.isValid()) {
         long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
-        qreal fps = projectJson["fps"].toDouble();
+        qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble();
         paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation);
     }
 
@@ -5334,7 +5687,7 @@ void MainWindow::onCameraFrameDeleted(const QString& uuid) {
 }
 
 void MainWindow::updateWindowTitle(bool isModified) {
-    QString projectName = projectJson["projectName"].toString("Untitled Project");
+    QString projectName = ProjectContext::instance().projectJson()["projectName"].toString("Untitled Project");
     QString title = projectName;
 
     if (isModified) {
@@ -6118,7 +6471,7 @@ void MainWindow::exportMovie() {
 
     // Pre-scan to compute total duration
     qint64 totalDurationMs = 0;
-    float fps = projectJson["fps"].toDouble(25.0);  // Default to 25 if not set
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble(25.0);  // Default to 25 if not set
     const auto& scenes = scriptBreakdown->getScenes();
     for (const auto& scene : scenes) {
         if(scene.markedForDeletion)
@@ -6290,7 +6643,7 @@ void MainWindow::timelineCameraUpdate(const QString& uuid, long frameOffset, con
             if(newPanelUuid.toStdString() == currentPanel->uuid){
                 //--- A CAMERA WAS ADDED TO CURRENT PANEL
                 long panelStartTime = cameraCtx.shot->startTime + currentPanel->startTime;
-                float fps = projectJson["fps"].toDouble();
+                float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
                 paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, cameraCtx.shot->cameraAnimation);
                 cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), cameraCtx.shot->cameraAnimation.frames);
             }
@@ -6300,7 +6653,7 @@ void MainWindow::timelineCameraUpdate(const QString& uuid, long frameOffset, con
                 PanelContext panelContext = findPanelByUuid(currentPanel->uuid);
                 if(panelContext.isValid()){
                     long panelStartTime = panelContext.shot->startTime + currentPanel->startTime;
-                    float fps = projectJson["fps"].toDouble();
+                    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
                     paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, panelContext.shot->cameraAnimation);
                     cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), panelContext.shot->cameraAnimation.frames);
                 }
@@ -6442,7 +6795,7 @@ void MainWindow::exportEDL() {
     out << "TITLE: " << projectName << "\n";
     out << "FCM: NON-DROP FRAME\n\n";
 
-    float fps = projectJson["fps"].toDouble(25.0);
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble(25.0);
     const auto& scenes = scriptBreakdown->getScenes();
 
     auto msToTimecode = [fps](qint64 ms) -> QString {
@@ -6579,7 +6932,7 @@ void MainWindow::onNewScene()
     }
 
     double currentTime = timeLineView->getCursorTime();
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     NewSceneDialog dialog(fps, this);
     if (dialog.exec() != QDialog::Accepted) {
         return;
@@ -6956,7 +7309,7 @@ void MainWindow::onNewShot()
 
     // Show dialog to get user input
     QString shotName = "SHOT_" + QString::number(currentCtx.scene->shots.size() * 10);
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     NewShotDialog dialog(fps, shotName, this);
     if (dialog.exec() != QDialog::Accepted) {
         return; // User canceled
@@ -7180,7 +7533,7 @@ void MainWindow::onEditShot()
         return;
     }
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     NewShotDialog dialog(fps, NewShotDialog::Mode::Edit,
                          QString::fromStdString(currentCtx.shot->name),
                          currentCtx.shot->endTime - currentCtx.shot->startTime,
@@ -7235,12 +7588,12 @@ void MainWindow::onEditShot()
     undoStack->push(new EditShotCommand(this, oldShot, newShot, currentTime));
 }
 
-void MainWindow::editShotSegment(const GameFusion::Shot &editShot, double cursorTime){
+void MainWindow::editShotSegment(const GameFusion::Shot &editShot, double cursorTime, bool updateTime){
     ShotContext shotContext = findShotByUuid(editShot.uuid);
     if(!shotContext.isValid())
         return;
 
-    ShotIndices shotIndecies = deleteShotSegment(shotContext, cursorTime);
+    ShotIndices shotIndecies = deleteShotSegment(shotContext, cursorTime, updateTime);
     CursorItem *sceneMarker = nullptr;
     insertShotSegment(editShot, shotIndecies, *shotContext.scene, cursorTime, sceneMarker);
 }
@@ -7281,7 +7634,7 @@ void MainWindow::onNewPanel()
             return;
         }
 
-        qreal fps = projectJson["fps"].toDouble(24.0);
+        qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
         NewPanelDialog dialog(fps, NewPanelDialog::Mode::Create, "", 1000.0, this);
         if (dialog.exec() != QDialog::Accepted) {
             return;
@@ -7350,6 +7703,82 @@ void MainWindow::onNewPanel()
         undoStack->push(new PanelCommand(this, originalShot, updatedShot, currentTime, "New Panel"));
 }
 
+void MainWindow::onInsertPanel() {
+    if (!scriptBreakdown) {
+        GameFusion::Log().error() << "No ScriptBreakdown available";
+        QMessageBox::warning(this, "Error", "No ScriptBreakdown available.");
+        return;
+    }
+
+    double currentTime = timeLineView->getCursorTime();
+    PanelContext ctx = findPanelForTime(currentTime);
+    if (!ctx.isValid()) {
+        QMessageBox::warning(this, "Error", "No valid shot selected. Please select a time in the timeline.");
+        return;
+    }
+
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
+    GameFusion::Panel newPanel;
+    newPanel.name = "Panel " + std::to_string(ctx.shot->panels.size() + 1);
+    newPanel.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    newPanel.durationTime = 1000.0; // Default 1 second
+    GameFusion::Layer bg;
+    bg.name = "BG";
+    bg.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    GameFusion::Layer l1;
+    l1.name = "Layer 1";
+    l1.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    newPanel.layers.push_back(l1);
+    newPanel.layers.push_back(bg);
+
+    GameFusion::Shot originalShot = *ctx.shot;
+    GameFusion::Shot updatedShot = originalShot;
+    int panelIndex = findPanelIndex(ctx);
+
+    if (panelIndex >= 0) {
+        double relativeTime = currentTime - originalShot.startTime;
+        auto& panel = originalShot.panels[panelIndex];
+        double splitTime = relativeTime - panel.startTime;
+        if (splitTime > 0 && splitTime < panel.durationTime) {
+            // Split current panel
+            GameFusion::Panel firstHalf = panel;
+            firstHalf.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+            firstHalf.startTime = panel.startTime + splitTime;
+            firstHalf.durationTime = panel.durationTime - splitTime;
+
+            int newPaneDuration = panel.durationTime - splitTime;
+            panel.durationTime = splitTime;
+
+            newPanel.startTime = panel.startTime + splitTime;
+            newPanel.durationTime = newPaneDuration;
+            updatedShot.panels[panelIndex] = panel;
+            updatedShot.panels.insert(updatedShot.panels.begin() + panelIndex + 1, newPanel);
+
+
+            for (size_t i = panelIndex + 3; i < updatedShot.panels.size(); ++i) {
+                updatedShot.panels[i].startTime += newPanel.durationTime;
+            }
+        } else {
+            // Insert after current panel
+            newPanel.startTime = panel.startTime + panel.durationTime;
+            updatedShot.panels.insert(updatedShot.panels.begin() + panelIndex + 1, newPanel);
+            for (size_t i = panelIndex + 2; i < updatedShot.panels.size(); ++i) {
+                updatedShot.panels[i].startTime += newPanel.durationTime;
+            }
+        }
+    } else {
+        // Append to shot
+        newPanel.startTime = originalShot.panels.empty() ? 0.0 : originalShot.panels.back().startTime + originalShot.panels.back().durationTime;
+        updatedShot.panels.push_back(newPanel);
+    }
+
+    updatedShot.endTime = updatedShot.startTime + (updatedShot.panels.empty() ? 0.0 :
+        updatedShot.panels.back().startTime + updatedShot.panels.back().durationTime);
+    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * fps / 1000.0);
+
+    undoStack->push(new PanelCommand(this, originalShot, updatedShot, currentTime, "Insert Panel"));
+}
+
 void MainWindow::onEditPanel()
 {
     if (!scriptBreakdown) {
@@ -7371,7 +7800,7 @@ void MainWindow::onEditPanel()
         return;
     }
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     const auto& panel = ctx.shot->panels[panelIndex];
     NewPanelDialog dialog(fps, NewPanelDialog::Mode::Edit, QString::fromStdString(panel.name),
                          panel.durationTime, this);
@@ -7472,7 +7901,7 @@ void MainWindow::onDuplicatePanel()
     }
     updatedShot.endTime = updatedShot.startTime + (updatedShot.panels.empty() ? 0.0 :
         updatedShot.panels.back().startTime + updatedShot.panels.back().durationTime);
-    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * projectJson["fps"].toDouble(24.0) / 1000.0);
+    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * ProjectContext::instance().projectJson()["fps"].toDouble(24.0) / 1000.0);
 
     undoStack->push(new PanelCommand(this, originalShot, updatedShot, currentTime, "Duplicate Panel"));
 }
@@ -7537,7 +7966,7 @@ void MainWindow::onCutPanel()
     }
     updatedShot.endTime = updatedShot.startTime + (updatedShot.panels.empty() ? 0.0 :
         updatedShot.panels.back().startTime + updatedShot.panels.back().durationTime);
-    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * projectJson["fps"].toDouble(24.0) / 1000.0);
+    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * ProjectContext::instance().projectJson()["fps"].toDouble(24.0) / 1000.0);
 
     undoStack->push(new PanelCommand(this, originalShot, updatedShot, currentTime, "Cut Panel"));
     GameFusion::Log().info() << "Cut panel " << clipboardPanel.uuid.c_str();
@@ -7605,7 +8034,7 @@ void MainWindow::onPastePanel()
 
     updatedShot.endTime = updatedShot.startTime + (updatedShot.panels.empty() ? 0.0 :
         updatedShot.panels.back().startTime + updatedShot.panels.back().durationTime);
-    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * projectJson["fps"].toDouble(24.0) / 1000.0);
+    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * ProjectContext::instance().projectJson()["fps"].toDouble(24.0) / 1000.0);
 
     undoStack->push(new PanelCommand(this, originalShot, updatedShot, currentTime, "Paste Panel"));
     GameFusion::Log().info() << "Pasted panel " << pastePanel.uuid.c_str();
@@ -7678,7 +8107,7 @@ void MainWindow::onDeletePanel()
     }
     updatedShot.endTime = updatedShot.startTime + (updatedShot.panels.empty() ? 0.0 :
         updatedShot.panels.back().startTime + updatedShot.panels.back().durationTime);
-    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * projectJson["fps"].toDouble(24.0) / 1000.0);
+    updatedShot.frameCount = qRound((updatedShot.endTime - updatedShot.startTime) * ProjectContext::instance().projectJson()["fps"].toDouble(24.0) / 1000.0);
 
     undoStack->push(new PanelCommand(this, originalShot, updatedShot, currentTime, "Delete Panel"));
     GameFusion::Log().info() << "Deleted panel at index " << panelIndex;
@@ -7718,7 +8147,7 @@ void MainWindow::onPastCamera(){
     if(!panelContext.isValid())
         return;
 
-    qreal fps = projectJson["fps"].toDouble();
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     qreal mspf = 1000.0f / fps;
     GameFusion::CameraFrame newCamera(clipboardCamera);
     newCamera.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
@@ -7934,7 +8363,7 @@ void MainWindow::onKeyframeAdded(const QString& attribute, double timeMs, const 
 
     qreal panelStartMs = panelCtx.shot->startTime + panelCtx.panel->startTime;
     qreal relativeMs = timeMs - panelStartMs;
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal keyTime = qRound((relativeMs / 1000.0) * fps);
 
     QVariantMap valueMap = value.toMap();
@@ -8039,7 +8468,7 @@ QVariantMap MainWindow::getKeyframeValueMap(const KeyframeContext& keyframeConte
     valueMap["layerName"] = QString::fromStdString(keyframeContext.layer->name);
     valueMap["sceneUuid"] = QString::fromStdString(keyframeContext.scene->uuid);
     valueMap["sceneName"] = QString::fromStdString(keyframeContext.scene->name);
-    valueMap["timeMs"] = keyframeContext.keyframe->time * (1000.0 / projectJson["fps"].toDouble(24.0)); // Convert frames to ms
+    valueMap["timeMs"] = keyframeContext.keyframe->time * (1000.0 / ProjectContext::instance().projectJson()["fps"].toDouble(24.0)); // Convert frames to ms
     valueMap["time"] = keyframeContext.keyframe->time; // Convert frames to ms
     valueMap["uuid"] = QString::fromStdString(keyframeContext.keyframe->uuid);
 
@@ -8078,7 +8507,7 @@ void MainWindow::onKeyframeUpdated(const QString& kfUuid, double globalMs, const
     paint->getPaintArea()->updateLayer(*keyframeContext.layer);
 
     float localMs = globalMs - (keyframeContext.shot->startTime + keyframeContext.panel->startTime);
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal mspf = 1000.0 / fps;
     float localFr = static_cast<qreal>(localMs / mspf);
     undoStack->push(new KeyframeUpdateCommand(kfUuid, keyframeContext.keyframe->time, oldValueMap, localFr, newValueMap, layerUuid, panelUuid, newValueMap["shotUuid"].toString(), this));
@@ -8108,7 +8537,7 @@ void MainWindow::onGroupedKeyframeUpdated(const QString& uuid1, double globalMs1
     }
     QVariantMap oldValueMap2 = getKeyframeValueMap(keyframeCtx2);
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal mspf = 1000.0 / fps;
 
     float localMs1 = globalMs1 - (keyframeCtx1.shot->startTime + keyframeCtx1.panel->startTime);
@@ -8131,7 +8560,7 @@ void MainWindow::updateKeyframe(const QString& kfUuid, double localFr, const QVa
     if(!keyframeCtx.isValid())
         return;
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     qreal mspf = 1000.0 / fps;
 
     if (keyframeCtx.isMotion) {
@@ -8329,7 +8758,7 @@ void MainWindow::applyLayerOrder(const std::vector<QString>& orderUuids, const Q
     updateWindowTitle(true);
 
     long panelStartTime = panelCtx.shot->startTime + panelCtx.panel->startTime;
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
 
     paint->getPaintArea()->setPanel(*panelCtx.panel, panelStartTime, fps, panelCtx.shot->cameraAnimation);
     paint->getPaintArea()->invalidateAllLayers();
@@ -8351,7 +8780,7 @@ void MainWindow::addLayer(const GameFusion::Layer& layer, const QString& panelUu
     updateWindowTitle(true);
 
     long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
 
     paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation);
 
@@ -8376,7 +8805,7 @@ void MainWindow::removeLayer(const QString& layerUuid, const QString& panelUuid)
     updateWindowTitle(true);
 
     long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
-    float fps = projectJson["fps"].toDouble();
+    float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
 
     paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation);
 
@@ -8423,7 +8852,7 @@ void MainWindow::setLayerImage(const QString& layerUuid, const QString& panelUui
         }
 
         long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
-        float fps = projectJson["fps"].toDouble();
+        float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
         paint->getPaintArea()->setPanel(*panelContext.panel, panelStartTime, fps, panelContext.shot->cameraAnimation);
         populateLayerList(panelContext.panel);
     }
@@ -8587,7 +9016,7 @@ void MainWindow::setKeyFramePosition(const QString& layerUuid, const QString& pa
     TrackItem *track = timeLineView->getTrack(0);
     double panelStartTime = layerContext.panel->startTime;
 
-    qreal fps = projectJson["fps"].toDouble(24.0);
+    qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     float mspf = fps > 0 ? 1000./fps : 1;
     long timeMs = panelStartTime + kf.time * mspf;
     track->addKeyframeToAttribute("motion", timeMs, valueMap);
@@ -8615,4 +9044,299 @@ void MainWindow::setLayerPosition(const QString& layerUuid, const QString& panel
 void MainWindow::showEvent(QShowEvent *event) {
     QMainWindow::showEvent(event);
     emit windowShown();
+}
+
+
+void MainWindow::duplicateLayerThroughShot(const QString& layerUuid) {
+    if (!currentPanel) return;
+    PanelContext panelContext = findPanelByUuid(currentPanel->uuid);
+    if (!panelContext.isValid()) return;
+
+    LayerContext layerContext = findLayerByUuid(layerUuid.toStdString().c_str());
+    if (!layerContext.isValid()) return;
+
+    int originalIndex = -1;
+    for (size_t i = 0; i < layerContext.panel->layers.size(); ++i) {
+        if (layerContext.panel->layers[i].uuid == layerUuid.toStdString()) {
+            originalIndex = static_cast<int>(i);
+            break;
+        }
+    }
+    if (originalIndex == -1) return;
+
+    for (auto& panel : panelContext.shot->panels) {
+        if (panel.uuid == currentPanel->uuid) continue;
+        QString duplicatedLayerUuid = QUuid::createUuid().toString();
+        undoStack->push(new LayerDuplicateCommand(layerUuid, duplicatedLayerUuid,
+                                                 QString::fromStdString(panel.uuid), this));
+    }
+}
+
+void MainWindow::instanceLayerToPanels(const QString& layerUuid, const std::vector<QString>& panelUuids) {
+    LayerContext layerContext = findLayerByUuid(layerUuid.toStdString().c_str());
+    if (!layerContext.isValid()) return;
+
+    for (const auto& panelUuid : panelUuids) {
+        QString aliasLayerUuid = QUuid::createUuid().toString();
+        undoStack->push(new InstanceLayerCommand(layerUuid, aliasLayerUuid, panelUuid, this));
+    }
+}
+
+void MainWindow::renameLayer(const QString& layerUuid, const QString& newName, bool propagateToAliases) {
+    LayerContext layerContext = findLayerByUuid(layerUuid.toStdString().c_str());
+    if (!layerContext.isValid()) return;
+
+    QString oldName = QString::fromStdString(layerContext.layer->name);
+    layerContext.layer->name = newName.toStdString();
+    if (propagateToAliases) {
+        for (auto& shot : layerContext.scene->shots) {
+            for (auto& panel : shot.panels) {
+                for (auto& layer : panel.layers) {
+                    if (layer.aliasUuid == layerUuid.toStdString()) {
+                        layer.name = newName.toStdString();
+                    }
+                }
+            }
+        }
+    }
+    layerContext.scene->dirty = true;
+    updateWindowTitle(true);
+    populateLayerList(layerContext.panel);
+    paint->getPaintArea()->invalidateAllLayers();
+    paint->getPaintArea()->updateCompositeImage();
+}
+
+bool MainWindow::hasLayerInstances(const std::string& layerUuid) const {
+    for(auto &scene :scriptBreakdown->getScenes()) {
+        for(auto &shot : scene.shots) {
+            for(auto &panel : shot.panels) {
+                for(auto &layer : panel.layers) {
+                    if(layer.uuid == layerUuid)
+                        return true;
+                    for(auto &sublayer: layer.layers){
+                        if(sublayer.uuid == layerUuid)
+                            return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+void MainWindow::groupLayers(const std::vector<QString>& layerUuids, const QString& panelUuid) {
+    PanelContext panelContext = findPanelByUuid(panelUuid.toStdString());
+    if (!panelContext.isValid() || layerUuids.size() < 2) return;
+
+    GameFusion::Layer groupLayer;
+    groupLayer.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    groupLayer.name = "Group " + std::to_string(panelContext.panel->layers.size() + 1);
+
+    std::vector<GameFusion::Layer> groupedLayers;
+    for (const auto& uuid : layerUuids) {
+        LayerContext layerContext = findLayerByUuid(uuid.toStdString().c_str());
+        if (layerContext.isValid()) {
+            groupedLayers.push_back(*layerContext.layer);
+            removeLayer(uuid, panelUuid);
+        }
+    }
+    groupLayer.layers = groupedLayers;
+
+    addLayer(groupLayer, panelUuid);
+}
+
+void MainWindow::ungroupLayers(const QString& layerUuid, const QString& panelUuid) {
+    PanelContext panelContext = findPanelByUuid(panelUuid.toStdString());
+    if (!panelContext.isValid()) return;
+
+    LayerContext layerContext = findLayerByUuid(layerUuid.toStdString().c_str());
+    if (!layerContext.isValid() || !layerContext.layer->isGroup()) return;
+
+    int index = -1;
+    for (size_t i = 0; i < panelContext.panel->layers.size(); ++i) {
+        if (panelContext.panel->layers[i].uuid == layerUuid.toStdString()) {
+            index = static_cast<int>(i);
+            break;
+        }
+    }
+    if (index == -1) return;
+
+    for (const auto& subLayer : layerContext.layer->layers) {
+        addLayer(subLayer, panelUuid, index++);
+    }
+    removeLayer(layerUuid, panelUuid);
+}
+
+void MainWindow::onLayerDuplicateThroughShot() {
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    if (selectedLayers.isEmpty() || !currentPanel) return;
+
+    QString layerUuid = selectedLayers.first()->data(Qt::UserRole).toString();
+    duplicateLayerThroughShot(layerUuid);
+}
+
+void MainWindow::onLayerInstanceToSelectedPanels() {
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    if (selectedLayers.isEmpty() || !currentPanel) return;
+
+    QString layerUuid = selectedLayers.first()->data(Qt::UserRole).toString();
+    std::vector<QString> panelUuids; // TODO: Implement panel selection logic
+    instanceLayerToPanels(layerUuid, panelUuids);
+}
+
+void MainWindow::onLayerInstanceThroughShot() {
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    if (selectedLayers.isEmpty() || !currentPanel) return;
+
+    QString layerUuid = selectedLayers.first()->data(Qt::UserRole).toString();
+    PanelContext panelContext = findPanelByUuid(currentPanel->uuid);
+    if (!panelContext.isValid()) return;
+
+    std::vector<QString> panelUuids;
+    for (const auto& panel : panelContext.shot->panels) {
+        if (panel.uuid != currentPanel->uuid) {
+            panelUuids.push_back(QString::fromStdString(panel.uuid));
+        }
+    }
+    instanceLayerToPanels(layerUuid, panelUuids);
+}
+
+void MainWindow::onLayerCopy() {
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    if (selectedLayers.isEmpty() || !currentPanel) return;
+
+    QString layerUuid = selectedLayers.first()->data(Qt::UserRole).toString();
+    LayerContext layerContext = findLayerByUuid(layerUuid.toStdString().c_str());
+    if (!layerContext.isValid()) return;
+
+    clipboardLayer = *layerContext.layer;
+    hasClipboardLayer = true;
+}
+
+void MainWindow::onLayerPasteAsInstance() {
+    if (!hasClipboardLayer || !currentPanel) return;
+
+    GameFusion::Layer instanceLayer = clipboardLayer;
+    QString instanceLayerUuid = QUuid::createUuid().toString();
+    instanceLayer.uuid = instanceLayerUuid.toStdString();
+    instanceLayer.name = clipboardLayer.name + " (Instance)";
+    instanceLayer.aliasUuid = clipboardLayer.uuid;
+
+    undoStack->push(new CopyPasteLayerCommand(instanceLayer, QString::fromStdString(currentPanel->uuid), true, this));
+}
+
+void MainWindow::onLayerPasteAsDuplicate() {
+    if (!hasClipboardLayer || !currentPanel) return;
+
+    GameFusion::Layer duplicateLayer = clipboardLayer;
+    duplicateLayer.uuid = QUuid::createUuid().toString().toStdString();
+    duplicateLayer.name = clipboardLayer.name + " (Copy)";
+    duplicateLayer.aliasUuid = "";
+
+    undoStack->push(new CopyPasteLayerCommand(duplicateLayer, QString::fromStdString(currentPanel->uuid), false, this));
+}
+
+void MainWindow::onLayerRename() {
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    if (selectedLayers.isEmpty() || !currentPanel) return;
+
+    QString layerUuid = selectedLayers.first()->data(Qt::UserRole).toString();
+    LayerContext layerContext = findLayerByUuid(layerUuid.toStdString().c_str());
+    if (!layerContext.isValid()) return;
+
+    bool propagate = false;
+    if (hasLayerInstances(layerUuid.toStdString())) {
+        int result = QMessageBox::question(this, "Propagate Rename",
+                                          "Propagate rename to instanced layers?",
+                                          QMessageBox::Yes | QMessageBox::No);
+        propagate = (result == QMessageBox::Yes);
+    }
+
+    bool ok;
+    QString newName = QInputDialog::getText(this, "Rename Layer",
+                                            "Layer name:", QLineEdit::Normal,
+                                            QString::fromStdString(layerContext.layer->name), &ok);
+    if (ok && !newName.isEmpty()) {
+        undoStack->push(new RenameLayerCommand(layerUuid, QString::fromStdString(layerContext.layer->name),
+                                               newName, propagate, QString::fromStdString(currentPanel->uuid), this));
+        renameLayer(layerUuid, newName, propagate);
+    }
+}
+
+void MainWindow::onLayerProperties() {
+    // TODO: Implement LayerPropertiesDialog
+    qDebug() << "Layer Properties not implemented yet";
+}
+
+void MainWindow::onGroupLayers() {
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    if (selectedLayers.size() < 2 || !currentPanel) return;
+
+    std::vector<QString> layerUuids;
+    for (const auto& item : selectedLayers) {
+        layerUuids.push_back(item->data(Qt::UserRole).toString());
+    }
+
+    QString groupUuid = QUuid::createUuid().toString();
+    undoStack->push(new GroupLayersCommand(layerUuids, groupUuid, QString::fromStdString(currentPanel->uuid), this));
+    groupLayers(layerUuids, QString::fromStdString(currentPanel->uuid));
+}
+
+void MainWindow::onUngroupLayers() {
+    // TODO: Implement group selection logic
+    QString groupUuid; // Assume group UUID from selection
+    if (!currentPanel || groupUuid.isEmpty()) return;
+
+    undoStack->push(new GroupLayersCommand(std::vector<QString>{}, groupUuid, QString::fromStdString(currentPanel->uuid), this));
+    ungroupLayers(groupUuid, QString::fromStdString(currentPanel->uuid));
+}
+
+void MainWindow::onLayerClear() {
+    QList<QListWidgetItem*> selectedLayers = ui->layerListWidget->selectedItems();
+    if (selectedLayers.isEmpty() || !currentPanel) return;
+
+    QString layerUuid = selectedLayers.first()->data(Qt::UserRole).toString();
+    LayerContext layerContext = findLayerByUuid(layerUuid.toStdString().c_str());
+    if (!layerContext.isValid()) return;
+
+    GameFusion::Layer originalLayer = *layerContext.layer;
+    GameFusion::Layer clearedLayer = originalLayer;
+    clearedLayer.strokes.clear();
+    clearedLayer.motionKeyframes.clear();
+    clearedLayer.opacityKeyframes.clear();
+    clearedLayer.imageFilePath.clear();
+
+    undoStack->push(new ClearLayerCommand(originalLayer, clearedLayer, layerUuid,
+                                         QString::fromStdString(currentPanel->uuid), this));
+    //updateLayer(layerUuid, QString::fromStdString(currentPanel->uuid), clearedLayer);
+}
+
+void MainWindow::colorPalette() {
+    ColorPaletteWidget *colorPalette = nullptr;
+
+    // Create only once – reuse if already exists
+    if (!colorPalette) {
+        colorPalette = new ColorPaletteWidget();  // parented to dock for proper cleanup
+        colorPalette->setWindowModality(Qt::WindowModal);  // blocks rest of app
+        colorPalette->setWindowTitle("Color Palette");
+
+        // Optional: set reasonable size
+        colorPalette->resize(400, 360);
+
+        // Connect the color selection signal
+        connect(colorPalette, &ColorPaletteWidget::colorPicked,
+                this, [this, colorPalette](const QColor &color) {
+
+                    colorPalette->close();  // auto-close on pick (nice UX)
+                });
+    }
+
+    // Update palette to current color before showing
+    //colorPalette->setCurrentColor(foregroundColor);
+
+    // Show centered over the main window (or dock)
+    colorPalette->move(mapToGlobal(rect().center()) - QPoint(colorPalette->width()/2, colorPalette->height()/2));
+    colorPalette->show();
+    colorPalette->raise();
+    colorPalette->activateWindow();
 }

@@ -86,7 +86,8 @@ public:
     void toJson(QJsonObject& json) const;
     void fromJson(const QJsonObject& json);
 
-    int size() const {return handles_.size();};
+    int size() const {return handles_.size();}
+    bool empty() const {return handles_.empty();}
 
     // Get and set stroke properties
     void setStrokeProperties(const StrokeProperties& props) {

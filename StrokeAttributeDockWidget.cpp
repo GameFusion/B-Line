@@ -7,16 +7,24 @@
 #include <QPushButton>
 #include <QColorDialog>
 #include <QJsonDocument>
+#include <QScrollArea>
 
 #include "paintarea.h"
 #include "ScriptBreakdown.h"
+#include "ColorPaletteWidget.h"
 
 StrokeAttributeDockWidget::StrokeAttributeDockWidget(QWidget *parent)
     : QDockWidget("Stroke Attributes", parent)
 {
+    // Create a scrollable container
+    QScrollArea *scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
     // Create the main widget and layout
-    QWidget *widget = new QWidget(this);
-    QVBoxLayout *layout = new QVBoxLayout(widget);
+    QWidget *contentWidget = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(contentWidget);
     layout->setSpacing(4);
     layout->setContentsMargins(8, 8, 8, 8);
 
@@ -119,14 +127,50 @@ StrokeAttributeDockWidget::StrokeAttributeDockWidget(QWidget *parent)
     colorModeCombo->setCurrentIndex(0); // Default: Solid Foreground
     layout->addWidget(colorModeCombo);
 
+
+
+
+
+    ColorPaletteWidget *colorPalette = new ColorPaletteWidget();  // parented to dock for proper cleanup
+
+    // Optional: set reasonable size
+    //colorPalette->resize(400, 360);
+
+    // Connect the color selection signal
+    connect(colorPalette, &ColorPaletteWidget::colorPicked,
+        this, [this, colorPalette](const QColor &color) {
+            if (color.isValid() && color != foregroundColor) {
+                foregroundColor = color;
+                //updateColorSwatchStyle();
+                emitStrokeProperties();  // Update preview and PaintArea
+            }
+            colorPalette->close();  // auto-close on pick (nice UX)
+    });
+
+
+    // Update palette to current color before showing
+    //colorPalette->setCurrentColor(foregroundColor);
+
+    layout->addWidget(colorPalette);
+
+
+
     // Add stretch to keep widgets compact
     layout->addStretch();
 
+    // Put content into scroll area
+    scrollArea->setWidget(contentWidget);
+
     // Set the widget for the dock
-    setWidget(widget);
+    setWidget(scrollArea);
+
+    // Optional: style the scroll area
+    scrollArea->setStyleSheet(
+        "QScrollArea { border: none; background: transparent; }"
+        );
 
     // Apply stylesheet for compact and modern look
-    widget->setStyleSheet(
+    contentWidget->setStyleSheet(
         "QLabel { font-size: 12px; }"
         "QSlider, QComboBox, QPushButton { margin-bottom: 4px; }"
         "QPushButton { border: 1px solid #555; border-radius: 3px; }"
@@ -188,8 +232,46 @@ void StrokeAttributeDockWidget::updateTaperLabel(int value)
     emitStrokeProperties();
 }
 
+//#include "ColorPaletteWidget.h"
+
 void StrokeAttributeDockWidget::selectForegroundColor()
 {
+    /***
+    ColorPaletteWidget *colorPalette = nullptr;
+
+    // Create only once – reuse if already exists
+    if (!colorPalette) {
+        colorPalette = new ColorPaletteWidget();  // parented to dock for proper cleanup
+        colorPalette->setWindowModality(Qt::WindowModal);  // blocks rest of app
+        colorPalette->setWindowTitle("Color Palette");
+
+        // Optional: set reasonable size
+        colorPalette->resize(400, 360);
+
+        // Connect the color selection signal
+        connect(colorPalette, &ColorPaletteWidget::colorPicked,
+                this, [this, colorPalette](const QColor &color) {
+                    if (color.isValid() && color != foregroundColor) {
+                        foregroundColor = color;
+                        //updateColorSwatchStyle();
+                        emitStrokeProperties();  // Update preview and PaintArea
+                    }
+                    colorPalette->close();  // auto-close on pick (nice UX)
+                });
+    }
+
+    // Update palette to current color before showing
+    //colorPalette->setCurrentColor(foregroundColor);
+
+    // Show centered over the main window (or dock)
+    colorPalette->move(mapToGlobal(rect().center()) - QPoint(colorPalette->width()/2, colorPalette->height()/2));
+    colorPalette->show();
+    colorPalette->raise();
+    colorPalette->activateWindow();
+
+    return;
+***/
+
     QColor color = QColorDialog::getColor(foregroundColor, this, "Select Foreground Color");
     if (color.isValid()) {
         foregroundColor = color;
