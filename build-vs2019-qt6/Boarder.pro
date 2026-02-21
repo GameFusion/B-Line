@@ -59,8 +59,8 @@ CONFIG(debug, debug|release) {
 
 }else {
         message("release mode")
-        LIBS += -L$$GF/GameEngine/Libs/macOS/Release -l"GameFusion Static Library Debug OSX"
-        LIBS += -L$$GF/english2phoneme/Build/Products/Debug -lword2phone
+        LIBS += -L$$GF/GameEngine/Libs/macOS/Release -l"GameFusion Static Library Release OSX"
+        LIBS += -L$$GF/english2phoneme/Build/Products/Release -lword2phone
 
 }
 
@@ -342,8 +342,4 @@ macx-xcode {
 	}else{
 		#LIBS += -lpnp_basictools
 	}
-	if(!debug_and_release|build_pass):CONFIG(debug, debug|release) {
-        mac:LIBS = $$member(LIBS, 0) $$member(LIBS, 1)_debug
-        ##### win32:LIBS = $$member(LIBS, 0) $$member(LIBS, 1)d
-    }
 }
