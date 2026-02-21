@@ -1030,8 +1030,14 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     if (fontId == -1) {
         qWarning("Failed to load FontAwesome font");
     }
-    else
-        fontFamily = QFontDatabase::applicationFontFamilies(fontId).at(0);
+    else {
+        const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
+        if (!families.isEmpty()) {
+            fontFamily = families.first();
+        } else {
+            qWarning() << "Loaded regular Font Awesome font, but no font family was reported.";
+        }
+    }
 
     //QFont fontAwesome(fontFamily);
     QFont fontAwesome(FontAwesomeViewer::fontAwesomeSolid);
@@ -1937,6 +1943,23 @@ MainWindow::MainWindow(QWidget *parent)
 )");
 
     QFont fa = FontAwesomeViewer::fontAwesomeSolid;
+    if (fa.family().isEmpty()) {
+        const int fontId = QFontDatabase::addApplicationFont(":/fa-solid-900.ttf");
+        if (fontId == -1) {
+            qWarning() << "Failed to load Font Awesome font from resources (:/fa-solid-900.ttf).";
+        } else {
+            const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
+            if (!families.isEmpty()) {
+                fa = QFont(families.first());
+                FontAwesomeViewer::fontAwesomeSolid = fa;
+            } else {
+                qWarning() << "Font Awesome loaded, but no font family was reported.";
+            }
+        }
+    }
+    if (fa.family().isEmpty()) {
+        fa = this->font();
+    }
     //fa.setPixelSize(8);
     ui->toolButton_layerAdd->setFont(fa);
     ui->toolButton_layerDup->setFont(fa);
@@ -1951,26 +1974,6 @@ MainWindow::MainWindow(QWidget *parent)
     ui->toolButton_layerTrash->setText(QChar(0xF2ED));
     ui->toolButton_layerMoveUp->setText(QChar(0xf062));
     ui->toolButton_layerMoveDown->setText(QChar(0xf063));
-
-    // Load the font explicitly
-        int fontId = QFontDatabase::addApplicationFont("resources/fonts/fa-solid-900.ttf");
-        if (fontId == -1) {
-            qDebug() << "Failed to load Font Awesome font!";
-
-        }
-
-        QStringList families = QFontDatabase::applicationFontFamilies(fontId);
-        if (families.isEmpty()) {
-            qDebug() << "No font families found!";
-
-        }
-
-        QString fontFamily = families.at(0);
-        qDebug() << "Using font family:" << fontFamily;
-
-        QFont faFont(fontFamily);
-        faFont.setPointSize(16);  // Try large size
-
 
     QFont toolFonts = FontAwesomeViewer::fontAwesomeSolid;
     //toolFonts.setPixelSize(14);
