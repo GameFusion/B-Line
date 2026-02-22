@@ -112,7 +112,7 @@ int main(int argc, char *argv[])
     console->show();
     w.connect(console->inputBox(), &QComboBox::activated, &w, &MainWindow::consoleCommandActivated);
 
-	w.show();
+    w.showFullScreen();
 
     //ShotPanelWidget sp;
     //sp.show();

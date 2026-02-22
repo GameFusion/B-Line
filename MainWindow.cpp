@@ -1975,14 +1975,8 @@ MainWindow::MainWindow(QWidget *parent)
     ui->toolButton_layerMoveUp->setText(QChar(0xf062));
     ui->toolButton_layerMoveDown->setText(QChar(0xf063));
 
-    QFont toolFonts = FontAwesomeViewer::fontAwesomeSolid;
-    //toolFonts.setPixelSize(14);
-    //paint->createTools(&toolFonts);
-    //paint->createTools(&FontAwesomeViewer::fontAwesomeSolid);
-    QTimer::singleShot(5000, this, [ this]() {
-            GameFusion::Log().info("create tools post\n");
-            paint->createTools(&FontAwesomeViewer::fontAwesomeSolid);
-        });
+    // Create paint tools immediately to avoid showing a transient empty toolbar.
+    paint->createTools(&FontAwesomeViewer::fontAwesomeSolid);
 
     //
 
