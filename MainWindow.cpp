@@ -5767,22 +5767,14 @@ void MainWindow::updateLayerThumbnail(const QString& uuid, const QImage& thumbna
     QString layerName = item->text();
     // Set thumbnail and name
     item->setIcon(QIcon(QPixmap::fromImage(thumbnail))); // First column: thumbnail
-    ui->layerListWidget->setIconSize(QSize(250, 150)); // or whatever size you want
+    ui->layerListWidget->setIconSize(thumbnail.size());
     //ui->layerListWidget->setViewMode(QListView::IconMode);
     //ui->layerListWidget->setResizeMode(QListView::Adjust);
-    QImage debugThumbnail = thumbnail;
-    QPainter p(&debugThumbnail);
-    p.setPen(Qt::red);
-    p.drawRect(0, 0, debugThumbnail.width() - 1, debugThumbnail.height() - 1);
-    p.end();
 
-    item->setIcon(QIcon(QPixmap::fromImage(debugThumbnail)));
     item->setText(layerName); // Second column: name
     // Re-enable signals
     ui->layerListWidget->blockSignals(prevState);
 
-    // In constructor or setupUi()
-    ui->layerListWidget->setIconSize(QSize(debugThumbnail.width(), debugThumbnail.height()));
     ui->layerListWidget->update(); // Force redraw
 }
 
@@ -5820,17 +5812,104 @@ void MainWindow::onPaintAreaImageModified(const QString& uuid, const QImage& ima
         return;
 
     // --- Resize the image to height = 200px, maintain 16:9 aspect ratio
-    int targetHeight = 200;
-    int targetWidth = static_cast<int>(targetHeight * 16.0 / 9.0);
+    const int targetHeight = 200;
+    const int targetWidth = static_cast<int>(targetHeight * 16.0 / 9.0);
+    constexpr qreal targetAspect = 16.0 / 9.0;
 
-    QImage resizedImage;
+    QImage sourceImage = image;
+    if (sourceImage.isNull()) {
+        sourceImage = QImage(targetWidth, targetHeight, QImage::Format_ARGB32);
+        sourceImage.fill(Qt::white);
+    }
 
-    if (image.isNull()) {
-        // Create a white image with 16:9 aspect ratio
-        resizedImage = QImage(targetWidth, targetHeight, QImage::Format_ARGB32);
-        resizedImage.fill(Qt::white);
-    } else
-        resizedImage = image.scaled(targetWidth, targetHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    // Normalize to center-cropped 16:9 panel content to remove overscan/canvas margins.
+    QRect cropRect = sourceImage.rect();
+    const qreal srcAspect = sourceImage.height() > 0
+                                ? (sourceImage.width() / static_cast<qreal>(sourceImage.height()))
+                                : targetAspect;
+    if (srcAspect > targetAspect) {
+        const int newW = qRound(sourceImage.height() * targetAspect);
+        cropRect.setX((sourceImage.width() - newW) / 2);
+        cropRect.setWidth(newW);
+    } else if (srcAspect < targetAspect) {
+        const int newH = qRound(sourceImage.width() / targetAspect);
+        cropRect.setY((sourceImage.height() - newH) / 2);
+        cropRect.setHeight(newH);
+    }
+    cropRect = cropRect.intersected(sourceImage.rect());
+
+    QImage panelImage = sourceImage.copy(cropRect).scaled(
+        1920, 1080, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+
+    QImage previewImage = panelImage;
+    // Match PiP selection semantics at shot start (frame 0): use prev/next keyframes around frame 0.
+    std::vector<GameFusion::CameraFrame> panelCameras;
+    panelCameras.reserve(panelContext.shot->cameraAnimation.frames.size());
+    for (const auto& cam : panelContext.shot->cameraAnimation.frames) {
+        if (cam.panelUuid == uuid.toStdString()) {
+            panelCameras.push_back(cam);
+        }
+    }
+    std::sort(panelCameras.begin(), panelCameras.end(),
+              [](const GameFusion::CameraFrame& a, const GameFusion::CameraFrame& b) {
+                  return a.frameOffset < b.frameOffset;
+              });
+
+    const bool hasCameraForPanel = !panelCameras.empty();
+    bool usedPipPreview = false;
+    if (hasCameraForPanel && paint && paint->getPaintArea() &&
+        paint->getPaintArea()->hasPipImage() &&
+        paint->getPaintArea()->currentPipPanelUuid() == uuid) {
+        // Keep storyboard thumbnail identical to PiP for camera-driven shots.
+        previewImage = paint->getPaintArea()->currentPipImage();
+        usedPipPreview = true;
+    }
+
+    const float currentFrame = 0.0f; // first frame in shot
+    const GameFusion::CameraFrame* prev = nullptr;
+    const GameFusion::CameraFrame* next = nullptr;
+    for (const auto& cam : panelCameras) {
+        if (cam.frameOffset <= currentFrame) {
+            prev = &cam;
+        } else {
+            next = &cam;
+            break;
+        }
+    }
+
+    if (prev && !usedPipPreview) {
+        QRectF cameraRect(prev->x, prev->y, 1920.0 * prev->zoom, 1080.0 * prev->zoom);
+        qreal cameraRotation = prev->rotation;
+
+        if (next && prev->frameOffset != next->frameOffset) {
+            const float t = (currentFrame - prev->frameOffset) / float(next->frameOffset - prev->frameOffset);
+            cameraRect = QRectF(
+                prev->x * (1.0f - t) + next->x * t,
+                prev->y * (1.0f - t) + next->y * t,
+                (1920.0f * prev->zoom) * (1.0f - t) + (1920.0f * next->zoom) * t,
+                (1080.0f * prev->zoom) * (1.0f - t) + (1080.0f * next->zoom) * t);
+            cameraRotation = prev->rotation * (1.0f - t) + next->rotation * t;
+        }
+
+        QTransform transform;
+        transform.translate(cameraRect.center().x(), cameraRect.center().y());
+        transform.rotate(cameraRotation);
+        transform.translate(-cameraRect.center().x(), -cameraRect.center().y());
+
+        QImage cameraView(panelImage.size(), QImage::Format_ARGB32_Premultiplied);
+        cameraView.fill(Qt::transparent);
+        QPainter camPainter(&cameraView);
+        camPainter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
+        camPainter.setTransform(transform.inverted());
+        camPainter.drawImage(0, 0, panelImage);
+        camPainter.end();
+
+        // Match PiP behavior: crop using the full camera rect (including out-of-bounds area if any).
+        previewImage = cameraView.copy(cameraRect.toAlignedRect());
+    }
+
+    const QImage resizedImage = previewImage.scaled(
+        targetWidth, targetHeight, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 
     // If we are done editing, save the thumbnail to disk
     if (!isEditing) {

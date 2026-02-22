@@ -32,6 +32,9 @@ StrokeAttributeDockWidget::StrokeAttributeDockWidget(QWidget *parent)
     previewArea->setFixedHeight(100);
     previewArea->setFpsDisplay(false);
     previewArea->setPipDisplay(false);
+    // Preview should not use overscan margins; make canvas == output for this local widget.
+    previewArea->setDimensions(300, 100, 300, 100);
+    previewArea->resetZoom();
     layout->addWidget(previewArea);
 
     setupPreviewCurve();
