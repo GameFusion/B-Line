@@ -177,7 +177,17 @@ struct Layer {
         float opacity = 1.0f;
     };
 
+    struct TextContent {
+        std::string text;
+        std::string fontName;
+        float fontSize = 24.0f;
+        std::string color; // Hex RGBA (e.g. "#FFFFFFFF")
+        float x = 0.0f;
+        float y = 0.0f;
+    };
+
     std::vector<BezierCurve>     strokes; // Updated to BezierCurve
+    std::vector<TextContent>     textContents;
     std::vector<MotionKeyFrame>  motionKeyframes;
     std::vector<OpacityKeyFrame> opacityKeyframes;
 

@@ -290,6 +290,24 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
                         }
                     }
 
+                    // Load text content
+                    if (layerObj.contains("textContents") && layerObj["textContents"].isArray()) {
+                        const QJsonArray textArray = layerObj["textContents"].toArray();
+                        for (const QJsonValue& textVal : textArray) {
+                            if (!textVal.isObject())
+                                continue;
+                            const QJsonObject textObj = textVal.toObject();
+                            Layer::TextContent textContent;
+                            textContent.text = textObj["text"].toString("Text").toStdString();
+                            textContent.fontName = textObj["fontName"].toString("Arial").toStdString();
+                            textContent.fontSize = float(textObj["fontSize"].toDouble(24.0));
+                            textContent.color = textObj["color"].toString("#FF000000").toStdString();
+                            textContent.x = float(textObj["x"].toDouble(0.0));
+                            textContent.y = float(textObj["y"].toDouble(0.0));
+                            layer.textContents.push_back(textContent);
+                        }
+                    }
+
 
 
                     panel.layers.push_back(layer); // this is not working great
@@ -1076,6 +1094,20 @@ void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
                             strokeArray.append(strokeObj);
                         }
                         layerObj["strokes"] = strokeArray;
+
+                        // Save text content
+                        QJsonArray textArray;
+                        for (const auto& textContent : layer.textContents) {
+                            QJsonObject textObj;
+                            textObj["text"] = QString::fromStdString(textContent.text);
+                            textObj["fontName"] = QString::fromStdString(textContent.fontName);
+                            textObj["fontSize"] = textContent.fontSize;
+                            textObj["color"] = QString::fromStdString(textContent.color);
+                            textObj["x"] = textContent.x;
+                            textObj["y"] = textContent.y;
+                            textArray.append(textObj);
+                        }
+                        layerObj["textContents"] = textArray;
 
                         QJsonArray motionKeyframesArray;
                         for (const auto& kf : layer.motionKeyframes) {

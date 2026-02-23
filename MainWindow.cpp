@@ -9378,6 +9378,7 @@ void MainWindow::onLayerClear() {
     GameFusion::Layer originalLayer = *layerContext.layer;
     GameFusion::Layer clearedLayer = originalLayer;
     clearedLayer.strokes.clear();
+    clearedLayer.textContents.clear();
     clearedLayer.motionKeyframes.clear();
     clearedLayer.opacityKeyframes.clear();
     clearedLayer.imageFilePath.clear();
