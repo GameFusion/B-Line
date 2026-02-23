@@ -16,6 +16,8 @@
 #include <QThread>
 #include <QButtonGroup>
 #include <QInputDialog>
+#include <QLabel>
+#include <QVBoxLayout>
 
 #include <QFile>
 #include <QDir>
@@ -1739,6 +1741,16 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(ui->actionColor_Palette, &QAction::triggered, this, &MainWindow::colorPalette);
 
+    ui->menuWindows->addSeparator();
+    toggleFullScreenAct = ui->menuWindows->addAction(tr("Toggle Full Screen"));
+    toggleFullScreenAct->setCheckable(true);
+    toggleFullScreenAct->setShortcut(QKeySequence(Qt::Key_F11));
+    connect(toggleFullScreenAct, &QAction::toggled, this, &MainWindow::onToggleFullScreen);
+
+    toggleDetachedPipAct = ui->menuWindows->addAction(tr("PiP in Separate Window"));
+    toggleDetachedPipAct->setCheckable(true);
+    connect(toggleDetachedPipAct, &QAction::toggled, this, &MainWindow::onToggleDetachedPip);
+
     setupDockPanels();
 
     paint = new MainWindowPaint;
@@ -1763,6 +1775,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(paint->getPaintArea(), &PaintArea::cameraFrameDeleted, this, &MainWindow::onCameraFrameDeleted);
     connect(paint->getPaintArea(), &PaintArea::toolModeChanged, this, &MainWindow::onToolModeChanged);
     connect(paint->getPaintArea(), &PaintArea::strokeSelected, this, &MainWindow::onStrokeSelected);
+    paint->getPaintArea()->setPipRenderInOverlay(true);
 
     connect(cameraSidePanel, &CameraSidePanel::cameraFrameUpdated,
             paint->getPaintArea(), &PaintArea::updateCameraFrameUI);
@@ -5772,6 +5785,86 @@ void MainWindow::updateLayerThumbnail(const QString& uuid, const QImage& thumbna
     ui->layerListWidget->update(); // Force redraw
 }
 
+void MainWindow::onToggleFullScreen(bool enabled)
+{
+    if (enabled) {
+        wasMaximizedBeforeFullScreen = isMaximized();
+        showFullScreen();
+    } else {
+        if (wasMaximizedBeforeFullScreen) {
+            showMaximized();
+        } else {
+            showNormal();
+        }
+    }
+}
+
+void MainWindow::onToggleDetachedPip(bool enabled)
+{
+    if (!paint || !paint->getPaintArea())
+        return;
+
+    if (!enabled) {
+        paint->getPaintArea()->setPipRenderInOverlay(true);
+        if (pipPreviewTimer)
+            pipPreviewTimer->stop();
+        if (pipPreviewWindow)
+            pipPreviewWindow->hide();
+        return;
+    }
+
+    if (!pipPreviewWindow) {
+        pipPreviewWindow = new QWidget(this, Qt::Window);
+        pipPreviewWindow->setWindowTitle(tr("Camera Preview (PiP)"));
+        pipPreviewWindow->setMinimumSize(480, 270);
+        pipPreviewWindow->setAttribute(Qt::WA_DeleteOnClose, false);
+        pipPreviewWindow->installEventFilter(this);
+
+        QVBoxLayout *layout = new QVBoxLayout(pipPreviewWindow);
+        layout->setContentsMargins(0, 0, 0, 0);
+        pipPreviewLabel = new QLabel(pipPreviewWindow);
+        pipPreviewLabel->setAlignment(Qt::AlignCenter);
+        pipPreviewLabel->setStyleSheet("background-color: black;");
+        layout->addWidget(pipPreviewLabel);
+
+        pipPreviewTimer = new QTimer(this);
+        pipPreviewTimer->setInterval(33); // ~30 fps
+        connect(pipPreviewTimer, &QTimer::timeout, this, &MainWindow::refreshDetachedPip);
+    }
+
+    paint->getPaintArea()->setPipRenderInOverlay(false);
+    pipPreviewWindow->show();
+    pipPreviewWindow->raise();
+    pipPreviewWindow->activateWindow();
+    refreshDetachedPip();
+    if (pipPreviewTimer)
+        pipPreviewTimer->start();
+}
+
+void MainWindow::refreshDetachedPip()
+{
+    if (!toggleDetachedPipAct || !toggleDetachedPipAct->isChecked())
+        return;
+    if (!pipPreviewWindow || !pipPreviewLabel || !paint || !paint->getPaintArea())
+        return;
+
+    const QImage &img = paint->getPaintArea()->currentPipImage();
+    if (img.isNull()) {
+        pipPreviewLabel->clear();
+        return;
+    }
+
+    const QSize targetSize = pipPreviewLabel->size();
+    if (targetSize.width() <= 0 || targetSize.height() <= 0)
+        return;
+
+    QPixmap pix = QPixmap::fromImage(img).scaled(
+        targetSize,
+        Qt::KeepAspectRatio,
+        Qt::SmoothTransformation);
+    pipPreviewLabel->setPixmap(pix);
+}
+
 void MainWindow::onPaintAreaImageModified(const QString& uuid, const QImage& image, bool isEditing)
 {
     if (uuid.isEmpty())
@@ -8982,6 +9075,13 @@ void MainWindow::setLayerAttribute(const QString& layerUuid, const QString& pane
 }
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
+    if (obj == pipPreviewWindow && event->type() == QEvent::Close) {
+        if (toggleDetachedPipAct && toggleDetachedPipAct->isChecked()) {
+            toggleDetachedPipAct->setChecked(false);
+        }
+        return false;
+    }
+
     if (event->type() == QEvent::KeyPress && (obj == ui->spinBox_layerRotation ||
                                               obj == ui->doubleSpinBox_layerPosX ||
                                               obj == ui->doubleSpinBox_layerPosY ||
@@ -9120,6 +9220,19 @@ void MainWindow::setLayerPosition(const QString& layerUuid, const QString& panel
 void MainWindow::showEvent(QShowEvent *event) {
     QMainWindow::showEvent(event);
     emit windowShown();
+}
+
+void MainWindow::changeEvent(QEvent *event)
+{
+    QMainWindow::changeEvent(event);
+    if (event->type() == QEvent::WindowStateChange && toggleFullScreenAct) {
+        const bool fullScreenNow = isFullScreen();
+        if (toggleFullScreenAct->isChecked() != fullScreenNow) {
+            toggleFullScreenAct->blockSignals(true);
+            toggleFullScreenAct->setChecked(fullScreenNow);
+            toggleFullScreenAct->blockSignals(false);
+        }
+    }
 }
 
 

@@ -30,6 +30,7 @@ class TrackItem;
 
 class QPdfWriter;
 class QUndoStack;
+class QLabel;
 
 namespace Ui {
 	class MainWindowBoarder;
@@ -354,10 +355,14 @@ public slots:
     void toggleAutoSave(bool checked);
 
     void colorPalette();
+    void onToggleFullScreen(bool enabled);
+    void onToggleDetachedPip(bool enabled);
+    void refreshDetachedPip();
 
 protected:
 
     bool eventFilter(QObject *obj, QEvent *event);
+    void changeEvent(QEvent *event) override;
     void tabletEvent(QTabletEvent* event) override;
 	void dragEnterEvent(QDragEnterEvent *event) override;
 	//void dragMoveEvent(QDragMoveEvent *event) override;
@@ -476,6 +481,8 @@ protected:
     QAction *renameCameraAct;
     QAction *copyCameraAct;
     QAction *pastCameraAct;
+    QAction *toggleFullScreenAct = nullptr;
+    QAction *toggleDetachedPipAct = nullptr;
 
     GameFusion::Panel clipboardPanel; // Clipboard for copy/cut/paste
     bool hasClipboardPanel = false;
@@ -497,6 +504,10 @@ private:
     //QAction *autoSaveAction;
 
     PaintCanvas *paintCanvas = nullptr;
+    bool wasMaximizedBeforeFullScreen = true;
+    QWidget *pipPreviewWindow = nullptr;
+    QLabel *pipPreviewLabel = nullptr;
+    QTimer *pipPreviewTimer = nullptr;
 };
 
 
