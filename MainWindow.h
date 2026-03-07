@@ -372,6 +372,8 @@ protected:
 
     bool initializeLlamaClient();
     void updateTimeline();
+    bool ensureProjectBootstrapDefaults();
+    bool selectEarliestPanelAfterLoad(bool focusPaintArea, bool forcePaintTool);
 
 
     // --- TODO put these in Dedicated Class for Layer Side Panel

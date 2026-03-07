@@ -19,6 +19,12 @@ B-Line is an open-source professional-grade storyboarding application built with
 
 *The B-Line main interface with canvas area, shot management, drawing tools, and layers*
 
+## Local Quickstart (101)
+
+For first-time local onboarding (new project -> default scene/shot/panel -> first draw -> save/reload), see:
+
+- [docs/getting-started-local-101.md](docs/getting-started-local-101.md)
+
 ## Current Features
 
 ### Shot Management

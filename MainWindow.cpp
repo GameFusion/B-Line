@@ -77,6 +77,40 @@ using namespace GameFusion;
 
 #include <QUndoCommand>
 
+namespace {
+
+std::vector<GameFusion::Layer> createDefaultPanelLayers() {
+    std::vector<GameFusion::Layer> layers;
+
+    GameFusion::Layer bgLayer;
+    bgLayer.name = "BG";
+    layers.push_back(bgLayer);
+
+    GameFusion::Layer drawLayer;
+    drawLayer.name = "Layer 1";
+    layers.push_back(drawLayer);
+
+    return layers;
+}
+
+QString makeDefaultSceneName(int sceneIndex) {
+    return QString("SCENE_%1").arg(sceneIndex, 3, 10, QChar('0'));
+}
+
+QString makeDefaultSceneId(int sceneIndex) {
+    return QString("%1").arg(sceneIndex, 4, 10, QChar('0'));
+}
+
+QString makeDefaultShotName(int shotIndex) {
+    return QString("SHOT_%1").arg(shotIndex, 3, 10, QChar('0'));
+}
+
+QString makeDefaultPanelName(int panelIndex) {
+    return QString("PANEL_%1").arg(panelIndex, 3, 10, QChar('0'));
+}
+
+} // namespace
+
 
 class InsertSegmentCommand : public QUndoCommand {
 public:
@@ -3560,41 +3594,25 @@ void MainWindow::loadProject(QString projectDir){
         Log().info() << "Project loaded successfully.\n";
     }
 
+    const bool bootstrapChanged = ensureProjectBootstrapDefaults();
+    if (bootstrapChanged) {
+        Log().info() << "Applied 101 bootstrap defaults for missing scene/shot/panel/layer data.\n";
+    }
+
     updateScenes();
     updateTimeline();
 
     loadAudioTracks();
 
-    // Post-load: Select the earliest panel by startTime across all scenes
-    if (scriptBreakdown) {
-        qint64 earliestTime = -1;
-        QTreeWidgetItem* targetItem = nullptr;
-        QTreeWidgetItemIterator it(ui->shotsTreeWidget);
-        float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
-        float mspf = fps > 0 ? 1000.0 / fps : 1.0;
+    const bool selectedPanel = selectEarliestPanelAfterLoad(
+        /*focusPaintArea=*/bootstrapChanged,
+        /*forcePaintTool=*/bootstrapChanged);
 
-        while (*it) {
-            QString uuid = (*it)->data(0, Qt::UserRole).toString();
-            if (!uuid.isEmpty()) {
-                auto panelContext = findPanelByUuid(uuid.toStdString());
-                if (panelContext.isValid()) {
-                    qint64 startTimeMs = static_cast<qint64>(panelContext.panel->startTime / mspf);
-                    if (earliestTime == -1 || startTimeMs < earliestTime) {
-                        earliestTime = startTimeMs;
-                        targetItem = *it;
-                    }
-                }
-            }
-            ++it;
-        }
-
-        if (targetItem) {
-            ui->shotsTreeWidget->setCurrentItem(targetItem);
-            onTreeItemClicked(targetItem, 0); // Trigger callback
-        }
+    if (!selectedPanel) {
+        Log().warning() << "No panel found after project load; drawing context remains unbound.";
     }
 
-    this->updateWindowTitle(false);
+    this->updateWindowTitle(bootstrapChanged);
 
 
 }
@@ -3623,6 +3641,223 @@ void MainWindow::loadScript() {
     }
     else
         scriptBreakdown = new ScriptBreakdown(fileName.toStdString().c_str(), fps, dictionary, dictionaryCustom, llamaClient, logger);
+}
+
+bool MainWindow::ensureProjectBootstrapDefaults() {
+    if (!scriptBreakdown) {
+        return false;
+    }
+
+    auto& scenes = scriptBreakdown->getScenes();
+    const double fpsValue = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
+    const double safeFps = fpsValue > 0.0 ? fpsValue : 24.0;
+    const double mspf = 1000.0 / safeFps;
+    const int defaultFrameCount = qMax(1, static_cast<int>(safeFps));
+    const int defaultDurationMs = qMax(1, static_cast<int>(defaultFrameCount * mspf));
+
+    bool anyChanges = false;
+    int sceneOrdinal = 0;
+    int globalFallbackStartMs = 0;
+
+    if (scenes.empty()) {
+        GameFusion::Scene defaultScene;
+        defaultScene.name = makeDefaultSceneName(1).toStdString();
+        defaultScene.sceneId = makeDefaultSceneId(1).toStdString();
+        defaultScene.filename = QString("%1_%2.json")
+                                    .arg(QString::fromStdString(defaultScene.sceneId),
+                                         QString::fromStdString(defaultScene.name))
+                                    .toStdString();
+
+        GameFusion::Shot defaultShot;
+        defaultShot.name = makeDefaultShotName(1).toStdString();
+        defaultShot.type = "MEDIUM";
+        defaultShot.frameCount = defaultFrameCount;
+        defaultShot.startTime = 0;
+        defaultShot.endTime = defaultDurationMs;
+
+        GameFusion::Panel defaultPanel;
+        defaultPanel.name = makeDefaultPanelName(1).toStdString();
+        defaultPanel.startTime = 0;
+        defaultPanel.durationTime = defaultDurationMs;
+        defaultPanel.layers = createDefaultPanelLayers();
+
+        defaultShot.panels.push_back(defaultPanel);
+        defaultScene.shots.push_back(defaultShot);
+        defaultScene.dirty = true;
+        scenes.push_back(defaultScene);
+
+        anyChanges = true;
+    }
+
+    for (GameFusion::Scene& scene : scenes) {
+        sceneOrdinal++;
+        bool sceneChanged = false;
+
+        if (scene.sceneId.empty()) {
+            scene.sceneId = makeDefaultSceneId(sceneOrdinal).toStdString();
+            sceneChanged = true;
+        }
+
+        if (scene.name.empty()) {
+            scene.name = makeDefaultSceneName(sceneOrdinal).toStdString();
+            sceneChanged = true;
+        }
+
+        if (scene.filename.empty()) {
+            QString safeSceneName = QString::fromStdString(scene.name);
+            safeSceneName.replace(' ', '_');
+            scene.filename = QString("%1_%2.json")
+                                 .arg(QString::fromStdString(scene.sceneId), safeSceneName)
+                                 .toStdString();
+            sceneChanged = true;
+        }
+
+        if (scene.shots.empty()) {
+            GameFusion::Shot defaultShot;
+            defaultShot.name = makeDefaultShotName(1).toStdString();
+            defaultShot.type = "MEDIUM";
+            defaultShot.frameCount = defaultFrameCount;
+            defaultShot.startTime = globalFallbackStartMs;
+            defaultShot.endTime = globalFallbackStartMs + defaultDurationMs;
+
+            GameFusion::Panel defaultPanel;
+            defaultPanel.name = makeDefaultPanelName(1).toStdString();
+            defaultPanel.startTime = 0;
+            defaultPanel.durationTime = defaultDurationMs;
+            defaultPanel.layers = createDefaultPanelLayers();
+
+            defaultShot.panels.push_back(defaultPanel);
+            scene.shots.push_back(defaultShot);
+            globalFallbackStartMs = defaultShot.endTime;
+            sceneChanged = true;
+        }
+
+        int shotOrdinal = 0;
+        for (GameFusion::Shot& shot : scene.shots) {
+            shotOrdinal++;
+            bool shotChanged = false;
+
+            if (shot.name.empty()) {
+                shot.name = makeDefaultShotName(shotOrdinal).toStdString();
+                shotChanged = true;
+            }
+
+            if (shot.frameCount <= 0) {
+                int inferredDurationMs = (shot.endTime > shot.startTime)
+                                             ? (shot.endTime - shot.startTime)
+                                             : defaultDurationMs;
+                shot.frameCount = qMax(1, static_cast<int>(inferredDurationMs / mspf));
+                shotChanged = true;
+            }
+
+            if (shot.panels.empty()) {
+                GameFusion::Panel defaultPanel;
+                defaultPanel.name = makeDefaultPanelName(1).toStdString();
+                defaultPanel.startTime = 0;
+                defaultPanel.durationTime = qMax(1, static_cast<int>(shot.frameCount * mspf));
+                defaultPanel.layers = createDefaultPanelLayers();
+                shot.panels.push_back(defaultPanel);
+                shotChanged = true;
+            }
+
+            int inferredShotDurationMs = 0;
+            int panelOrdinal = 0;
+            for (GameFusion::Panel& panel : shot.panels) {
+                panelOrdinal++;
+
+                if (panel.name.empty()) {
+                    panel.name = makeDefaultPanelName(panelOrdinal).toStdString();
+                    shotChanged = true;
+                }
+
+                if (panel.durationTime <= 0) {
+                    panel.durationTime = qMax(1, static_cast<int>(shot.frameCount * mspf));
+                    shotChanged = true;
+                }
+
+                if (panel.startTime < 0) {
+                    panel.startTime = inferredShotDurationMs;
+                    shotChanged = true;
+                }
+
+                if (panel.layers.empty()) {
+                    panel.layers = createDefaultPanelLayers();
+                    shotChanged = true;
+                }
+
+                inferredShotDurationMs = qMax(inferredShotDurationMs,
+                                              panel.startTime + panel.durationTime);
+            }
+
+            if (shot.startTime < 0 || shot.endTime <= shot.startTime) {
+                if (inferredShotDurationMs <= 0) {
+                    inferredShotDurationMs = qMax(1, static_cast<int>(shot.frameCount * mspf));
+                }
+
+                shot.startTime = globalFallbackStartMs;
+                shot.endTime = globalFallbackStartMs + inferredShotDurationMs;
+                shotChanged = true;
+            }
+
+            globalFallbackStartMs = qMax(globalFallbackStartMs, shot.endTime);
+
+            if (shotChanged) {
+                sceneChanged = true;
+            }
+        }
+
+        if (sceneChanged) {
+            scene.dirty = true;
+            anyChanges = true;
+        }
+    }
+
+    return anyChanges;
+}
+
+bool MainWindow::selectEarliestPanelAfterLoad(bool focusPaintArea, bool forcePaintTool) {
+    if (!scriptBreakdown) {
+        return false;
+    }
+
+    QTreeWidgetItem* targetItem = nullptr;
+    qint64 earliestStartMs = 0;
+    bool foundPanel = false;
+
+    QTreeWidgetItemIterator it(ui->shotsTreeWidget);
+    while (*it) {
+        QString uuid = (*it)->data(0, Qt::UserRole).toString();
+        if (!uuid.isEmpty()) {
+            PanelContext panelContext = findPanelByUuid(uuid.toStdString());
+            if (panelContext.isValid()) {
+                qint64 panelStartMs = static_cast<qint64>(panelContext.shot->startTime)
+                                    + static_cast<qint64>(panelContext.panel->startTime);
+                if (!foundPanel || panelStartMs < earliestStartMs) {
+                    earliestStartMs = panelStartMs;
+                    targetItem = *it;
+                    foundPanel = true;
+                }
+            }
+        }
+        ++it;
+    }
+
+    if (!targetItem) {
+        return false;
+    }
+
+    ui->shotsTreeWidget->setCurrentItem(targetItem);
+    onTreeItemClicked(targetItem, 0);
+
+    if (forcePaintTool) {
+        paint->getPaintArea()->setToolMode(PaintArea::ToolMode::Paint);
+    }
+
+    if (focusPaintArea) {
+        paint->getPaintArea()->setFocus(Qt::OtherFocusReason);
+    }
+
+    return true;
 }
 
 ShotContext MainWindow::findShotByUuid(const std::string& uuid) {
@@ -4039,6 +4274,8 @@ void MainWindow::populateLayerList(GameFusion::Panel* panel) {
         return;
     }
 
+    const QString preferredLayerUuid = QString::fromStdString(panel->layers.back().uuid);
+
     // Set a consistent icon size for all items
     ui->layerListWidget->setIconSize(QSize(240, 135));
 
@@ -4103,6 +4340,18 @@ void MainWindow::populateLayerList(GameFusion::Panel* panel) {
                 }
             }
         }
+
+    for (int i = 0; i < ui->layerListWidget->count(); ++i) {
+        QListWidgetItem* item = ui->layerListWidget->item(i);
+        if (!item) {
+            continue;
+        }
+
+        if (item->data(Qt::UserRole).toString() == preferredLayerUuid) {
+            ui->layerListWidget->setCurrentItem(item);
+            break;
+        }
+    }
 
 
 
@@ -5614,7 +5863,6 @@ void MainWindow::onCameraFrameAddedFromPaint(const GameFusion::CameraFrame& fram
     scriptBreakdown->addCameraFrame(frame);
 
     auto& scenes = scriptBreakdown->getScenes();
-    GameFusion::Shot *theShot = nullptr;
     for (auto& scene : scenes) {
         for (auto& shot : scene.shots) {
             for(auto &panel : shot.panels){

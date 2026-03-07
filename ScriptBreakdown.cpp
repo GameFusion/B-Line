@@ -324,8 +324,8 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
                 bg.name = "BG";
                 l1.name = "Layer 1";
 
-                panel.layers.push_back(l1);
                 panel.layers.push_back(bg);
+                panel.layers.push_back(l1);
             }
 
             shot.panels.push_back(panel);
