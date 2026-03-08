@@ -5825,21 +5825,11 @@ void MainWindow::onNewCamera() {
     }
 
     double currentTime = timeLineView->getCursorTime();
-    CameraContext cameraContext = findCameraForTime(currentTime);
-    //PanelContext panelContext = findPanelForTime(currentTime);
-    if (!cameraContext.isValid()) {
-        QMessageBox::warning(this, "Error", "No valid camera selected. Please select a time in the timeline.");
+    PanelContext panelContext = findPanelForTime(currentTime);
+    if(!panelContext.isValid()) {
+        QMessageBox::warning(this, "Error", "No valid panel selected. Please select a time inside a shot.");
         return;
     }
-
-
-    // now we can copy the camera if we want, but here we only realy want to create a new camera at the current time
-
-    //------
-
-    PanelContext panelContext = findPanelForTime(currentTime);
-    if(!panelContext.isValid())
-        return;
 
     qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble();
     qreal mspf = 1000.0f / fps;
