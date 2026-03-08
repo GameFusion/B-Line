@@ -84,6 +84,7 @@ using namespace GameFusion;
 #include <QUndoCommand>
 
 namespace {
+constexpr int kAutoSaveIntervalMs = 10000;
 
 std::vector<GameFusion::Layer> createDefaultPanelLayers() {
     std::vector<GameFusion::Layer> layers;
@@ -1893,7 +1894,7 @@ MainWindow::MainWindow(QWidget *parent)
     QObject::connect(ui->actionNew, SIGNAL(triggered()), this, SLOT(newProject()));
     QObject::connect(ui->actionEdit_Project, SIGNAL(triggered()), this, SLOT(editProject()));
     QObject::connect(ui->actionSave, SIGNAL(triggered()), this, SLOT(saveProject()));
-    QObject::connect(ui->actionAuto_Save, SIGNAL(triggered()), this, SLOT(toggleProject()));
+    connect(ui->actionAuto_Save, &QAction::triggered, this, &MainWindow::toggleAutoSave);
     QObject::connect(ui->actionPost_issue, SIGNAL(triggered()), this, SLOT(postIssue()));
     QObject::connect(ui->actionTeam_email, SIGNAL(triggered()), this, SLOT(teamEmail()));
     QObject::connect(ui->actionLogin, SIGNAL(triggered()), this, SLOT(login()));
@@ -2233,7 +2234,7 @@ QComboBox, QSpinBox {
     autoSaveTimer->setTimerType(Qt::CoarseTimer);
     connect(autoSaveTimer, &QTimer::timeout, this, &MainWindow::onAutoSaveTimer);
     if (autoSave) {
-        autoSaveTimer->start(30000); // Every 30 seconds
+        autoSaveTimer->start(kAutoSaveIntervalMs);
     }
 
     setTabletTracking(true);
@@ -5470,6 +5471,19 @@ void MainWindow::saveProject(){
     }
 
     saveAudioTracks();
+
+    bool hasDirtyScenes = false;
+    if (scriptBreakdown) {
+        for (const auto& scene : scriptBreakdown->getScenes()) {
+            if (scene.dirty) {
+                hasDirtyScenes = true;
+                break;
+            }
+        }
+    }
+
+    savePending = hasDirtyScenes;
+    updateWindowTitle(hasDirtyScenes);
 }
 
 QString generateUniquePanelName(GameFusion::Shot* shot) {
@@ -9434,7 +9448,7 @@ void MainWindow::loadSettings() {
 }
 
 void MainWindow::saveSettings() {
-    QSettings settings("MyCompany", "MyApp"); // Adjust organization and app name
+    QSettings settings("B-Line", "Storyboard");
     settings.setValue("autoSave", autoSave);
 }
 
@@ -9455,8 +9469,6 @@ void MainWindow::onCheckDirtyTimer() {
 void MainWindow::onAutoSaveTimer() {
     if (autoSave && savePending) {
         this->saveProject();
-        updateWindowTitle(false);
-        savePending = false;
     }
 }
 
@@ -9464,7 +9476,7 @@ void MainWindow::toggleAutoSave(bool checked) {
     autoSave = checked;
     saveSettings();
     if (autoSave) {
-        autoSaveTimer->start(30000); // Start timer if enabled
+        autoSaveTimer->start(kAutoSaveIntervalMs);
     } else {
         autoSaveTimer->stop(); // Stop timer if disabled
     }
