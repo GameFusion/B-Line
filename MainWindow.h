@@ -308,6 +308,7 @@ public slots:
 
     void updateLayerThumbnail(const QString& uuid, const QImage& thumbnail);
     void onPaintAreaImageModified(const QString& uuid, const QImage& image, bool editing);
+    void onPaintCanvasSizeChanged(int canvasWidth, int canvasHeight);
     void showOptionsDialog();
 
     void exportStoryboardPDF();

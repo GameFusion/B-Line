@@ -2075,6 +2075,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(paint->getPaintArea(), &PaintArea::LayerPositionChanged,
             this, &MainWindow::onLayerPositionChanged);
+    connect(paint, &MainWindowPaint::canvasSizeChangedByUser,
+            this, &MainWindow::onPaintCanvasSizeChanged);
 
     // Initialize new widgets
     ui->spinBox_layerRotation->setRange(-3600, 3600);
@@ -3880,6 +3882,9 @@ void MainWindow::loadProject(QString projectDir){
 
     if (!selectedPanel) {
         Log().warning() << "No panel found after project load; drawing context remains unbound.";
+    } else if (paint && paint->getPaintArea()) {
+        // Default post-open viewport: centered output frame, fully visible.
+        paint->getPaintArea()->resetZoom();
     }
 
     this->updateWindowTitle(bootstrapChanged);
@@ -5418,6 +5423,9 @@ void MainWindow::onTimeCursorMoved(double time)
     pastCameraAct->setEnabled(theShot);
 
     applyShotViewportToPaintArea(paint->getPaintArea(), theShot, ProjectContext::instance().projectJson());
+    const QSize shotOutput = shotOutputResolutionOrDefault(theShot, ProjectContext::instance().projectJson());
+    const QSize shotCanvas = shotCanvasOrDefault(theShot, ProjectContext::instance().projectJson(), shotOutput);
+    paint->syncCanvasPresetDisplay(shotCanvas.width(), shotCanvas.height());
 
     //--- If no panel found, show white image
     if (!newPanel) {
@@ -6488,6 +6496,47 @@ void MainWindow::onPaintAreaImageModified(const QString& uuid, const QImage& ima
 
     // Set the resized thumbnail in the marker
     panelMarker->setThumbnail(resizedImage);
+}
+
+void MainWindow::onPaintCanvasSizeChanged(int canvasWidth, int canvasHeight)
+{
+    if (!scriptBreakdown || !timeLineView) {
+        return;
+    }
+
+    ShotContext shotContext = findShotForTime(timeLineView->getCursorTime());
+    if (!shotContext.isValid()) {
+        return;
+    }
+
+    QJsonObject& projectJson = ProjectContext::instance().projectJson();
+    const QSize projectOutput = projectOutputResolution(projectJson);
+    const QSize projectCanvas = projectCanvasSize(projectJson, projectOutput);
+
+    const int targetCanvasWidth = qMax(projectOutput.width(), canvasWidth);
+    const int targetCanvasHeight = qMax(projectOutput.height(), canvasHeight);
+
+    int shotCanvasWidth = targetCanvasWidth;
+    int shotCanvasHeight = targetCanvasHeight;
+    if (targetCanvasWidth == projectCanvas.width() &&
+        targetCanvasHeight == projectCanvas.height()) {
+        // 0 means "inherit from project defaults" in Shot.
+        shotCanvasWidth = 0;
+        shotCanvasHeight = 0;
+    }
+
+    if (shotContext.shot->canvasWidth == shotCanvasWidth &&
+        shotContext.shot->canvasHeight == shotCanvasHeight) {
+        return;
+    }
+
+    shotContext.shot->canvasWidth = shotCanvasWidth;
+    shotContext.shot->canvasHeight = shotCanvasHeight;
+    shotContext.scene->dirty = true;
+
+    Log::info() << "Shot canvas updated from PaintArea for shot "
+                << shotContext.shot->uuid.c_str()
+                << ": " << targetCanvasWidth << "x" << targetCanvasHeight << "\n";
 }
 
 void MainWindow::showOptionsDialog()
@@ -7970,37 +8019,170 @@ void MainWindow::onNewShot()
         return;
     }
 
-    // Get current time and shot context
     double currentTime = timeLineView->getCursorTime();
-    ShotContext currentCtx = findShotForTime(currentTime);
-    if (!currentCtx.isValid()) {
-        QMessageBox::warning(this, "Error", "No valid shot selected. Please select a time in the timeline.");
+    ShotContext cursorCtx = findShotForTime(currentTime);
+
+    auto& scenes = scriptBreakdown->getScenes();
+    struct ShotRef {
+        GameFusion::Scene* scene = nullptr;
+        GameFusion::Shot* shot = nullptr;
+        int sceneIndex = -1;
+        int shotIndex = -1;
+        int globalIndex = -1;
+    };
+
+    std::vector<ShotRef> shotRefs;
+    shotRefs.reserve(64);
+    for (int sceneIndex = 0; sceneIndex < static_cast<int>(scenes.size()); ++sceneIndex) {
+        auto& scene = scenes[sceneIndex];
+        if (scene.markedForDeletion) {
+            continue;
+        }
+        for (int shotIndex = 0; shotIndex < static_cast<int>(scene.shots.size()); ++shotIndex) {
+            shotRefs.push_back({&scene, &scene.shots[shotIndex], sceneIndex, shotIndex, -1});
+        }
+    }
+
+    if (shotRefs.empty()) {
+        QMessageBox::warning(this, "Error", "No shots available in the project. Create a scene with a shot first.");
         return;
     }
 
+    std::sort(shotRefs.begin(), shotRefs.end(), [](const ShotRef& a, const ShotRef& b) {
+        if (a.shot->startTime != b.shot->startTime) {
+            return a.shot->startTime < b.shot->startTime;
+        }
+        if (a.shot->endTime != b.shot->endTime) {
+            return a.shot->endTime < b.shot->endTime;
+        }
+        if (a.sceneIndex != b.sceneIndex) {
+            return a.sceneIndex < b.sceneIndex;
+        }
+        return a.shotIndex < b.shotIndex;
+    });
+
+    for (int i = 0; i < static_cast<int>(shotRefs.size()); ++i) {
+        shotRefs[i].globalIndex = i;
+    }
+
     // Show dialog to get user input
-    QString shotName = "SHOT_" + QString::number(currentCtx.scene->shots.size() * 10);
+    const int fallbackNameIndex =
+        cursorCtx.scene ? static_cast<int>(cursorCtx.scene->shots.size()) * 10
+                        : static_cast<int>(shotRefs.size()) * 10;
+    QString shotName = "SHOT_" + QString::number(fallbackNameIndex);
     qreal fps = ProjectContext::instance().projectJson()["fps"].toDouble(24.0);
     NewShotDialog dialog(fps, shotName, this);
     if (dialog.exec() != QDialog::Accepted) {
         return; // User canceled
     }
 
-    double durationMs = dialog.getDurationMs();
+    double durationMs = qMax(1.0, dialog.getDurationMs());
     bool insertBefore = dialog.isInsertBefore();
     shotName = dialog.getShotName();
-    int panelCount = dialog.getPanelCount();
+    int panelCount = qMax(1, dialog.getPanelCount());
+
+    TrackItem* track = timeLineView->getTrack(0);
+    if (!track) {
+        QMessageBox::warning(this, "Error", "Storyboard track not found.");
+        return;
+    }
+
+    auto segmentIndexFromUuid = [track](const std::string& shotUuid, int fallbackIndex) {
+        const int idx = track->getSegmentIndexByUuid(QString::fromStdString(shotUuid));
+        return idx >= 0 ? idx : fallbackIndex;
+    };
+
+    GameFusion::Scene* targetScene = nullptr;
+    int shotIndex = 0;
+    int segmentIndex = 0;
+    double startTimeMs = 0.0;
+    double endTimeMs = 0.0;
+
+    if (cursorCtx.isValid()) {
+        targetScene = cursorCtx.scene;
+        auto& sceneShots = targetScene->shots;
+        auto it = std::find_if(sceneShots.begin(), sceneShots.end(),
+                               [&](const GameFusion::Shot& s) { return s.uuid == cursorCtx.shot->uuid; });
+        const int currentShotIndex = (it == sceneShots.end())
+                                         ? 0
+                                         : static_cast<int>(std::distance(sceneShots.begin(), it));
+        const int currentSegmentIndex = segmentIndexFromUuid(cursorCtx.shot->uuid, currentShotIndex);
+
+        if (insertBefore) {
+            shotIndex = currentShotIndex;
+            segmentIndex = currentSegmentIndex;
+            startTimeMs = cursorCtx.shot->startTime;
+        } else {
+            shotIndex = currentShotIndex + 1;
+            segmentIndex = currentSegmentIndex + 1;
+            startTimeMs = cursorCtx.shot->endTime;
+        }
+        endTimeMs = startTimeMs + durationMs;
+    } else {
+        const ShotRef& firstRef = shotRefs.front();
+        const ShotRef& lastRef = shotRefs.back();
+
+        if (currentTime >= lastRef.shot->endTime) {
+            // Cursor after last shot: append.
+            targetScene = lastRef.scene;
+            shotIndex = lastRef.shotIndex + 1;
+            segmentIndex = segmentIndexFromUuid(lastRef.shot->uuid, lastRef.globalIndex) + 1;
+            startTimeMs = lastRef.shot->endTime;
+            endTimeMs = startTimeMs + durationMs;
+        } else if (currentTime <= firstRef.shot->startTime) {
+            // Cursor before first shot: prepend.
+            targetScene = firstRef.scene;
+            shotIndex = firstRef.shotIndex;
+            segmentIndex = segmentIndexFromUuid(firstRef.shot->uuid, firstRef.globalIndex);
+            startTimeMs = firstRef.shot->startTime - durationMs;
+            endTimeMs = startTimeMs + durationMs;
+        } else {
+            // Cursor between two shots: insert and fill exactly the gap.
+            const ShotRef* prevRef = nullptr;
+            const ShotRef* nextRef = nullptr;
+            for (int i = 0; i + 1 < static_cast<int>(shotRefs.size()); ++i) {
+                const double prevEnd = shotRefs[i].shot->endTime;
+                const double nextStart = shotRefs[i + 1].shot->startTime;
+                if (currentTime >= prevEnd && currentTime < nextStart) {
+                    prevRef = &shotRefs[i];
+                    nextRef = &shotRefs[i + 1];
+                    break;
+                }
+            }
+
+            if (prevRef && nextRef) {
+                targetScene = nextRef->scene;
+                shotIndex = nextRef->shotIndex;
+                segmentIndex = segmentIndexFromUuid(nextRef->shot->uuid, nextRef->globalIndex);
+                startTimeMs = prevRef->shot->endTime;
+                endTimeMs = nextRef->shot->startTime;
+                durationMs = qMax(1.0, endTimeMs - startTimeMs);
+            } else {
+                // Fallback to append if no strict gap match was found.
+                targetScene = lastRef.scene;
+                shotIndex = lastRef.shotIndex + 1;
+                segmentIndex = segmentIndexFromUuid(lastRef.shot->uuid, lastRef.globalIndex) + 1;
+                startTimeMs = lastRef.shot->endTime;
+                endTimeMs = startTimeMs + durationMs;
+            }
+        }
+    }
+
+    if (!targetScene) {
+        QMessageBox::warning(this, "Error", "Unable to resolve target scene for the new shot.");
+        return;
+    }
 
     // Create new shot
     GameFusion::Shot newShot;
     newShot.name = shotName.toStdString();
     newShot.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
-    newShot.frameCount = qRound(durationMs * fps / 1000.0);
-    newShot.startTime = insertBefore ? currentCtx.shot->startTime : currentCtx.shot->endTime;
-    newShot.endTime = newShot.startTime + durationMs;
+    newShot.frameCount = qMax(1, qRound(durationMs * fps / 1000.0));
+    newShot.startTime = startTimeMs;
+    newShot.endTime = endTimeMs;
 
     // Create panels
-    double panelDuration = durationMs / panelCount; // Evenly distribute duration
+    double panelDuration = durationMs / panelCount;
     for (int i = 0; i < panelCount; ++i) {
         GameFusion::Panel panel;
         panel.name = QString("%1_PANEL_%2").arg(shotName).arg(i + 1, 3, 10, QChar('0')).toStdString();
@@ -8016,50 +8198,11 @@ void MainWindow::onNewShot()
         newShot.panels.push_back(panel);
     }
 
-    size_t shotIndex = -1;
-    int segmentIndex = -1;
-    TrackItem* track = timeLineView->getTrack(0);
-
-    ShotContext prevCtx;
-
-    // Determine shot index
-    if (!insertBefore) {
-        if(currentCtx.isValid()){
-            auto& shots = currentCtx.scene->shots;
-            auto it = std::find_if(shots.begin(), shots.end(),
-                           [&](const GameFusion::Shot& s) { return s.uuid == currentCtx.shot->uuid; });
-            shotIndex = (it == shots.end()) ? shots.size() : (it - shots.begin())+1;
-            segmentIndex = track->getSegmentIndexByUuid(QString::fromStdString(currentCtx.shot->uuid))+1;
-        }
-        else{
-            shotIndex = 0;
-            segmentIndex = 0;
-        }
-    }
-    else {
-        if(currentCtx.isValid()){
-            auto& shots = currentCtx.scene->shots;
-            auto it = std::find_if(shots.begin(), shots.end(),
-                                   [&](const GameFusion::Shot& s) { return s.uuid == currentCtx.shot->uuid; });
-            shotIndex = (it == shots.end()) ? shots.size() : (it - shots.begin());
-            segmentIndex = track->getSegmentIndexByUuid(QString::fromStdString(currentCtx.shot->uuid));
-        }
-        else{
-            shotIndex = 0;
-            segmentIndex = 0;
-        }
-    }
-
     // Create ShotIndices
-    ShotIndices shotIndices;
-    shotIndices.shotIndex = static_cast<int>(shotIndex);
-    shotIndices.segmentIndex = segmentIndex;
+    ShotIndices shotIndices(shotIndex, segmentIndex);
 
     // Push to undo stack
-    if (!insertBefore)
-        undoStack->push(new InsertSegmentCommand(this, shotIndices, newShot, *currentCtx.scene, QString::fromStdString(currentCtx.scene->uuid), currentTime));
-    else
-        undoStack->push(new InsertSegmentCommand(this, shotIndices, newShot, *currentCtx.scene, QString::fromStdString(currentCtx.scene->uuid), currentTime));
+    undoStack->push(new InsertSegmentCommand(this, shotIndices, newShot, *targetScene, QString::fromStdString(targetScene->uuid), currentTime));
 
     // UI updates handled by InsertSegmentCommand::redo()
 }
