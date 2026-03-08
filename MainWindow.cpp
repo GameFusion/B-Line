@@ -18,9 +18,15 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QVBoxLayout>
+#include <QDialogButtonBox>
+#include <QTextBrowser>
+#include <QTextDocument>
+#include <QCoreApplication>
+#include <QUrl>
 
 #include <QFile>
 #include <QDir>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -107,6 +113,31 @@ QString makeDefaultShotName(int shotIndex) {
 
 QString makeDefaultPanelName(int panelIndex) {
     return QString("PANEL_%1").arg(panelIndex, 3, 10, QChar('0'));
+}
+
+QString findGettingStartedGuidePath() {
+    constexpr int kMaxSearchDepth = 8;
+    const QString relativeGuidePath = QStringLiteral("docs/getting-started-local-101.md");
+
+    auto resolveFromBaseDir = [&](QDir baseDir) -> QString {
+        for (int depth = 0; depth < kMaxSearchDepth; ++depth) {
+            const QString candidatePath = baseDir.filePath(relativeGuidePath);
+            if (QFileInfo::exists(candidatePath)) {
+                return QFileInfo(candidatePath).absoluteFilePath();
+            }
+            if (!baseDir.cdUp()) {
+                break;
+            }
+        }
+        return {};
+    };
+
+    QString guidePath = resolveFromBaseDir(QDir(QCoreApplication::applicationDirPath()));
+    if (!guidePath.isEmpty()) {
+        return guidePath;
+    }
+
+    return resolveFromBaseDir(QDir(QDir::currentPath()));
 }
 
 } // namespace
@@ -1746,6 +1777,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     setAcceptDrops(true);
 
+    ui->actionSave->setShortcut(QKeySequence::Save);
+    ui->actionSave->setShortcutContext(Qt::ApplicationShortcut);
+
     QObject::connect(ui->actionOpen, SIGNAL(triggered()), this, SLOT(loadProject()));
     QObject::connect(ui->actionNew, SIGNAL(triggered()), this, SLOT(newProject()));
     QObject::connect(ui->actionEdit_Project, SIGNAL(triggered()), this, SLOT(editProject()));
@@ -1761,6 +1795,14 @@ MainWindow::MainWindow(QWidget *parent)
     QObject::connect(ui->actionBlack, SIGNAL(triggered()), this, SLOT(setBlackTheme()));
 
     connect(ui->actionPainterOptions, &QAction::triggered, this, &MainWindow::showOptionsDialog);
+
+    QAction *gettingStartedAct = new QAction(tr("Getting Started (Local 101)"), this);
+    gettingStartedAct->setShortcut(QKeySequence(Qt::Key_F1));
+    gettingStartedAct->setShortcutContext(Qt::ApplicationShortcut);
+    ui->menuHelp->insertAction(ui->actionAbout, gettingStartedAct);
+    ui->menuHelp->insertSeparator(ui->actionAbout);
+    connect(gettingStartedAct, &QAction::triggered, this, &MainWindow::openGettingStartedGuide);
+
     connect(ui->actionAbout, SIGNAL(triggered()), this, SLOT(about()));
 
     connect(ui->actionExport_as_PDF, &QAction::triggered, this, &MainWindow::exportStoryboardPDF);
@@ -2303,6 +2345,78 @@ void MainWindow::about()
 
 }
 
+void MainWindow::openGettingStartedGuide()
+{
+    const QString guidePath = findGettingStartedGuidePath();
+    if (guidePath.isEmpty()) {
+        QMessageBox::warning(this,
+                             tr("Getting Started"),
+                             tr("Unable to find docs/getting-started-local-101.md from the application or current directory."));
+        return;
+    }
+
+    QFile guideFile(guidePath);
+    if (!guideFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QMessageBox::warning(this,
+                             tr("Getting Started"),
+                             tr("Failed to open guide file:\n%1").arg(guidePath));
+        return;
+    }
+
+    const QString markdown = QString::fromUtf8(guideFile.readAll());
+
+    QDialog* dialog = new QDialog(this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setWindowTitle(tr("Getting Started (Local 101)"));
+    dialog->resize(980, 720);
+
+    QVBoxLayout* layout = new QVBoxLayout(dialog);
+    layout->setContentsMargins(12, 12, 12, 12);
+    layout->setSpacing(10);
+
+    QTextBrowser* browser = new QTextBrowser(dialog);
+    browser->setOpenExternalLinks(true);
+    browser->setReadOnly(true);
+    browser->setStyleSheet(
+        "QTextBrowser {"
+        "  background: #f7fafc;"
+        "  color: #1f2933;"
+        "  border: 1px solid #d5dde6;"
+        "  border-radius: 10px;"
+        "  padding: 18px;"
+        "  font-size: 14px;"
+        "}"
+    );
+
+    browser->document()->setDefaultStyleSheet(
+        "body { line-height: 1.55; }"
+        "h1 { color: #0b6fb8; font-size: 28px; margin: 0 0 12px 0; }"
+        "h2 { color: #0b6fb8; font-size: 22px; margin-top: 20px; }"
+        "h3 { color: #1f4f7a; font-size: 18px; margin-top: 16px; }"
+        "p { margin: 8px 0; }"
+        "ul, ol { margin-top: 8px; margin-bottom: 8px; }"
+        "code { background: #e9eef5; color: #17324d; padding: 2px 4px; border-radius: 4px; }"
+        "pre { background: #111827; color: #f3f4f6; padding: 12px; border-radius: 8px; }"
+        "a { color: #005ea3; text-decoration: none; }"
+    );
+
+    const QFileInfo guideInfo(guidePath);
+    browser->document()->setBaseUrl(QUrl::fromLocalFile(guideInfo.absolutePath() + "/"));
+    browser->setMarkdown(markdown);
+    browser->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    browser->verticalScrollBar()->setValue(0);
+
+    QDialogButtonBox* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
+    connect(buttonBox, &QDialogButtonBox::rejected, dialog, &QDialog::close);
+
+    layout->addWidget(browser, 1);
+    layout->addWidget(buttonBox, 0);
+
+    dialog->show();
+    dialog->raise();
+    dialog->activateWindow();
+}
+
 #include <QPointer>
 static QPointer<MainWindow> g_mainWindowInstance = nullptr;
 
@@ -2753,9 +2867,33 @@ void MainWindow::insertShotSegment(const GameFusion::Shot& shot, ShotIndices sho
         }
         */
 
+        TrackItem* track = timeLineView->getTrack(0);
+        if (!track) {
+            GameFusion::Log().error() << "Storyboard track not found while inserting shot";
+            return;
+        }
+
+        // If we insert at index 0 of an existing scene, re-link the scene marker to the new first shot.
+        if (!sceneMarker && shotIndices.shotIndex == 0) {
+            CursorItem* existingSceneMarker = timeLineView->getSceneMarkerFromUuid(scene->uuid.c_str());
+            if (existingSceneMarker) {
+                for (Segment* baseSegment : track->segments()) {
+                    ShotSegment* existingShotSegment = dynamic_cast<ShotSegment*>(baseSegment);
+                    if (!existingShotSegment) {
+                        continue;
+                    }
+                    if (existingShotSegment->getSceneMarkerPointer() == existingSceneMarker ||
+                        existingShotSegment->getSceneMarkerUuid() == existingSceneMarker->getUuid()) {
+                        existingShotSegment->setSceneMarker(nullptr);
+                        break;
+                    }
+                }
+                sceneMarker = existingSceneMarker;
+            }
+        }
+
         // Create and insert ShotSegment
         ShotSegment* shotSegment = createShotSegment(insertedShot, *scene, sceneMarker);
-        TrackItem* track = timeLineView->getTrack(0);
        // int segmentIndex = track->insertSegmentAtIndex(shotIndices.segmentIndex, shotSegment);
 
         int segmentIndex = shotIndices.segmentIndex;
@@ -7328,7 +7466,7 @@ void MainWindow::onNewScene()
     QString sceneName = dialog.getSceneName();
     double durationMs = dialog.getDurationMs();
     int shotCount = dialog.getShotCount();
-    bool after = dialog.getInsertMode() == NewSceneDialog::InsertMode::InsertAfter;
+    NewSceneDialog::InsertMode insertMode = dialog.getInsertMode();
     GameFusion::Scene newScene;
     newScene.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
     newScene.name = sceneName.toStdString();
@@ -7370,13 +7508,34 @@ void MainWindow::onNewScene()
         newScene.shots.push_back(shot);
     }
 
-    ShotContext shotContext = this->findShotForTime(currentTime);
+    ShotContext shotContext = findShotForTime(currentTime);
+    std::vector<GameFusion::Scene>& scenes = scriptBreakdown->getScenes();
 
-    if(!shotContext.isValid()){
-        return;
+    QString sceneRefUuid;
+    bool insertAfter = true;
+
+    if (insertMode == NewSceneDialog::InsertMode::Append) {
+        for (auto it = scenes.rbegin(); it != scenes.rend(); ++it) {
+            if (!it->markedForDeletion) {
+                sceneRefUuid = QString::fromStdString(it->uuid);
+                break;
+            }
+        }
+
+        if (sceneRefUuid.isEmpty() && shotContext.scene) {
+            sceneRefUuid = QString::fromStdString(shotContext.scene->uuid);
+        }
+    } else {
+        if (!shotContext.scene) {
+            QMessageBox::warning(this, "Error", "No valid scene selected. Move the timeline cursor inside a scene and try again.");
+            return;
+        }
+
+        sceneRefUuid = QString::fromStdString(shotContext.scene->uuid);
+        insertAfter = (insertMode != NewSceneDialog::InsertMode::InsertBefore);
     }
 
-    undoStack->push(new InsertSceneCommand(this, newScene, shotContext.scene->uuid.c_str(), after, currentTime, "New Scene"));
+    undoStack->push(new InsertSceneCommand(this, newScene, sceneRefUuid, insertAfter, currentTime, "New Scene"));
     GameFusion::Log().info() << "Created new scene " << newScene.uuid.c_str();
 }
 
@@ -8659,72 +8818,90 @@ void MainWindow::insertScene(GameFusion::Scene &newSceneInput, QString sceneRefU
     }
 
     GameFusion::Scene &newScene = newSceneInput;
+    std::vector<GameFusion::Scene> &scenes = scriptBreakdown->getScenes();
 
-    GameFusion::Scene *sceneRef = this->findSceneByUuid(sceneRefUuid.toStdString());
-    int sceneRefIndex = findSceneIndex(sceneRefUuid.toStdString());
-    // Get reference to the inserted scene
-    GameFusion::Shot *firstShot=&sceneRef->shots.front();
-    GameFusion::Shot *lastShot=&sceneRef->shots.back();
-
-    TrackItem* track = timeLineView->getTrack(0);
-
-    ShotIndices shotIndices;
-    long timeStart = 0;
-
-    if(insertAfter){
-        timeStart = lastShot->endTime;
-        ShotContext shotContext = findShotByUuid(lastShot->uuid);
-        if(!shotContext.isValid())
-            return;
-
-        shotIndices.shotIndex = 0;
-        shotIndices.segmentIndex = track->getSegmentIndexByUuid(lastShot->uuid.c_str())+1;
-    }else{
-        timeStart = firstShot->startTime;
-
-        ShotContext shotContext = findShotByUuid(lastShot->uuid);
-        if(!shotContext.isValid())
-            return;
-        shotIndices.shotIndex = 0;
-        shotIndices.segmentIndex = track->getSegmentIndexByUuid(lastShot->uuid.c_str())-1;
+    TrackItem* track = timeLineView ? timeLineView->getTrack(0) : nullptr;
+    if (!track) {
+        GameFusion::Log().error() << "Storyboard track is unavailable";
+        return;
     }
 
-    if(!shotIndices.isValid())
-    {
-        return;
+    int insertSceneIndex = static_cast<int>(scenes.size());
+    long timeStart = 0;
+    int segmentInsertIndex = track->segments().size();
+
+    GameFusion::Scene* sceneRef = nullptr;
+    int sceneRefIndex = -1;
+    if (!sceneRefUuid.isEmpty()) {
+        sceneRef = findSceneByUuid(sceneRefUuid.toStdString());
+        if (sceneRef) {
+            sceneRefIndex = findSceneIndex(sceneRefUuid.toStdString());
+        }
+    }
+
+    if (sceneRef && sceneRefIndex >= 0) {
+        if (!sceneRef->shots.empty()) {
+            const GameFusion::Shot& firstShot = sceneRef->shots.front();
+            const GameFusion::Shot& lastShot = sceneRef->shots.back();
+
+            if (insertAfter) {
+                insertSceneIndex = sceneRefIndex + 1;
+                timeStart = static_cast<long>(lastShot.endTime);
+                segmentInsertIndex = track->getSegmentIndexByUuid(QString::fromStdString(lastShot.uuid)) + 1;
+            } else {
+                insertSceneIndex = sceneRefIndex;
+                timeStart = static_cast<long>(firstShot.startTime);
+                const int firstSegmentIndex = track->getSegmentIndexByUuid(QString::fromStdString(firstShot.uuid));
+                segmentInsertIndex = qMax(0, firstSegmentIndex);
+            }
+        } else {
+            insertSceneIndex = sceneRefIndex + (insertAfter ? 1 : 0);
+        }
+    } else if (!scenes.empty()) {
+        // Fallback for empty/missing reference UUID (for example undoing deletion of the only scene).
+        insertSceneIndex = static_cast<int>(scenes.size());
+        const GameFusion::Scene& lastScene = scenes.back();
+        if (!lastScene.shots.empty()) {
+            const GameFusion::Shot& lastShot = lastScene.shots.back();
+            timeStart = static_cast<long>(lastShot.endTime);
+            segmentInsertIndex = track->getSegmentIndexByUuid(QString::fromStdString(lastShot.uuid)) + 1;
+        }
+    }
+
+    if (insertSceneIndex < 0) {
+        insertSceneIndex = 0;
+    }
+    if (insertSceneIndex > static_cast<int>(scenes.size())) {
+        insertSceneIndex = static_cast<int>(scenes.size());
+    }
+    if (segmentInsertIndex < 0) {
+        segmentInsertIndex = 0;
     }
 
     GameFusion::Scene emptyScene = newScene;
     emptyScene.shots.clear();
     emptyScene.dirty = true;
 
-    std::vector<GameFusion::Scene> &scenes = scriptBreakdown->getScenes();
-    scenes.insert(scenes.begin() + sceneRefIndex+1, emptyScene);
+    scenes.insert(scenes.begin() + insertSceneIndex, emptyScene);
 
-    //GameFusion::Scene insertScene = newScene;
-
-
-    // Add a scene marker
     CursorItem *sceneMarker = timeLineView->addSceneMarker(timeStart, emptyScene.name.c_str());
     sceneMarker->setUuid(emptyScene.uuid.c_str());
-    //segment->setSceneMarker(sceneMarker);
 
-    for(auto &shot: newScene.shots){
-
-
-        long shotDuration = shot.endTime - shot.startTime;
+    ShotIndices shotIndices(0, segmentInsertIndex);
+    for (auto &shot : newScene.shots) {
+        const long shotDuration = static_cast<long>(shot.endTime - shot.startTime);
         shot.startTime = timeStart;
         shot.endTime = timeStart + shotDuration;
         timeStart += shotDuration;
 
-        insertShotSegment(shot, shotIndices, emptyScene, shot.startTime, sceneMarker);
+        insertShotSegment(shot, shotIndices, emptyScene, cursorTime, sceneMarker);
 
         sceneMarker = nullptr;
-
-        shotIndices.shotIndex ++;
-        shotIndices.segmentIndex ++;
+        shotIndices.shotIndex++;
+        shotIndices.segmentIndex++;
     }
 
+    updateScenes();
     timeLineView->update();
 }
 

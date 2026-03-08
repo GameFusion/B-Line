@@ -202,6 +202,7 @@ public slots:
 	void login();
 	void quit();
 	void about();
+    void openGettingStartedGuide();
 
     void addAudioTrack();
 

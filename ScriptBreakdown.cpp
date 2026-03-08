@@ -4,6 +4,8 @@
 #include <QJsonArray>
 #include <QApplication>
 #include <QDir>
+#include <QRegularExpression>
+#include <QSet>
 
 #include <sstream>
 
@@ -995,7 +997,23 @@ void ScriptBreakdown::loadScene(const QString& sceneName, const QJsonObject &sce
 }
 
 void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
+    QDir scenesDir(projectPath + "/scenes");
+    if (!scenesDir.exists()) {
+        scenesDir.mkpath(".");
+    }
+
+    QSet<QString> reservedFilenames;
+    for (const Scene& existingScene : scenes) {
+        if (existingScene.markedForDeletion || existingScene.filename.empty()) {
+            continue;
+        }
+        reservedFilenames.insert(QString::fromStdString(existingScene.filename).toLower());
+    }
+
+    int sceneOrdinal = 0;
     for (Scene& scene : scenes) {
+        sceneOrdinal++;
+
         if (scene.markedForDeletion) {
             // Move file to trash directory
             QString src = projectPath + "/scenes/" + scene.filename.c_str();
@@ -1006,6 +1024,38 @@ void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
                 Log().info() << "Moved scene to trash: " << dst.toUtf8().constData() << "\n";
             }
             continue; // skip saving
+        }
+
+        if (scene.filename.empty()) {
+            if (scene.sceneId.empty()) {
+                scene.sceneId = QString("%1").arg(sceneOrdinal, 4, 10, QChar('0')).toStdString();
+            }
+
+            QString safeSceneName = QString::fromStdString(scene.name).trimmed();
+            if (safeSceneName.isEmpty()) {
+                safeSceneName = "SCENE";
+            }
+
+            safeSceneName.replace(QRegularExpression("[^a-zA-Z0-9_-]+"), "_");
+            safeSceneName.replace(QRegularExpression("_+"), "_");
+            safeSceneName.remove(QRegularExpression("^_+|_+$"));
+            if (safeSceneName.isEmpty()) {
+                safeSceneName = "SCENE";
+            }
+
+            const QString sceneId = QString::fromStdString(scene.sceneId);
+            const QString baseName = QString("%1_%2").arg(sceneId, safeSceneName);
+            QString candidate = baseName + ".json";
+            int suffix = 2;
+
+            while (reservedFilenames.contains(candidate.toLower()) ||
+                   QFile::exists(scenesDir.filePath(candidate))) {
+                candidate = QString("%1_%2.json").arg(baseName).arg(suffix++);
+            }
+
+            scene.filename = candidate.toStdString();
+            reservedFilenames.insert(candidate.toLower());
+            scene.dirty = true;
         }
 
         if (scene.dirty && !scene.filename.empty()) {
