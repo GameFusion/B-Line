@@ -88,13 +88,13 @@ namespace {
 std::vector<GameFusion::Layer> createDefaultPanelLayers() {
     std::vector<GameFusion::Layer> layers;
 
-    GameFusion::Layer bgLayer;
-    bgLayer.name = "BG";
-    layers.push_back(bgLayer);
-
     GameFusion::Layer drawLayer;
     drawLayer.name = "Layer 1";
     layers.push_back(drawLayer);
+
+    GameFusion::Layer bgLayer;
+    bgLayer.name = "BG";
+    layers.push_back(bgLayer);
 
     return layers;
 }
