@@ -132,23 +132,33 @@ void ScriptBreakdown::addShotFromJson(const QJsonObject& obj, Scene& scene) {
 
 
 
-    if(obj.contains("resolution")) {
-        shot.resolutionWidth = obj["resolution"].toArray()[0].toInt();
-        shot.resolutionHeight = obj["resolution"].toArray()[1].toInt();
-    }
-    else
-    {
-        shot.resolutionWidth = ProjectContext::instance().projectJson()["resolution"].toArray()[0].toInt();
-        shot.resolutionWidth = ProjectContext::instance().projectJson()["resolution"].toArray()[1].toInt();
+    if (obj.contains("resolution") && obj["resolution"].isArray()) {
+        const QJsonArray resolutionArray = obj["resolution"].toArray();
+        if (resolutionArray.size() >= 2) {
+            shot.resolutionWidth = resolutionArray[0].toInt();
+            shot.resolutionHeight = resolutionArray[1].toInt();
+        }
     }
 
-    if(obj.contains("canvas")) {
-        shot.canvasWidth = obj["canvas"].toArray()[0].toInt();
-        shot.canvasHeight = obj["canvas"].toArray()[1].toInt();
+    if (obj.contains("canvas") && obj["canvas"].isArray()) {
+        const QJsonArray canvasArray = obj["canvas"].toArray();
+        if (canvasArray.size() >= 2) {
+            shot.canvasWidth = canvasArray[0].toInt();
+            shot.canvasHeight = canvasArray[1].toInt();
+        }
     }
-    else {
-        shot.canvasWidth = ProjectContext::instance().projectJson()["canvas"].toArray()[0].toInt();
-        shot.canvasHeight = ProjectContext::instance().projectJson()["canvas"].toArray()[1].toInt();
+
+    if (shot.resolutionWidth < 0) {
+        shot.resolutionWidth = 0;
+    }
+    if (shot.resolutionHeight < 0) {
+        shot.resolutionHeight = 0;
+    }
+    if (shot.canvasWidth < 0) {
+        shot.canvasWidth = 0;
+    }
+    if (shot.canvasHeight < 0) {
+        shot.canvasHeight = 0;
     }
 
     float mspf = fps > 0 ? 1000./fps : 1;
@@ -1078,8 +1088,12 @@ void ScriptBreakdown::saveModifiedScenes(QString projectPath) {
                 shotObj["startTime"] = shot.startTime;
                 shotObj["endTime"] = shot.endTime;
 
-                shotObj["resolution"] = QJsonArray{shot.resolutionWidth, shot.resolutionWidth};
-                shotObj["canvas"] = QJsonArray{shot.canvasWidth, shot.canvasHeight};
+                if (shot.resolutionWidth > 0 && shot.resolutionHeight > 0) {
+                    shotObj["resolution"] = QJsonArray{shot.resolutionWidth, shot.resolutionHeight};
+                }
+                if (shot.canvasWidth > 0 && shot.canvasHeight > 0) {
+                    shotObj["canvas"] = QJsonArray{shot.canvasWidth, shot.canvasHeight};
+                }
 
                 QJsonObject cameraObj;
                 cameraObj["movement"] = QString::fromStdString(shot.camera.movement);

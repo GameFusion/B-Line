@@ -2,10 +2,14 @@
 #define NEWPROJECTDIALOG_H
 
 #include <QDialog>
+#include <QSize>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class NewProjectDialog; }
 QT_END_NAMESPACE
+
+class QSpinBox;
+class QJsonObject;
 
 class NewProjectDialog : public QDialog
 {
@@ -34,6 +38,9 @@ public:
     QString episodeFormat() const;
     QString copyright() const;
     QString startTC() const;
+    QString canvasPreset() const;
+    int canvasWidth() const;
+    int canvasHeight() const;
     QString canvasMargin() const;
     QString canvasMarginCustom() const;
 
@@ -41,7 +48,14 @@ private slots:
     void browseLocation();
 
 private:
+    QSize outputResolutionFromUi() const;
+    void applyCanvasPreset(const QString& preset);
+    void syncCanvasPresetFromSize();
+
     Ui::NewProjectDialog *ui;
+    QSpinBox *canvasWidthSpinBox = nullptr;
+    QSpinBox *canvasHeightSpinBox = nullptr;
+    bool updatingCanvasControls = false;
 };
 
 #endif // NEWPROJECTDIALOG_H

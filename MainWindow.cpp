@@ -140,6 +140,114 @@ QString findGettingStartedGuidePath() {
     return resolveFromBaseDir(QDir(QDir::currentPath()));
 }
 
+QSize projectOutputResolution(const QJsonObject& projectJson) {
+    const QJsonArray resArray = projectJson.value("resolution").toArray();
+    const int width = qMax(1, resArray.size() > 0 ? resArray[0].toInt(1920) : 1920);
+    const int height = qMax(1, resArray.size() > 1 ? resArray[1].toInt(1080) : 1080);
+    return QSize(width, height);
+}
+
+int parseLeadingInt(const QString& text, bool* okOut = nullptr) {
+    const QString trimmed = text.trimmed();
+    if (trimmed.isEmpty()) {
+        if (okOut) {
+            *okOut = false;
+        }
+        return 0;
+    }
+
+    int index = 0;
+    if (trimmed[0] == '+' || trimmed[0] == '-') {
+        index = 1;
+    }
+    while (index < trimmed.size() && trimmed[index].isDigit()) {
+        ++index;
+    }
+
+    if (index <= 0 || (index == 1 && (trimmed[0] == '+' || trimmed[0] == '-'))) {
+        if (okOut) {
+            *okOut = false;
+        }
+        return 0;
+    }
+
+    bool ok = false;
+    const int value = trimmed.left(index).toInt(&ok);
+    if (okOut) {
+        *okOut = ok;
+    }
+    return ok ? value : 0;
+}
+
+int projectCanvasPercentFallback(const QJsonObject& projectJson) {
+    if (projectJson.contains("canvas_percent")) {
+        return qMax(0, projectJson.value("canvas_percent").toInt());
+    }
+
+    const QJsonValue marginValue = projectJson.value("canvas_margin");
+    if (!marginValue.isString()) {
+        return 0;
+    }
+
+    const QString marginText = marginValue.toString().trimmed();
+    if (marginText.compare(QStringLiteral("Custom"), Qt::CaseInsensitive) == 0) {
+        return 0;
+    }
+
+    bool ok = false;
+    const int percent = parseLeadingInt(marginText, &ok);
+    return ok ? qMax(0, percent) : 0;
+}
+
+QSize projectCanvasSize(const QJsonObject& projectJson, const QSize& output) {
+    const QJsonArray canvasArray = projectJson.value("canvas").toArray();
+    int width = canvasArray.size() > 0 ? canvasArray[0].toInt(0) : 0;
+    int height = canvasArray.size() > 1 ? canvasArray[1].toInt(0) : 0;
+
+    if (width <= 0 || height <= 0) {
+        const int marginPercent = projectCanvasPercentFallback(projectJson);
+        width = qRound(output.width() * (1.0 + marginPercent / 100.0));
+        height = qRound(output.height() * (1.0 + marginPercent / 100.0));
+    }
+
+    width = qMax(output.width(), width);
+    height = qMax(output.height(), height);
+    return QSize(width, height);
+}
+
+QSize shotOutputResolutionOrDefault(const GameFusion::Shot* shot, const QJsonObject& projectJson) {
+    const QSize projectOutput = projectOutputResolution(projectJson);
+    if (!shot) {
+        return projectOutput;
+    }
+
+    const int width = shot->resolutionWidth > 0 ? shot->resolutionWidth : projectOutput.width();
+    const int height = shot->resolutionHeight > 0 ? shot->resolutionHeight : projectOutput.height();
+    return QSize(qMax(1, width), qMax(1, height));
+}
+
+QSize shotCanvasOrDefault(const GameFusion::Shot* shot, const QJsonObject& projectJson, const QSize& output) {
+    const QSize projectCanvas = projectCanvasSize(projectJson, output);
+    if (!shot) {
+        return projectCanvas;
+    }
+
+    const int width = shot->canvasWidth > 0 ? shot->canvasWidth : projectCanvas.width();
+    const int height = shot->canvasHeight > 0 ? shot->canvasHeight : projectCanvas.height();
+    return QSize(qMax(output.width(), width), qMax(output.height(), height));
+}
+
+void applyShotViewportToPaintArea(PaintArea* paintArea, const GameFusion::Shot* shot, const QJsonObject& projectJson) {
+    if (!paintArea) {
+        return;
+    }
+
+    const QSize output = shotOutputResolutionOrDefault(shot, projectJson);
+    const QSize canvas = shotCanvasOrDefault(shot, projectJson, output);
+    paintArea->setCanvasSize(canvas.width(), canvas.height());
+    paintArea->setOutputResolution(output.width(), output.height());
+}
+
 } // namespace
 
 
@@ -1511,6 +1619,7 @@ MainWindow::MainWindow(QWidget *parent)
     ProjectContext::instance().projectJson()["resolution"] = QJsonArray{1920, 1080};
     ProjectContext::instance().projectJson()["canvas_margin"] = QString("20");
     ProjectContext::instance().projectJson()["canvas_percent"] = 20;
+    ProjectContext::instance().projectJson()["canvas_preset"] = QString("Overscan 20% (Recommended)");
     ProjectContext::instance().projectJson()["canvas"] = QJsonArray{2304, 1296}; // For 20% margin: 1920 + 384, etc.
 
     paintCanvas = new PaintCanvas();
@@ -3621,6 +3730,29 @@ void MainWindow::loadProject(QString projectDir){
         return;
     }
 
+    const QSize outputSize = projectOutputResolution(ProjectContext::instance().projectJson());
+    const QSize canvasSize = projectCanvasSize(ProjectContext::instance().projectJson(), outputSize);
+    ProjectContext::instance().projectJson()["resolution"] = QJsonArray{outputSize.width(), outputSize.height()};
+    ProjectContext::instance().projectJson()["canvas"] = QJsonArray{canvasSize.width(), canvasSize.height()};
+
+    if (!ProjectContext::instance().projectJson().contains("canvas_preset")) {
+        const QString preset = (canvasSize == outputSize) ? QStringLiteral("Match Output")
+                                                          : QStringLiteral("Custom");
+        ProjectContext::instance().projectJson()["canvas_preset"] = preset;
+    }
+
+    if (!ProjectContext::instance().projectJson().contains("canvas_percent")) {
+        const int canvasPercent = outputSize.width() > 0
+                                      ? qMax(0, qRound((canvasSize.width() - outputSize.width()) * 100.0 / outputSize.width()))
+                                      : 0;
+        ProjectContext::instance().projectJson()["canvas_percent"] = canvasPercent;
+    }
+
+    if (!ProjectContext::instance().projectJson().contains("canvas_margin")) {
+        ProjectContext::instance().projectJson()["canvas_margin"] =
+            QString::number(ProjectContext::instance().projectJson()["canvas_percent"].toInt());
+    }
+
     // (Optional) Store project metadata
     ProjectContext::instance().setCurrentProjectName( ProjectContext::instance().projectJson()["projectName"].toString() );
     ProjectContext::instance().setCurrentProjectPath( projectDir );
@@ -5042,21 +5174,21 @@ void MainWindow::newProject()
     projectJson["copyright"] = dialog.copyright();
     projectJson["start_tc"] = dialog.startTC();  // Use in timeline (e.g., offset TC display)
 
-    QString canvasMargin = dialog.canvasMargin();
+    int canvasWidth = dialog.canvasWidth();
+    int canvasHeight = dialog.canvasHeight();
 
-    int marginPct = 0;
-    if(canvasMargin == "Custom")
-        marginPct = dialog.canvasMarginCustom().toInt();
-    else
-        marginPct = dialog.canvasMargin().toInt();  // 0 if empty/invalid
+    const int marginPctW = resWidth > 0
+                               ? qMax(0, qRound((canvasWidth - resWidth) * 100.0 / resWidth))
+                               : 0;
+    const int marginPctH = resHeight > 0
+                               ? qMax(0, qRound((canvasHeight - resHeight) * 100.0 / resHeight))
+                               : 0;
+    const bool uniformMargin = qAbs(marginPctW - marginPctH) <= 1;
+    const int marginPct = uniformMargin ? qMax(0, (marginPctW + marginPctH) / 2) : marginPctW;
 
-    int marginW = resWidth * marginPct / 100;  // Total extra (split left/right)
-    int marginH = resHeight * marginPct / 100;
-    int canvasWidth = resWidth + marginW;
-    int canvasHeight = resHeight + marginH;
-
-    projectJson["canvas_margin"] = canvasMargin;
-    projectJson["canvas_percent"] = marginPct;  // For reference/editing
+    projectJson["canvas_margin"] = uniformMargin ? QString::number(marginPct) : QString("Custom");
+    projectJson["canvas_percent"] = marginPct;  // Backward-compatible metadata
+    projectJson["canvas_preset"] = dialog.canvasPreset();
     projectJson["canvas"] = QJsonArray{canvasWidth, canvasHeight};
 
 
@@ -5103,17 +5235,16 @@ void MainWindow::editProject(){
     int resWidth = resParts.value(0).toInt();
     int resHeight = resParts.value(1).toInt();
 
-    // Parse canvas margin and compute canvas size
-    QString canvasMargin = dialog.canvasMargin();
-
-    int marginPct = dialog.canvasMargin().toInt();
-    if(canvasMargin == "Custom")
-        marginPct = dialog.canvasMarginCustom().toInt();
-
-    int marginW = resWidth * marginPct / 100;
-    int marginH = resHeight * marginPct / 100;
-    int canvasWidth = resWidth + marginW;
-    int canvasHeight = resHeight + marginH;
+    int canvasWidth = dialog.canvasWidth();
+    int canvasHeight = dialog.canvasHeight();
+    const int marginPctW = resWidth > 0
+                               ? qMax(0, qRound((canvasWidth - resWidth) * 100.0 / resWidth))
+                               : 0;
+    const int marginPctH = resHeight > 0
+                               ? qMax(0, qRound((canvasHeight - resHeight) * 100.0 / resHeight))
+                               : 0;
+    const bool uniformMargin = qAbs(marginPctW - marginPctH) <= 1;
+    const int marginPct = uniformMargin ? qMax(0, (marginPctW + marginPctH) / 2) : marginPctW;
 
     // Update projectJson
     projectJson["projectName"] = name;
@@ -5126,7 +5257,9 @@ void MainWindow::editProject(){
     projectJson["resolution"] = QJsonArray{resWidth, resHeight};
     projectJson["safeFrame"] = dialog.safeFrame();
     projectJson["canvas"] = QJsonArray{canvasWidth, canvasHeight};
+    projectJson["canvas_margin"] = uniformMargin ? QString::number(marginPct) : QString("Custom");
     projectJson["canvas_percent"] = marginPct;
+    projectJson["canvas_preset"] = dialog.canvasPreset();
     projectJson["subtitle"] = dialog.subtitle();
     projectJson["episode_format"] = dialog.episodeFormat();
     projectJson["copyright"] = dialog.copyright();
@@ -5283,6 +5416,8 @@ void MainWindow::onTimeCursorMoved(double time)
     renameCameraAct->setEnabled(theShot);
     copyCameraAct->setEnabled(theShot);
     pastCameraAct->setEnabled(theShot);
+
+    applyShotViewportToPaintArea(paint->getPaintArea(), theShot, ProjectContext::instance().projectJson());
 
     //--- If no panel found, show white image
     if (!newPanel) {
