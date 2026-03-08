@@ -500,6 +500,7 @@ protected:
 private:
     void loadSettings();
     void saveSettings();
+    bool initialStartupZoomResetApplied = false;
 
     QTimer *dirtyCheckTimer;
     QTimer *autoSaveTimer;

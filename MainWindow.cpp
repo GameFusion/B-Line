@@ -9882,6 +9882,16 @@ void MainWindow::setLayerPosition(const QString& layerUuid, const QString& panel
 
 void MainWindow::showEvent(QShowEvent *event) {
     QMainWindow::showEvent(event);
+
+    if (!initialStartupZoomResetApplied) {
+        initialStartupZoomResetApplied = true;
+        QTimer::singleShot(0, this, [this]() {
+            if (paint && paint->getPaintArea()) {
+                paint->getPaintArea()->resetZoom();
+            }
+        });
+    }
+
     emit windowShown();
 }
 
