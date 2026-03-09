@@ -17,12 +17,27 @@
 #include <QButtonGroup>
 #include <QInputDialog>
 #include <QLabel>
+#include <QComboBox>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QDialogButtonBox>
+#include <QPushButton>
 #include <QTextBrowser>
 #include <QTextDocument>
+#include <QTextBlock>
+#include <QTextCursor>
+#include <QTextFragment>
+#include <QTextImageFormat>
 #include <QCoreApplication>
 #include <QUrl>
+#include <QPixmap>
+#include <QHash>
+#include <QPdfWriter>
+#include <QPageSize>
+#include <QPageLayout>
+#include <QStandardPaths>
+#include <QtPrintSupport/QPrinter>
+#include <QtPrintSupport/QPrintDialog>
 
 #include <QFile>
 #include <QDir>
@@ -86,6 +101,133 @@ using namespace GameFusion;
 namespace {
 constexpr int kAutoSaveIntervalMs = 10000;
 
+class GuideTextBrowser final : public QTextBrowser {
+public:
+    using QTextBrowser::QTextBrowser;
+
+    void fitImagesToViewport() {
+        QTextDocument* doc = document();
+        if (!doc) {
+            return;
+        }
+
+        const qreal maxWidth = qMax<qreal>(120.0, viewport()->width() - 28.0);
+
+        struct PendingImageFormatUpdate {
+            int position = 0;
+            int length = 0;
+            QTextImageFormat format;
+        };
+
+        std::vector<PendingImageFormatUpdate> updates;
+        updates.reserve(32);
+
+        for (QTextBlock block = doc->begin(); block.isValid(); block = block.next()) {
+            for (QTextBlock::iterator it = block.begin(); !it.atEnd(); ++it) {
+                QTextFragment fragment = it.fragment();
+                if (!fragment.isValid()) {
+                    continue;
+                }
+
+                QTextCharFormat charFormat = fragment.charFormat();
+                if (!charFormat.isImageFormat()) {
+                    continue;
+                }
+
+                QTextImageFormat imageFormat = charFormat.toImageFormat();
+                const QString imageName = imageFormat.name();
+                if (imageName.isEmpty()) {
+                    continue;
+                }
+
+                QImage sourceImage = sourceImages_.value(imageName);
+                if (sourceImage.isNull()) {
+                    const QVariant resource = doc->resource(QTextDocument::ImageResource, QUrl(imageName));
+                    if (resource.canConvert<QImage>()) {
+                        sourceImage = qvariant_cast<QImage>(resource);
+                    } else if (resource.canConvert<QPixmap>()) {
+                        sourceImage = qvariant_cast<QPixmap>(resource).toImage();
+                    }
+
+                    if (!sourceImage.isNull()) {
+                        sourceImages_.insert(imageName, sourceImage);
+                    }
+                }
+
+                if (sourceImage.isNull()) {
+                    continue;
+                }
+
+                const qreal sourceWidth = sourceImage.width();
+                const qreal sourceHeight = sourceImage.height();
+                if (sourceWidth <= 0.0 || sourceHeight <= 0.0) {
+                    continue;
+                }
+
+                // Rule:
+                // - If image is wider than viewport, fit to viewport width.
+                // - If image is smaller than viewport, reduce by 15% (show at 85%).
+                const qreal targetWidth = (sourceWidth > maxWidth + 0.5)
+                                              ? maxWidth
+                                              : qMax<qreal>(1.0, sourceWidth * 0.85);
+                const qreal targetHeight = sourceHeight * (targetWidth / sourceWidth);
+                const qreal dpr = qMax<qreal>(1.0, devicePixelRatioF());
+                const QSize targetLogicalSize(qMax(1, qRound(targetWidth)),
+                                              qMax(1, qRound(targetHeight)));
+                const QSize targetPixelSize(qMax(1, qRound(targetWidth * dpr)),
+                                            qMax(1, qRound(targetHeight * dpr)));
+
+                // Rebuild image resource with smooth resampling for better visual quality.
+                if (scaledSizes_.value(imageName) != targetPixelSize) {
+                    const QImage highQualitySource =
+                        sourceImage.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+                    QImage scaledImage = highQualitySource.scaled(targetPixelSize,
+                                                                  Qt::IgnoreAspectRatio,
+                                                                  Qt::SmoothTransformation);
+                    scaledImage.setDevicePixelRatio(dpr);
+                    doc->addResource(QTextDocument::ImageResource, QUrl(imageName), scaledImage);
+                    scaledSizes_.insert(imageName, targetPixelSize);
+                }
+
+                bool changed = false;
+                if (qFuzzyCompare(imageFormat.width(), targetLogicalSize.width()) == false ||
+                    qFuzzyCompare(imageFormat.height(), targetLogicalSize.height()) == false) {
+                    imageFormat.setWidth(targetLogicalSize.width());
+                    imageFormat.setHeight(targetLogicalSize.height());
+                    changed = true;
+                }
+
+                if (changed) {
+                    updates.push_back({fragment.position(), fragment.length(), imageFormat});
+                }
+            }
+        }
+
+        if (updates.empty()) {
+            return;
+        }
+
+        QTextCursor cursor(doc);
+        cursor.beginEditBlock();
+        for (const PendingImageFormatUpdate& update : updates) {
+            cursor.setPosition(update.position);
+            cursor.setPosition(update.position + update.length, QTextCursor::KeepAnchor);
+            cursor.setCharFormat(update.format);
+        }
+        cursor.endEditBlock();
+    }
+
+protected:
+    void resizeEvent(QResizeEvent* event) override {
+        QTextBrowser::resizeEvent(event);
+        QTimer::singleShot(0, this, [this]() { fitImagesToViewport(); });
+    }
+
+private:
+    QHash<QString, QImage> sourceImages_;
+    QHash<QString, QSize> scaledSizes_;
+};
+
 std::vector<GameFusion::Layer> createDefaultPanelLayers() {
     std::vector<GameFusion::Layer> layers;
 
@@ -116,9 +258,8 @@ QString makeDefaultPanelName(int panelIndex) {
     return QString("PANEL_%1").arg(panelIndex, 3, 10, QChar('0'));
 }
 
-QString findGettingStartedGuidePath() {
+QString findGuidePath(const QString& relativeGuidePath) {
     constexpr int kMaxSearchDepth = 8;
-    const QString relativeGuidePath = QStringLiteral("docs/getting-started-local-101.md");
 
     auto resolveFromBaseDir = [&](QDir baseDir) -> QString {
         for (int depth = 0; depth < kMaxSearchDepth; ++depth) {
@@ -139,6 +280,14 @@ QString findGettingStartedGuidePath() {
     }
 
     return resolveFromBaseDir(QDir(QDir::currentPath()));
+}
+
+QString findGettingStartedGuidePath() {
+    return findGuidePath(QStringLiteral("docs/getting-started-local-101.md"));
+}
+
+QString findGettingStartedGuideFrenchPath() {
+    return findGuidePath(QStringLiteral("docs/getting-started-local-101-fr.md"));
 }
 
 QSize projectOutputResolution(const QJsonObject& projectJson) {
@@ -1913,6 +2062,12 @@ MainWindow::MainWindow(QWidget *parent)
     ui->menuHelp->insertSeparator(ui->actionAbout);
     connect(gettingStartedAct, &QAction::triggered, this, &MainWindow::openGettingStartedGuide);
 
+    // Keep Help as the right-most top-level menu.
+    if (menuBar() && ui->menuHelp) {
+        menuBar()->removeAction(ui->menuHelp->menuAction());
+        menuBar()->addAction(ui->menuHelp->menuAction());
+    }
+
     connect(ui->actionAbout, SIGNAL(triggered()), this, SLOT(about()));
 
     connect(ui->actionExport_as_PDF, &QAction::triggered, this, &MainWindow::exportStoryboardPDF);
@@ -2459,34 +2614,41 @@ void MainWindow::about()
 
 void MainWindow::openGettingStartedGuide()
 {
-    const QString guidePath = findGettingStartedGuidePath();
-    if (guidePath.isEmpty()) {
+    const QString englishGuidePath = findGettingStartedGuidePath();
+    const QString frenchGuidePath = findGettingStartedGuideFrenchPath();
+
+    if (englishGuidePath.isEmpty()) {
         QMessageBox::warning(this,
                              tr("Getting Started"),
                              tr("Unable to find docs/getting-started-local-101.md from the application or current directory."));
         return;
     }
 
-    QFile guideFile(guidePath);
-    if (!guideFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QMessageBox::warning(this,
-                             tr("Getting Started"),
-                             tr("Failed to open guide file:\n%1").arg(guidePath));
-        return;
-    }
-
-    const QString markdown = QString::fromUtf8(guideFile.readAll());
-
     QDialog* dialog = new QDialog(this);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->setWindowTitle(tr("Getting Started (Local 101)"));
-    dialog->resize(980, 720);
+    dialog->resize(1040, 760);
 
     QVBoxLayout* layout = new QVBoxLayout(dialog);
     layout->setContentsMargins(12, 12, 12, 12);
     layout->setSpacing(10);
 
-    QTextBrowser* browser = new QTextBrowser(dialog);
+    QHBoxLayout* controlsLayout = new QHBoxLayout();
+    controlsLayout->setSpacing(8);
+
+    QLabel* languageLabel = new QLabel(tr("Language:"), dialog);
+    QComboBox* languageCombo = new QComboBox(dialog);
+    languageCombo->addItem(tr("English"), englishGuidePath);
+    languageCombo->addItem(tr("French"), frenchGuidePath);
+
+    QPushButton* exportPdfButton = new QPushButton(tr("Export PDF..."), dialog);
+
+    controlsLayout->addWidget(languageLabel);
+    controlsLayout->addWidget(languageCombo);
+    controlsLayout->addStretch(1);
+    controlsLayout->addWidget(exportPdfButton);
+
+    GuideTextBrowser* browser = new GuideTextBrowser(dialog);
     browser->setOpenExternalLinks(true);
     browser->setReadOnly(true);
     browser->setStyleSheet(
@@ -2510,17 +2672,202 @@ void MainWindow::openGettingStartedGuide()
         "code { background: #e9eef5; color: #17324d; padding: 2px 4px; border-radius: 4px; }"
         "pre { background: #111827; color: #f3f4f6; padding: 12px; border-radius: 8px; }"
         "a { color: #005ea3; text-decoration: none; }"
+        "img { max-width: 100%; height: auto; display: block; margin: 10px 0; }"
     );
 
-    const QFileInfo guideInfo(guidePath);
-    browser->document()->setBaseUrl(QUrl::fromLocalFile(guideInfo.absolutePath() + "/"));
-    browser->setMarkdown(markdown);
+    const auto loadGuideFromPath = [this, browser](const QString& guidePath) -> bool {
+        if (guidePath.isEmpty()) {
+            return false;
+        }
+
+        QFile guideFile(guidePath);
+        if (!guideFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QMessageBox::warning(this,
+                                 tr("Getting Started"),
+                                 tr("Failed to open guide file:\n%1").arg(guidePath));
+            return false;
+        }
+
+        const QString markdown = QString::fromUtf8(guideFile.readAll());
+        const QFileInfo guideInfo(guidePath);
+        browser->document()->setBaseUrl(QUrl::fromLocalFile(guideInfo.absolutePath() + "/"));
+        browser->setMarkdown(markdown);
+        QTimer::singleShot(0, browser, [browser]() { browser->fitImagesToViewport(); });
+        browser->verticalScrollBar()->setValue(0);
+        return true;
+    };
+
+    if (!loadGuideFromPath(englishGuidePath)) {
+        return;
+    }
+
+    connect(languageCombo,
+            &QComboBox::currentIndexChanged,
+            dialog,
+            [this, loadGuideFromPath, languageCombo](int index) {
+                const QString selectedPath = languageCombo->itemData(index).toString();
+                if (selectedPath.isEmpty()) {
+                    QMessageBox::warning(this,
+                                         tr("Getting Started"),
+                                         tr("The selected language file is not available on disk."));
+                    return;
+                }
+                loadGuideFromPath(selectedPath);
+            });
+
+    connect(exportPdfButton,
+            &QPushButton::clicked,
+            dialog,
+            [this, languageCombo]() {
+                const QString guidePath = languageCombo->currentData().toString();
+                if (guidePath.isEmpty()) {
+                    QMessageBox::warning(this,
+                                         tr("Export PDF"),
+                                         tr("No guide file is selected for export."));
+                    return;
+                }
+
+                QFile guideFile(guidePath);
+                if (!guideFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                    QMessageBox::warning(this,
+                                         tr("Export PDF"),
+                                         tr("Failed to open guide file:\n%1").arg(guidePath));
+                    return;
+                }
+
+                const QString markdown = QString::fromUtf8(guideFile.readAll());
+                const QString languageCode = (languageCombo->currentIndex() == 1) ? QStringLiteral("fr")
+                                                                                   : QStringLiteral("en");
+
+                QString defaultDir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+                if (defaultDir.isEmpty()) {
+                    defaultDir = QDir::homePath();
+                }
+
+                const QString suggestedPath =
+                    QDir(defaultDir).filePath(QString("boarder-101-%1.pdf").arg(languageCode));
+
+                QString exportPath = QFileDialog::getSaveFileName(this,
+                                                                  tr("Export Guide as PDF"),
+                                                                  suggestedPath,
+                                                                  tr("PDF Files (*.pdf)"));
+                if (exportPath.isEmpty()) {
+                    return;
+                }
+
+                if (!exportPath.endsWith(".pdf", Qt::CaseInsensitive)) {
+                    exportPath += ".pdf";
+                }
+
+                QPdfWriter pdfWriter(exportPath);
+                pdfWriter.setResolution(180);
+                pdfWriter.setPageSize(QPageSize(QPageSize::A4));
+                pdfWriter.setPageMargins(QMarginsF(14.0, 14.0, 14.0, 14.0), QPageLayout::Millimeter);
+
+                QTextDocument exportDoc;
+                exportDoc.setDocumentMargin(12.0);
+                exportDoc.setDefaultStyleSheet(
+                    "body { line-height: 1.45; font-size: 12pt; }"
+                    "h1 { color: #0b6fb8; font-size: 24pt; margin: 0 0 10pt 0; }"
+                    "h2 { color: #0b6fb8; font-size: 17pt; margin-top: 14pt; }"
+                    "h3 { color: #1f4f7a; font-size: 14pt; margin-top: 10pt; }"
+                    "p, li { font-size: 12pt; }"
+                    "ul, ol { margin-top: 6pt; margin-bottom: 6pt; }"
+                    "code { background: #e9eef5; color: #17324d; }"
+                    "pre { background: #111827; color: #f3f4f6; padding: 8pt; }"
+                    "img { width: 50%; max-width: 50%; height: auto; display: block; margin: 8pt 0; }"
+                );
+
+                const QFileInfo guideInfo(guidePath);
+                exportDoc.setBaseUrl(QUrl::fromLocalFile(guideInfo.absolutePath() + "/"));
+                exportDoc.setMarkdown(markdown);
+
+                const QSizeF pageSizePx =
+                    pdfWriter.pageLayout().paintRectPixels(pdfWriter.resolution()).size();
+                exportDoc.setPageSize(pageSizePx);
+
+                const auto scaleExportImages = [](QTextDocument& doc, qreal maxImageWidthPx) {
+                    struct PendingImageFormatUpdate {
+                        int position = 0;
+                        int length = 0;
+                        QTextImageFormat format;
+                    };
+
+                    std::vector<PendingImageFormatUpdate> updates;
+                    updates.reserve(64);
+
+                    for (QTextBlock block = doc.begin(); block.isValid(); block = block.next()) {
+                        for (QTextBlock::iterator it = block.begin(); !it.atEnd(); ++it) {
+                            const QTextFragment fragment = it.fragment();
+                            if (!fragment.isValid()) {
+                                continue;
+                            }
+
+                            QTextCharFormat charFormat = fragment.charFormat();
+                            if (!charFormat.isImageFormat()) {
+                                continue;
+                            }
+
+                            QTextImageFormat imageFormat = charFormat.toImageFormat();
+                            const QUrl imageUrl(imageFormat.name());
+                            const QVariant resource = doc.resource(QTextDocument::ImageResource, imageUrl);
+
+                            QImage sourceImage;
+                            if (resource.canConvert<QImage>()) {
+                                sourceImage = qvariant_cast<QImage>(resource);
+                            } else if (resource.canConvert<QPixmap>()) {
+                                sourceImage = qvariant_cast<QPixmap>(resource).toImage();
+                            }
+
+                            if (sourceImage.isNull() || sourceImage.width() <= 0 || sourceImage.height() <= 0) {
+                                continue;
+                            }
+
+                            const qreal sourceWidth = static_cast<qreal>(sourceImage.width());
+                            const qreal sourceHeight = static_cast<qreal>(sourceImage.height());
+                            const qreal targetWidth = qMin(maxImageWidthPx, sourceWidth * 0.5);
+                            const qreal targetHeight = sourceHeight * (targetWidth / sourceWidth);
+
+                            if (qFuzzyCompare(imageFormat.width(), targetWidth) &&
+                                qFuzzyCompare(imageFormat.height(), targetHeight)) {
+                                continue;
+                            }
+
+                            imageFormat.setWidth(targetWidth);
+                            imageFormat.setHeight(targetHeight);
+                            updates.push_back({fragment.position(), fragment.length(), imageFormat});
+                        }
+                    }
+
+                    if (updates.empty()) {
+                        return;
+                    }
+
+                    QTextCursor cursor(&doc);
+                    cursor.beginEditBlock();
+                    for (const PendingImageFormatUpdate& update : updates) {
+                        cursor.setPosition(update.position);
+                        cursor.setPosition(update.position + update.length, QTextCursor::KeepAnchor);
+                        cursor.setCharFormat(update.format);
+                    }
+                    cursor.endEditBlock();
+                };
+
+                scaleExportImages(exportDoc, pageSizePx.width() * 0.5);
+                exportDoc.print(&pdfWriter);
+
+                QMessageBox::information(this,
+                                         tr("Export PDF"),
+                                         tr("Guide exported to:\n%1").arg(exportPath));
+            });
+
     browser->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     browser->verticalScrollBar()->setValue(0);
 
     QDialogButtonBox* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
     connect(buttonBox, &QDialogButtonBox::rejected, dialog, &QDialog::close);
 
+    layout->addLayout(controlsLayout, 0);
     layout->addWidget(browser, 1);
     layout->addWidget(buttonBox, 0);
 

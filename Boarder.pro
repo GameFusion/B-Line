@@ -141,6 +141,7 @@ INCLUDEPATH += $$GF/Applications/CommonQt
 SOURCES += $$GF/Applications/CommonQt/QtUtils.cpp
 
 QT += opengl
+QT += printsupport
 CONFIG += qt thread release
 
 # Input

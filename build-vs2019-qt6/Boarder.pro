@@ -213,6 +213,7 @@ QT += widgets
 QT += network
 QT += concurrent
 QT += openglwidgets
+QT += printsupport
 CONFIG += qt thread
 
 # Input
