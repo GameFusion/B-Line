@@ -102,6 +102,18 @@ using namespace GameFusion;
 namespace {
 constexpr int kAutoSaveIntervalMs = 10000;
 
+bool isSupportedImageDropPath(const QString& localPath) {
+    const QFileInfo info(localPath);
+    if (!info.exists() || !info.isFile()) {
+        return false;
+    }
+
+    static const QStringList kImageExts = {
+        "png", "jpg", "jpeg", "bmp", "gif", "tif", "tiff", "webp"
+    };
+    return kImageExts.contains(info.suffix().toLower());
+}
+
 class GuideTextBrowser final : public QTextBrowser {
 public:
     using QTextBrowser::QTextBrowser;
@@ -2558,63 +2570,123 @@ void MainWindow::update()
 
 void MainWindow::dragEnterEvent(QDragEnterEvent *event)
 {
-    printf("dragEnter\n");
+    if (!event || !event->mimeData() || !event->mimeData()->hasUrls()) {
+        event->ignore();
+        return;
+    }
 
-    //if (event->mimeData()->hasFormat("text/plain"))
+    bool hasSupportedImage = false;
+    const QList<QUrl> urls = event->mimeData()->urls();
+    for (const QUrl& url : urls) {
+        const QString localPath = url.toLocalFile();
+        if (localPath.isEmpty()) {
+            continue;
+        }
+        if (isSupportedImageDropPath(localPath)) {
+            hasSupportedImage = true;
+            break;
+        }
+    }
+
+    if (!hasSupportedImage) {
+        event->ignore();
+        return;
+    }
+
+    if (!paint || !paint->getPaintArea()) {
+        event->ignore();
+        return;
+    }
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    const QPoint globalPos = mapToGlobal(event->position().toPoint());
+#else
+    const QPoint globalPos = event->globalPos();
+#endif
+    const QPoint posInPaintArea = paint->getPaintArea()->mapFromGlobal(globalPos);
+    if (!paint->getPaintArea()->rect().contains(posInPaintArea)) {
+        event->ignore();
+        return;
+    }
+
     event->acceptProposedAction();
 }
 
 void MainWindow::dropEvent(QDropEvent *event)
 {
-    printf("Got dropEvent!\n");
-
-    //
-    //-----------------------------------------------
-    //
-
-    GameFusion::Str plainText = (char*)event->mimeData()->text().constData();
-    printf("drop mime data = '%s'\n", (char*)plainText);
-
-    const QMimeData* mimeData = event->mimeData();
-
-    {
-        QByteArray data = mimeData->data("FileNameW");
-        QString filename = QString::fromUtf16((ushort*)data.data(), data.size() / 2);
-        Str tmp = (char*)filename.toLatin1().constData();
-        printf("**** fileNameW = %s\n", (char*)tmp);
+    if (!event || !event->mimeData() || !event->mimeData()->hasUrls()) {
+        event->ignore();
+        return;
     }
 
-    // check for our needed mime type, here a file or a list of files
-    if (mimeData->hasUrls())
-    {
-        QStringList pathList;
-        QList<QUrl> urlList = mimeData->urls();
+    if (!paint || !paint->getPaintArea()) {
+        event->ignore();
+        return;
+    }
 
-        // extract the local paths of the files
-        for (int i = 0; i < urlList.size(); i++)
-        {
-            QString file = urlList.at(i).toLocalFile();
-            Str file_str = (char*)file.toLatin1().constData();
-            pathList.append(urlList.at(i).toLocalFile());
-            printf("local path for file %d : %s\n", i, (char*)file_str);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    const QPoint globalPos = mapToGlobal(event->position().toPoint());
+#else
+    const QPoint globalPos = event->globalPos();
+#endif
+    const QPoint posInPaintArea = paint->getPaintArea()->mapFromGlobal(globalPos);
+    if (!paint->getPaintArea()->rect().contains(posInPaintArea)) {
+        event->ignore();
+        return;
+    }
+
+    if (!currentPanel) {
+        QMessageBox::warning(this, tr("Drop Image"),
+                             tr("No active panel. Select a panel before dropping images."));
+        event->ignore();
+        return;
+    }
+
+    QStringList droppedImages;
+    const QList<QUrl> urls = event->mimeData()->urls();
+    for (const QUrl& url : urls) {
+        const QString localPath = url.toLocalFile();
+        if (localPath.isEmpty()) {
+            continue;
+        }
+        if (isSupportedImageDropPath(localPath)) {
+            droppedImages.push_back(QDir::toNativeSeparators(QFileInfo(localPath).absoluteFilePath()));
         }
     }
 
-    {
-
-        QList<QUrl> urls = event->mimeData()->urls();
-
-        for (int i = 0; i < urls.length(); i++)
-        {
-            printf("url %d\n", i);
-            GameFusion::Str urlText = (char*)urls[i].fileName().toLatin1().constData();;
-            printf("urlText '%s'\n", (char*)urlText);
-        }
+    if (droppedImages.isEmpty()) {
+        event->ignore();
+        return;
     }
 
-    //textBrowser->setPlainText(event->mimeData()->text());
-    //mimeTypeCombo->clear();
-    //mimeTypeCombo->addItems(event->mimeData()->formats());
+    const QString panelUuid = QString::fromStdString(currentPanel->uuid);
+    undoStack->beginMacro(tr("Drop Image Layer"));
+    QString lastLayerUuid;
+    for (const QString& imagePath : droppedImages) {
+        GameFusion::Layer newLayer;
+        const QFileInfo info(imagePath);
+        const QString baseName = info.completeBaseName().trimmed();
+        if (!baseName.isEmpty()) {
+            newLayer.name = baseName.toStdString();
+        } else {
+            newLayer.name = ("Layer " + std::to_string(currentPanel->layers.size() + 1));
+        }
+        newLayer.imageFilePath = imagePath.toStdString();
+        lastLayerUuid = QString::fromStdString(newLayer.uuid);
+        undoStack->push(new LayerAddCommand(newLayer, panelUuid, this));
+    }
+    undoStack->endMacro();
+
+    if (!lastLayerUuid.isEmpty()) {
+        for (int i = 0; i < ui->layerListWidget->count(); ++i) {
+            QListWidgetItem* item = ui->layerListWidget->item(i);
+            if (item && item->data(Qt::UserRole).toString() == lastLayerUuid) {
+                ui->layerListWidget->setCurrentItem(item);
+                ui->layerListWidget->scrollToItem(item);
+                break;
+            }
+        }
+    }
 
     event->acceptProposedAction();
 }
