@@ -114,6 +114,17 @@ bool isSupportedImageDropPath(const QString& localPath) {
     return kImageExts.contains(info.suffix().toLower());
 }
 
+QPointF centeredImageLayerTranslation(const QSize& imageSize, const QSize& outputSize) {
+    if (!imageSize.isValid() || !outputSize.isValid()) {
+        return QPointF(0.0, 0.0);
+    }
+
+    const QSize fittedSize = imageSize.scaled(outputSize, Qt::KeepAspectRatio);
+    const qreal tx = (outputSize.width() - fittedSize.width()) * 0.5;
+    const qreal ty = (outputSize.height() - fittedSize.height()) * 0.5;
+    return QPointF(tx, ty);
+}
+
 class GuideTextBrowser final : public QTextBrowser {
 public:
     using QTextBrowser::QTextBrowser;
@@ -2660,6 +2671,10 @@ void MainWindow::dropEvent(QDropEvent *event)
     }
 
     const QString panelUuid = QString::fromStdString(currentPanel->uuid);
+    PanelContext dropPanelContext = findPanelByUuid(currentPanel->uuid);
+    const QSize outputSize = shotOutputResolutionOrDefault(
+        dropPanelContext.shot,
+        ProjectContext::instance().projectJson());
     undoStack->beginMacro(tr("Drop Image Layer"));
     QString lastLayerUuid;
     for (const QString& imagePath : droppedImages) {
@@ -2671,6 +2686,16 @@ void MainWindow::dropEvent(QDropEvent *event)
         } else {
             newLayer.name = ("Layer " + std::to_string(currentPanel->layers.size() + 1));
         }
+        QImage droppedImage;
+        if (!droppedImage.load(imagePath)) {
+            continue;
+        }
+
+        const QPointF centeredTranslation = centeredImageLayerTranslation(
+            droppedImage.size(),
+            outputSize);
+        newLayer.x = static_cast<float>(centeredTranslation.x());
+        newLayer.y = static_cast<float>(centeredTranslation.y());
         newLayer.imageFilePath = imagePath.toStdString();
         lastLayerUuid = QString::fromStdString(newLayer.uuid);
         undoStack->push(new LayerAddCommand(newLayer, panelUuid, this));
@@ -10166,6 +10191,15 @@ void MainWindow::setLayerImage(const QString& layerUuid, const QString& panelUui
                 qWarning() << "Failed to load image:" << QString::fromStdString(imageFilePath);
                 return;
             }
+
+            const QSize outputSize = shotOutputResolutionOrDefault(
+                panelContext.shot,
+                ProjectContext::instance().projectJson());
+            const QPointF centeredTranslation = centeredImageLayerTranslation(
+                image.size(),
+                outputSize);
+            it->x = static_cast<float>(centeredTranslation.x());
+            it->y = static_cast<float>(centeredTranslation.y());
         }
 
         long panelStartTime = panelContext.shot->startTime + panelContext.panel->startTime;
