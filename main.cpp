@@ -5,6 +5,8 @@
 #include <QApplication>
 #include <QSplashScreen>
 #include <QTimer>
+#include <QDir>
+#include <QStandardPaths>
 
 #include "Str.h"
 #include "Log.h"
@@ -25,9 +27,33 @@ Q_IMPORT_PLUGIN(BasicToolsPlugin)
 
 using GameFusion::Log;
 
+static QString ResolveWritableLogPath()
+{
+    QString basePath = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    if (basePath.isEmpty()) {
+        basePath = QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation)).filePath("B-Line");
+    }
+
+    QString logPath = QDir(basePath).filePath("logs");
+    QDir dir;
+    if (!dir.mkpath(logPath)) {
+        logPath = QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation)).filePath("B-Line/logs");
+        dir.mkpath(logPath);
+    }
+
+    if (!logPath.endsWith('/') && !logPath.endsWith('\\')) {
+        logPath += '/';
+    }
+
+    return QDir::toNativeSeparators(logPath);
+}
+
 int main(int argc, char *argv[])
 {
 	QApplication app(argc, argv);
+    QCoreApplication::setOrganizationName("Stargit Studio AB");
+    QCoreApplication::setApplicationName("B-Line");
+    QCoreApplication::setApplicationVersion(QStringLiteral(VERSION_STRING));
 
 	// Prompt to attach debugger
 #ifdef DEBUG
@@ -55,9 +81,14 @@ int main(int argc, char *argv[])
     app.processEvents(); // Ensure splash screen is drawn immediately
     splash.showMessage("Loading...", Qt::AlignCenter, Qt::white);
 
-	GameFusion::Str logPath("./");
+    const QString logPathQt = ResolveWritableLogPath();
+    const QByteArray logPathUtf8 = logPathQt.toUtf8();
+    GameFusion::Str logPath(logPathUtf8.constData());
+    printf("B-Line log path: %s\n", logPathUtf8.constData());
 	GameFusion::Log::enableFile(logPath);
 	GameFusion::Log::EnableQueue();
+    GameFusion::Log::info("B-Line log path: %s\n", logPathUtf8.constData());
+
 
 #ifdef DEBUG
 	GameFusion::Console::Show();
@@ -87,6 +118,9 @@ int main(int argc, char *argv[])
 	QString appFilePath = QCoreApplication::applicationFilePath();
 	QString appDirPath = QCoreApplication::applicationDirPath();
 	QString appVersion = QCoreApplication::applicationVersion();
+    const QByteArray appVersionUtf8 = appVersion.toUtf8();
+    printf("B-Line version: %s\n", appVersionUtf8.constData());
+    GameFusion::Log::info("B-Line version: %s\n", appVersionUtf8.constData());
 
 	QFont f = app.font();
 	//f.setPointSize(QFontDatabase::systemFont(QFontDatabase::FixedFont).pointSize() + 5);
@@ -126,4 +160,3 @@ int main(int argc, char *argv[])
 
 	return app.exec();
 }
-

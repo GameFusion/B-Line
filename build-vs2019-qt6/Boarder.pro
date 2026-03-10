@@ -2,7 +2,7 @@
 TEMPLATE = app
 TARGET = Boarder
 
-VERSION = 1.0.0
+VERSION = 1.0.1
 DEFINES += VERSION_STRING=\\\"$$VERSION\\\"
 
 message(GameFusion env value set to $$(GameFusion))

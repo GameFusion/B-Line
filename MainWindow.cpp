@@ -49,6 +49,7 @@
 #include <QUndoStack>
 
 #include <QSettings>
+#include <QDateTime>
 
 #include "QtUtils.h"
 
@@ -2086,6 +2087,14 @@ MainWindow::MainWindow(QWidget *parent)
     toggleDetachedPipAct = ui->menuWindows->addAction(tr("PiP in Separate Window"));
     toggleDetachedPipAct->setCheckable(true);
     connect(toggleDetachedPipAct, &QAction::toggled, this, &MainWindow::onToggleDetachedPip);
+
+    toggleLowLatencyScrubAct = ui->menuWindows->addAction(tr("Low-Latency Scrubbing"));
+    toggleLowLatencyScrubAct->setCheckable(true);
+    toggleLowLatencyScrubAct->setToolTip(tr("Reduce non-essential timeline thumbnail/UI updates while scrubbing."));
+    connect(toggleLowLatencyScrubAct, &QAction::toggled, this, [this](bool enabled) {
+        lowLatencyScrubMode = enabled;
+        saveSettings();
+    });
 
     setupDockPanels();
 
@@ -5643,168 +5652,165 @@ void MainWindow::editProject(){
     QMessageBox::information(this, tr("Success"), tr("Project updated successfully."));
 }
 
+void MainWindow::updateContextActionAvailability(bool hasShotContext)
+{
+    if (actionAvailabilityInitialized &&
+        hasShotContext == lastActionHasShotContext &&
+        hasClipboardPanel == lastActionHasClipboardPanel) {
+        return;
+    }
+
+    splitSceneAct->setEnabled(hasShotContext);
+    renameSceneAct->setEnabled(hasShotContext);
+    duplicateSceneAct->setEnabled(hasShotContext);
+    deleteSceneAct->setEnabled(hasShotContext);
+
+    editShotAct->setEnabled(hasShotContext);
+    renameShotAct->setEnabled(hasShotContext);
+    duplicateShotAct->setEnabled(hasShotContext);
+    deleteShotAct->setEnabled(hasShotContext);
+
+    newPanelAct->setEnabled(hasShotContext);
+    insertPanelAct->setEnabled(hasShotContext);
+    editPanelAct->setEnabled(hasShotContext);
+    renamePanelAct->setEnabled(hasShotContext);
+    duplicatePanelAct->setEnabled(hasShotContext);
+    copyPanelAct->setEnabled(hasShotContext);
+    cutPanelAct->setEnabled(hasShotContext);
+    pastePanelAct->setEnabled(hasShotContext && hasClipboardPanel);
+    clearPanelAct->setEnabled(hasShotContext);
+    deletePanelAct->setEnabled(hasShotContext);
+
+    newCameraAct->setEnabled(hasShotContext);
+    deleteCameraAct->setEnabled(hasShotContext);
+    renameCameraAct->setEnabled(hasShotContext);
+    copyCameraAct->setEnabled(hasShotContext);
+    pastCameraAct->setEnabled(hasShotContext);
+
+    actionAvailabilityInitialized = true;
+    lastActionHasShotContext = hasShotContext;
+    lastActionHasClipboardPanel = hasClipboardPanel;
+}
+
+bool MainWindow::isInLowLatencyScrubWindow() const
+{
+    constexpr qint64 kScrubWindowMs = 120;
+    if (!lowLatencyScrubMode || lastScrubBurstMs <= 0) {
+        return false;
+    }
+    return (QDateTime::currentMSecsSinceEpoch() - lastScrubBurstMs) <= kScrubWindowMs;
+}
+
 void MainWindow::onTimeCursorMoved(double time)
 {
-    Log::info() << "Time cursor moved " << (float)time << "\n";
-    double cursorTime = timeLineView->getCursorTime();
-    Log::info() << "Time cursor time " << (float)cursorTime << "\n";
-    //--- Respond to timeline cursor change
-    //qDebug() << "Timeline cursor moved to time:" << time;
-    //Log().debug() << "Timeline cursor moved to time:" << (float)time << "\n";
-
-    //--- Update other UI parts if needed
-
-    //--- Find the current Scene → Shot → Panel at given time
-
-    /*----------------------------------------------------
-     * Find the current Scene → Shot → Panel at given time
-     *
-     * Project
-     * └─ Scenes (each has Shots)
-     *      └─ Shots (each has Panels)
-     *           └─ Panels (each has startTime, endTime, imagePath or image)
-     */
-
-    splitSceneAct->setEnabled(false);
-    renameSceneAct->setEnabled(false);
-    duplicateSceneAct->setEnabled(false);
-    deleteSceneAct->setEnabled(false);
-
-    editShotAct->setEnabled(false);
-    renameShotAct->setEnabled(false);
-    duplicateShotAct->setEnabled(false);
-    deleteShotAct->setEnabled(false);
-
-    newPanelAct->setEnabled(false);
-    insertPanelAct->setEnabled(false);
-    editPanelAct->setEnabled(false);
-    renamePanelAct->setEnabled(false);
-    duplicatePanelAct->setEnabled(false);
-    copyPanelAct->setEnabled(false);
-    cutPanelAct->setEnabled(false);
-    pastePanelAct->setEnabled(false);
-    clearPanelAct->setEnabled(false);
-    deletePanelAct->setEnabled(false);
-
-    newCameraAct->setEnabled(false);
-    deleteCameraAct->setEnabled(false);
-    renameCameraAct->setEnabled(false);
-    copyCameraAct->setEnabled(false);
-    pastCameraAct->setEnabled(false);
-
-
-    Panel* newPanel = nullptr;
-
-    long timeCounter = 0;
+    constexpr qint64 kScrubBurstThresholdMs = 35;
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    const bool scrubBurstActive = (lastCursorMoveMs > 0) &&
+                                  ((nowMs - lastCursorMoveMs) <= kScrubBurstThresholdMs);
+    lastCursorMoveMs = nowMs;
+    if (scrubBurstActive) {
+        lastScrubBurstMs = nowMs;
+    }
 
     float fps = ProjectContext::instance().projectJson()["fps"].toDouble();
-    if(fps <= 0)
-    {
+    if (fps <= 0) {
         Log().info() << "Invalid project fps " << fps << "\n";
+        updateContextActionAvailability(false);
         return;
     }
     float mspf = 1000 / fps;
 
-    if (!scriptBreakdown)
+    if (!scriptBreakdown) {
+        updateContextActionAvailability(false);
         return;
+    }
 
-    auto& scenes = scriptBreakdown->getScenes();
+    if (lowLatencyScrubMode &&
+        currentPanel &&
+        currentPanelStartMs >= 0.0 &&
+        currentPanelEndMs > currentPanelStartMs &&
+        time >= currentPanelStartMs &&
+        time < currentPanelEndMs) {
+        paint->getPaintArea()->setCurrentTime(time - currentPanelStartMs);
+        paint->getPaintArea()->update();
+        return;
+    }
+
+    Panel* newPanel = nullptr;
+    long timeCounter = 0;
     GameFusion::Shot *theShot = nullptr;
 
-
+    auto& scenes = scriptBreakdown->getScenes();
     for (auto& scene : scenes) {
         for (auto& shot : scene.shots) {
-
-            if(shot.startTime == -1) {
+            if (shot.startTime == -1) {
                 shot.startTime = timeCounter;
-                shot.endTime = shot.startTime + shot.frameCount*mspf;
+                shot.endTime = shot.startTime + shot.frameCount * mspf;
             }
 
             timeCounter = shot.endTime;
 
-            if(time < shot.startTime || time > shot.endTime)
+            if (time < shot.startTime || time > shot.endTime) {
                 continue;
+            }
 
-            for(auto &panel : shot.panels){
-                if (time >= (shot.startTime + panel.startTime) &&
-                    time < (shot).startTime + (panel.startTime + panel.durationTime)) {
+            for (auto& panel : shot.panels) {
+                const long panelStart = shot.startTime + panel.startTime;
+                const long panelEnd = shot.startTime + panel.startTime + panel.durationTime;
+                if (time >= panelStart && time < panelEnd) {
                     newPanel = &panel;
                     theShot = &shot;
                     break;
                 }
             }
 
-            if(newPanel)
+            if (newPanel) {
                 break;
+            }
         }
-        if(newPanel)
+        if (newPanel) {
             break;
+        }
     }
 
-    // --- enable context menues base on selection
-    splitSceneAct->setEnabled(theShot);
-    renameSceneAct->setEnabled(theShot);
-    duplicateSceneAct->setEnabled(theShot);
-    deleteSceneAct->setEnabled(theShot);
-
-    editShotAct->setEnabled(theShot);
-    renameShotAct->setEnabled(theShot);
-    duplicateShotAct->setEnabled(theShot);
-    deleteShotAct->setEnabled(theShot);
-
-    newPanelAct->setEnabled(theShot);
-    insertPanelAct->setEnabled(theShot);
-    editPanelAct->setEnabled(theShot);
-    renamePanelAct->setEnabled(theShot);
-    duplicatePanelAct->setEnabled(theShot);
-    copyPanelAct->setEnabled(theShot);
-    cutPanelAct->setEnabled(theShot);
-    if(hasClipboardPanel)
-        pastePanelAct->setEnabled(theShot);
-    clearPanelAct->setEnabled(theShot);
-    deletePanelAct->setEnabled(theShot);
-
-    newCameraAct->setEnabled(theShot);
-    deleteCameraAct->setEnabled(theShot);
-    renameCameraAct->setEnabled(theShot);
-    copyCameraAct->setEnabled(theShot);
-    pastCameraAct->setEnabled(theShot);
+    updateContextActionAvailability(theShot != nullptr);
 
     applyShotViewportToPaintArea(paint->getPaintArea(), theShot, ProjectContext::instance().projectJson());
     const QSize shotOutput = shotOutputResolutionOrDefault(theShot, ProjectContext::instance().projectJson());
     const QSize shotCanvas = shotCanvasOrDefault(theShot, ProjectContext::instance().projectJson(), shotOutput);
     paint->syncCanvasPresetDisplay(shotCanvas.width(), shotCanvas.height());
 
-    //--- If no panel found, show white image
     if (!newPanel) {
-        Log().debug() << "No panel at time: " << (float)time << ", showing blank image.";
-
-        if(theShot){
-            long panelStartTime = theShot->startTime + currentPanel->startTime;
+        if (theShot && currentPanel) {
+            const long panelStartTime = theShot->startTime + currentPanel->startTime;
             paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraAnimation);
             cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraAnimation.frames);
         }
 
-
-
         currentPanel = nullptr;
+        currentPanelStartMs = -1.0;
+        currentPanelEndMs = -1.0;
         return;
     }
 
-    long panelStartTime = (theShot && currentPanel) ? theShot->startTime + currentPanel->startTime : 0;
-
-    if(newPanel == currentPanel) {
+    const long panelStartTime = theShot ? (theShot->startTime + newPanel->startTime) : 0;
+    if (newPanel == currentPanel) {
+        currentPanelStartMs = panelStartTime;
+        currentPanelEndMs = panelStartTime + currentPanel->durationTime;
         paint->getPaintArea()->setCurrentTime(time - panelStartTime);
         paint->getPaintArea()->update();
-        return; // no panel change
+        return;
     }
 
     currentPanel = newPanel;
+    currentPanelStartMs = panelStartTime;
+    currentPanelEndMs = panelStartTime + currentPanel->durationTime;
 
-    if(theShot) {
+    if (theShot) {
         paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraAnimation);
 
-        if (!isPlaying) {
+        const bool updateSecondaryUi = !isPlaying && !(lowLatencyScrubMode && scrubBurstActive);
+        if (updateSecondaryUi) {
             populateLayerList(currentPanel);
             cameraSidePanel->setCameraList(currentPanel->uuid.c_str(), theShot->cameraAnimation.frames);
         }
@@ -6719,6 +6725,11 @@ void MainWindow::onPaintAreaImageModified(const QString& uuid, const QImage& ima
 {
     if (uuid.isEmpty())
         return;
+
+    if (!isEditing && isInLowLatencyScrubWindow()) {
+        // Keep scrub interaction responsive on slower hardware by deferring thumbnail rebuilds.
+        return;
+    }
 
     PanelContext panelContext = this->findPanelByUuid(uuid.toStdString());
     if (!panelContext.isValid())
@@ -9790,13 +9801,20 @@ void MainWindow::updateKeyframe(const QString& kfUuid, double localFr, const QVa
 void MainWindow::loadSettings() {
     QSettings settings("B-Line", "Storyboard"); // Adjust organization and app name
     autoSave = settings.value("autoSave", false).toBool();
+    lowLatencyScrubMode = settings.value("lowLatencyScrubMode", true).toBool();
 
     ui->actionAuto_Save->setChecked(autoSave);
+    if (toggleLowLatencyScrubAct) {
+        toggleLowLatencyScrubAct->blockSignals(true);
+        toggleLowLatencyScrubAct->setChecked(lowLatencyScrubMode);
+        toggleLowLatencyScrubAct->blockSignals(false);
+    }
 }
 
 void MainWindow::saveSettings() {
     QSettings settings("B-Line", "Storyboard");
     settings.setValue("autoSave", autoSave);
+    settings.setValue("lowLatencyScrubMode", lowLatencyScrubMode);
 }
 
 void MainWindow::onCheckDirtyTimer() {

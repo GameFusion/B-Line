@@ -487,6 +487,7 @@ protected:
     QAction *pastCameraAct;
     QAction *toggleFullScreenAct = nullptr;
     QAction *toggleDetachedPipAct = nullptr;
+    QAction *toggleLowLatencyScrubAct = nullptr;
 
     GameFusion::Panel clipboardPanel; // Clipboard for copy/cut/paste
     bool hasClipboardPanel = false;
@@ -500,7 +501,17 @@ protected:
 private:
     void loadSettings();
     void saveSettings();
+    void updateContextActionAvailability(bool hasShotContext);
+    bool isInLowLatencyScrubWindow() const;
     bool initialStartupZoomResetApplied = false;
+    bool lowLatencyScrubMode = true;
+    bool actionAvailabilityInitialized = false;
+    bool lastActionHasShotContext = false;
+    bool lastActionHasClipboardPanel = false;
+    qint64 lastCursorMoveMs = 0;
+    qint64 lastScrubBurstMs = 0;
+    double currentPanelStartMs = -1.0;
+    double currentPanelEndMs = -1.0;
 
     QTimer *dirtyCheckTimer;
     QTimer *autoSaveTimer;

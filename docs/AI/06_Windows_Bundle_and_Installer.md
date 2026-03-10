@@ -1,4 +1,4 @@
-# Windows Bundle and Installer (Qt 6.10, MSVC 2022)
+﻿# Windows Bundle and Installer (Qt 6.10, MSVC 2022)
 
 ## Goal
 Create a reproducible Windows packaging flow for B-Line:
@@ -23,12 +23,18 @@ Create a reproducible Windows packaging flow for B-Line:
 ## Release Pipeline (Step-by-Step)
 Run from repo root: `F:\GameSource\Applications\B-Line`.
 
-1. Compile Release executable.
+1. Bump version (for installer filename and app metadata).
+Edit `build-vs2019-qt6/Boarder.pro`:
+```qmake
+VERSION = 1.0.1
+```
+
+2. Compile Release executable.
 ```powershell
 cmd /c "call ""C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"" && cd /d F:\GameSource\Applications\B-Line\build-vs2019-qt6\build\Desktop_Qt_6_10_2_MSVC2022_64bit-Release && nmake /f Makefile.Release"
 ```
 
-2. Build Release bundle.
+3. Build Release bundle.
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build-vs2019-qt6\tools\windows\Bundle-Windows.ps1 `
   -BuildDir F:\GameSource\Applications\B-Line\build-vs2019-qt6\build\Desktop_Qt_6_10_2_MSVC2022_64bit-Release `
@@ -37,21 +43,24 @@ powershell -ExecutionPolicy Bypass -File .\build-vs2019-qt6\tools\windows\Bundle
   -GameSourceRoot F:\GameSource
 ```
 
-3. Smoke test the bundle.
+4. Smoke test the bundle.
 ```powershell
-F:\GameSource\Applications\B-Line\build-vs2019-qt6\dist\windows\B-Line-1.0.0-Release\Boarder.exe
+F:\GameSource\Applications\B-Line\build-vs2019-qt6\dist\windows\B-Line-<VERSION>-Release\Boarder.exe
 ```
 
-4. Build offline installer from the release bundle.
+5. Build offline installer from the release bundle.
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build-vs2019-qt6\tools\windows\Create-Installer.ps1 `
-  -BundleDir F:\GameSource\Applications\B-Line\build-vs2019-qt6\dist\windows\B-Line-1.0.0-Release `
+  -BundleDir F:\GameSource\Applications\B-Line\build-vs2019-qt6\dist\windows\B-Line-<VERSION>-Release `
   -IfwRoot C:\Qt\Tools\QtInstallerFramework\4.10 `
   -OutputDir F:\GameSource\Applications\B-Line\build-vs2019-qt6\dist\windows\installer
 ```
 
-5. Confirm output installer.
-`F:\GameSource\Applications\B-Line\build-vs2019-qt6\dist\windows\installer\B-Line-Setup-1.0.0.exe`
+6. Confirm output installer.
+`F:\GameSource\Applications\B-Line\build-vs2019-qt6\dist\windows\installer\B-Line-Setup-<VERSION>.exe`
+
+7. Confirm registry entry was appended.
+`F:\GameSource\Applications\B-Line\docs\AI\installer-build-registry.csv`
 
 ## Debug Bundle Pipeline (Step-by-Step)
 1. Compile Debug executable.
@@ -96,8 +105,15 @@ Unsigned binaries can be blocked outside dev tools. Internal testing may require
 ## Publisher
 Installer publisher default is `Stargit Studio AB` (set in `build-vs2019-qt6/tools/windows/Create-Installer.ps1`).
 
+## Versioning Best Practice
+1. Keep semantic versioning in `build-vs2019-qt6/Boarder.pro` (`MAJOR.MINOR.PATCH`).
+2. Let installer name come from app version (`B-Line-Setup-<VERSION>.exe`).
+3. Record each installer build in a machine-readable registry (CSV with UTC timestamp, version, SHA256, publisher, output path).
+4. Keep registry in repo (`docs/AI/installer-build-registry.csv`) for internal traceability and partner handoff.
+
 ## Local Security Exception (Temporary, Internal Only)
 1. Disable Smart App Control only on designated internal dev/test machines.
 2. Record machine, owner, date, and reason in studio IT/security tracking.
 3. Apply same documented policy for partner studio testing only.
 4. Remove this exception path after signing is in place and validated.
+
