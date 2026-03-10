@@ -399,6 +399,32 @@ void applyShotViewportToPaintArea(PaintArea* paintArea, const GameFusion::Shot* 
     paintArea->setOutputResolution(output.width(), output.height());
 }
 
+QPixmap makeLayerListThumbnailPixmap(const GameFusion::Layer& layer,
+                                     const QImage& fallbackThumbnail,
+                                     const QSize& maxSize = QSize(240, 135)) {
+    QImage sourceImage = fallbackThumbnail;
+
+    const bool isImageOnlyLayer = layer.strokes.empty() && !layer.imageFilePath.empty();
+    if (isImageOnlyLayer) {
+        QImage loadedImage;
+        if (loadedImage.load(QString::fromStdString(layer.imageFilePath))) {
+            sourceImage = loadedImage;
+        }
+    }
+
+    if (sourceImage.isNull()) {
+        QPixmap placeholder(maxSize);
+        placeholder.fill(Qt::black);
+        return placeholder;
+    }
+
+    const QImage scaled = sourceImage.scaled(
+        maxSize,
+        Qt::KeepAspectRatio,
+        Qt::SmoothTransformation);
+    return QPixmap::fromImage(scaled);
+}
+
 } // namespace
 
 
@@ -4915,12 +4941,8 @@ void MainWindow::populateLayerList(GameFusion::Panel* panel) {
         QString label = QString::fromStdString(layer.name);
         QListWidgetItem* item = new QListWidgetItem(label);
 
-        // Create a dummy black pixmap (240 x 135)
-        QPixmap dummyPixmap(240, 135);
-        dummyPixmap.fill(Qt::black);
-
-        // Assign the dummy icon
-        item->setIcon(QIcon(dummyPixmap));
+        const QPixmap initialThumbnail = makeLayerListThumbnailPixmap(layer, QImage());
+        item->setIcon(QIcon(initialThumbnail));
 
         // Enable checkbox
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
@@ -6628,11 +6650,25 @@ void MainWindow::updateLayerThumbnail(const QString& uuid, const QImage& thumbna
     // Disable signals to avoid recursive itemChanged or other event triggers
     bool prevState = ui->layerListWidget->blockSignals(true);
     QString layerName = item->text();
+
+    QPixmap layerThumbnailPixmap;
+    LayerContext layerContext = findLayerByUuid(uuid.toStdString());
+    if (layerContext.isValid()) {
+        layerThumbnailPixmap = makeLayerListThumbnailPixmap(*layerContext.layer, thumbnail);
+    } else {
+        const QSize maxThumbSize(240, 135);
+        if (thumbnail.isNull()) {
+            layerThumbnailPixmap = QPixmap(maxThumbSize);
+            layerThumbnailPixmap.fill(Qt::black);
+        } else {
+            layerThumbnailPixmap = QPixmap::fromImage(
+                thumbnail.scaled(maxThumbSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        }
+    }
+
     // Set thumbnail and name
-    item->setIcon(QIcon(QPixmap::fromImage(thumbnail))); // First column: thumbnail
-    ui->layerListWidget->setIconSize(thumbnail.size());
-    //ui->layerListWidget->setViewMode(QListView::IconMode);
-    //ui->layerListWidget->setResizeMode(QListView::Adjust);
+    item->setIcon(QIcon(layerThumbnailPixmap));
+    ui->layerListWidget->setIconSize(QSize(240, 135));
 
     item->setText(layerName); // Second column: name
     // Re-enable signals
