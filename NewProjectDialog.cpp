@@ -2,6 +2,7 @@
 #include "ui_NewProjectDialog.h"
 
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QHBoxLayout>
@@ -244,7 +245,9 @@ QString NewProjectDialog::canvasMarginCustom() const
 void NewProjectDialog::setProjectData(const QJsonObject& projectJson) {
     // Populate fields from projectJson
     ui->projectNameEdit->setText(projectJson["projectName"].toString());
-    ui->locationEdit->setText(projectJson["projectPath"].toString());  // Add projectPath to projectJson later
+    const QString projectPath = projectJson["projectPath"].toString();
+    const QFileInfo projectInfo(projectPath);
+    ui->locationEdit->setText(projectInfo.exists() ? projectInfo.absolutePath() : projectPath);
     ui->fpsComboBox->setCurrentText(QString::number(projectJson["fps"].toInt()));
     ui->resolutionComboBox->setCurrentText(
         QString("%1x%2").arg(projectJson["resolution"].toArray()[0].toInt())

@@ -196,6 +196,7 @@ public slots:
     void editProject();
     void loadProject();
     void saveProject();
+    void saveProjectAs();
 	void update();
 	void postIssue();
 	void teamEmail();
@@ -501,6 +502,8 @@ protected:
 private:
     void loadSettings();
     void saveSettings();
+    bool saveProjectMetadataFile(const QString& projectDir, QString* errorMessage = nullptr);
+    bool rehomeExternalProjectDependencies(const QString& oldProjectDir, const QString& newProjectDir, QString* errorMessage = nullptr);
     void updateContextActionAvailability(bool hasShotContext);
     bool isInLowLatencyScrubWindow() const;
     bool initialStartupZoomResetApplied = false;

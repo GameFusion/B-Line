@@ -41,6 +41,7 @@
 
 #include <QFile>
 #include <QDir>
+#include <QDirIterator>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -123,6 +124,111 @@ QPointF centeredImageLayerTranslation(const QSize& imageSize, const QSize& outpu
     const qreal tx = (outputSize.width() - fittedSize.width()) * 0.5;
     const qreal ty = (outputSize.height() - fittedSize.height()) * 0.5;
     return QPointF(tx, ty);
+}
+
+bool copyDirectoryRecursively(const QString& sourcePath, const QString& targetPath, QString* errorMessage) {
+    QDir sourceDir(sourcePath);
+    if (!sourceDir.exists()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Source project folder does not exist: %1").arg(sourcePath);
+        }
+        return false;
+    }
+
+    if (!QDir().mkpath(targetPath)) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Failed to create destination folder: %1").arg(targetPath);
+        }
+        return false;
+    }
+
+    QDirIterator it(sourcePath,
+                    QDir::NoDotAndDotDot | QDir::AllEntries | QDir::Hidden | QDir::System,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        it.next();
+
+        const QFileInfo sourceInfo = it.fileInfo();
+        const QString relativePath = sourceDir.relativeFilePath(sourceInfo.filePath());
+        const QString destinationPath = QDir(targetPath).filePath(relativePath);
+
+        if (relativePath == ".git" || relativePath.startsWith(".git/")) {
+            continue;
+        }
+
+        if (sourceInfo.isDir()) {
+            if (!QDir().mkpath(destinationPath)) {
+                if (errorMessage) {
+                    *errorMessage = QStringLiteral("Failed to create folder while duplicating project: %1").arg(destinationPath);
+                }
+                return false;
+            }
+            continue;
+        }
+
+        QFile::remove(destinationPath);
+        if (!QFile::copy(sourceInfo.filePath(), destinationPath)) {
+            if (errorMessage) {
+                *errorMessage = QStringLiteral("Failed to copy '%1' to '%2'.")
+                                    .arg(sourceInfo.filePath(), destinationPath);
+            }
+            return false;
+        }
+    }
+
+    return true;
+}
+
+QString uniqueFilePathForCopy(const QDir& destinationDir, const QFileInfo& sourceInfo) {
+    QString baseName = sourceInfo.completeBaseName();
+    QString suffix = sourceInfo.suffix();
+    QString candidateName = sourceInfo.fileName();
+    int duplicateIndex = 2;
+
+    while (destinationDir.exists(candidateName)) {
+        candidateName = suffix.isEmpty()
+                            ? QStringLiteral("%1_%2").arg(baseName).arg(duplicateIndex++)
+                            : QStringLiteral("%1_%2.%3").arg(baseName).arg(duplicateIndex++).arg(suffix);
+    }
+
+    return destinationDir.filePath(candidateName);
+}
+
+bool copyFileIfNeeded(const QString& sourceFilePath,
+                      const QString& destinationDirectoryPath,
+                      QString* copiedFilePath,
+                      QString* errorMessage) {
+    const QFileInfo sourceInfo(sourceFilePath);
+    if (!sourceInfo.exists() || !sourceInfo.isFile()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Referenced file does not exist: %1").arg(sourceFilePath);
+        }
+        return false;
+    }
+
+    QDir destinationDir(destinationDirectoryPath);
+    if (!destinationDir.exists() && !QDir().mkpath(destinationDirectoryPath)) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Failed to create dependency folder: %1").arg(destinationDirectoryPath);
+        }
+        return false;
+    }
+
+    const QString destinationFilePath = uniqueFilePathForCopy(destinationDir, sourceInfo);
+    QFile::remove(destinationFilePath);
+    if (!QFile::copy(sourceInfo.filePath(), destinationFilePath)) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Failed to copy asset '%1' to '%2'.")
+                                .arg(sourceInfo.filePath(), destinationFilePath);
+        }
+        return false;
+    }
+
+    if (copiedFilePath) {
+        *copiedFilePath = destinationFilePath;
+    }
+
+    return true;
 }
 
 class GuideTextBrowser final : public QTextBrowser {
@@ -2088,11 +2194,14 @@ MainWindow::MainWindow(QWidget *parent)
 
     ui->actionSave->setShortcut(QKeySequence::Save);
     ui->actionSave->setShortcutContext(Qt::ApplicationShortcut);
+    ui->actionSave_As->setShortcut(QKeySequence::SaveAs);
+    ui->actionSave_As->setShortcutContext(Qt::ApplicationShortcut);
 
     QObject::connect(ui->actionOpen, SIGNAL(triggered()), this, SLOT(loadProject()));
     QObject::connect(ui->actionNew, SIGNAL(triggered()), this, SLOT(newProject()));
     QObject::connect(ui->actionEdit_Project, SIGNAL(triggered()), this, SLOT(editProject()));
     QObject::connect(ui->actionSave, SIGNAL(triggered()), this, SLOT(saveProject()));
+    QObject::connect(ui->actionSave_As, SIGNAL(triggered()), this, SLOT(saveProjectAs()));
     connect(ui->actionAuto_Save, &QAction::triggered, this, &MainWindow::toggleAutoSave);
     QObject::connect(ui->actionPost_issue, SIGNAL(triggered()), this, SLOT(postIssue()));
     QObject::connect(ui->actionTeam_email, SIGNAL(triggered()), this, SLOT(teamEmail()));
@@ -5771,6 +5880,119 @@ void MainWindow::editProject(){
     QMessageBox::information(this, tr("Success"), tr("Project updated successfully."));
 }
 
+bool MainWindow::saveProjectMetadataFile(const QString& projectDir, QString* errorMessage) {
+    QJsonObject& projectJson = ProjectContext::instance().projectJson();
+    projectJson["projectPath"] = projectDir;
+
+    QFile metadataFile(QDir(projectDir).filePath("project.json"));
+    if (!metadataFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        if (errorMessage) {
+            *errorMessage = tr("Failed to save project metadata to %1.")
+                                .arg(QDir::toNativeSeparators(metadataFile.fileName()));
+        }
+        return false;
+    }
+
+    metadataFile.write(QJsonDocument(projectJson).toJson());
+    metadataFile.close();
+    return true;
+}
+
+bool MainWindow::rehomeExternalProjectDependencies(const QString& oldProjectDir,
+                                                   const QString& newProjectDir,
+                                                   QString* errorMessage) {
+    const QString oldRoot = QDir(oldProjectDir).absolutePath();
+    const QString newRoot = QDir(newProjectDir).absolutePath();
+
+    auto remapAssetPath = [&](const QString& originalPath,
+                              const QString& destinationSubdir) -> QString {
+        if (originalPath.isEmpty()) {
+            return originalPath;
+        }
+
+        const QFileInfo originalInfo(originalPath);
+        if (!originalInfo.exists()) {
+            return originalPath;
+        }
+
+        if (!originalInfo.isAbsolute()) {
+            return originalPath;
+        }
+
+        const QString cleanedPath = QDir::cleanPath(originalInfo.absoluteFilePath());
+        if (cleanedPath.startsWith(oldRoot + "/") || cleanedPath == oldRoot) {
+            return QDir(newRoot).filePath(QDir(oldRoot).relativeFilePath(cleanedPath));
+        }
+
+        QString copiedPath;
+        if (!copyFileIfNeeded(cleanedPath, QDir(newRoot).filePath(destinationSubdir), &copiedPath, errorMessage)) {
+            return QString();
+        }
+
+        return copiedPath;
+    };
+
+    if (scriptBreakdown) {
+        for (auto& scene : scriptBreakdown->getScenes()) {
+            bool sceneChanged = false;
+            for (auto& shot : scene.shots) {
+                for (auto& panel : shot.panels) {
+                    for (auto& layer : panel.layers) {
+                        const QString oldImagePath = QString::fromStdString(layer.imageFilePath);
+                        const QString newImagePath = remapAssetPath(oldImagePath, QStringLiteral("assets/imported-images"));
+                        if (newImagePath.isNull()) {
+                            return false;
+                        }
+                        if (newImagePath != oldImagePath) {
+                            layer.imageFilePath = QDir::toNativeSeparators(newImagePath).toStdString();
+                            sceneChanged = true;
+                        }
+                    }
+                }
+            }
+
+            if (sceneChanged) {
+                scene.dirty = true;
+            }
+        }
+    }
+
+    for (TrackItem* trackItem : timeLineView->trackItems()) {
+        if (!trackItem || !trackItem->track() || trackItem->track()->getType() != TrackType::Audio) {
+            continue;
+        }
+
+        for (Segment* segment : trackItem->segments()) {
+            AudioSegment* audioSegment = dynamic_cast<AudioSegment*>(segment);
+            if (!audioSegment) {
+                continue;
+            }
+
+            const QString oldAudioPath = audioSegment->filePath();
+            const QString newAudioPath = remapAssetPath(oldAudioPath, QStringLiteral("assets/audio"));
+            if (newAudioPath.isNull()) {
+                return false;
+            }
+            if (newAudioPath == oldAudioPath || newAudioPath.isEmpty()) {
+                continue;
+            }
+
+            const int inOffset = audioSegment->inOffset();
+            const int outOffset = audioSegment->outOffset();
+            const float volume = audioSegment->volume();
+            const float pan = audioSegment->pan();
+            audioSegment->loadAudio(QFileInfo(newAudioPath).completeBaseName().toUtf8().constData(),
+                                    QDir::toNativeSeparators(newAudioPath).toUtf8().constData());
+            audioSegment->setInOffset(inOffset);
+            audioSegment->setOutOffset(outOffset);
+            audioSegment->setVolume(volume);
+            audioSegment->setPan(pan);
+        }
+    }
+
+    return true;
+}
+
 void MainWindow::updateContextActionAvailability(bool hasShotContext)
 {
     if (actionAvailabilityInitialized &&
@@ -5956,6 +6178,147 @@ void MainWindow::saveProject(){
 
     savePending = hasDirtyScenes;
     updateWindowTitle(hasDirtyScenes);
+}
+
+void MainWindow::saveProjectAs() {
+    const QString currentProjectDir = ProjectContext::instance().currentProjectPath();
+    if (currentProjectDir.isEmpty()) {
+        QMessageBox::warning(this, tr("Save Project As"), tr("No project is currently loaded."));
+        return;
+    }
+
+    NewProjectDialog dialog(this);
+    dialog.setWindowTitle(tr("Save Project As"));
+    dialog.setProjectData(ProjectContext::instance().projectJson());
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const QString projectName = dialog.projectName().trimmed();
+    const QString location = dialog.location().trimmed();
+    if (projectName.isEmpty() || location.isEmpty()) {
+        QMessageBox::warning(this, tr("Save Project As"), tr("Please choose both a project name and destination."));
+        return;
+    }
+
+    const QString targetProjectDir = QDir(location).filePath(projectName);
+    if (QDir::cleanPath(targetProjectDir) == QDir::cleanPath(currentProjectDir)) {
+        saveProject();
+        if (!saveProjectMetadataFile(currentProjectDir)) {
+            QMessageBox::warning(this, tr("Save Project As"), tr("Project data saved, but project.json could not be updated."));
+        }
+        return;
+    }
+
+    const QString cleanedCurrentDir = QDir(currentProjectDir).absolutePath();
+    const QString cleanedTargetDir = QDir(targetProjectDir).absolutePath();
+    if (cleanedTargetDir.startsWith(cleanedCurrentDir + "/")) {
+        QMessageBox::warning(this,
+                             tr("Save Project As"),
+                             tr("The destination folder cannot be inside the current project folder."));
+        return;
+    }
+
+    const QFileInfo targetInfo(targetProjectDir);
+    if (targetInfo.exists()) {
+        const QDir existingTarget(targetProjectDir);
+        const QStringList entries = existingTarget.entryList(QDir::NoDotAndDotDot | QDir::AllEntries | QDir::Hidden | QDir::System);
+        if (!entries.isEmpty()) {
+            QMessageBox::warning(this,
+                                 tr("Save Project As"),
+                                 tr("The destination folder already exists and is not empty.\nPlease choose a new location."));
+            return;
+        }
+    }
+
+    const QString oldProjectDir = currentProjectDir;
+    const QString oldProjectName = ProjectContext::instance().currentProjectName();
+    const QJsonObject oldProjectJson = ProjectContext::instance().projectJson();
+    saveProject();
+
+    QString errorMessage;
+    if (!copyDirectoryRecursively(oldProjectDir, targetProjectDir, &errorMessage)) {
+        QMessageBox::critical(this, tr("Save Project As"), errorMessage);
+        return;
+    }
+
+    QJsonObject& projectJson = ProjectContext::instance().projectJson();
+    const QStringList resParts = dialog.resolution().split('x');
+    const int resWidth = resParts.value(0).toInt();
+    const int resHeight = resParts.value(1).toInt();
+    const int canvasWidth = dialog.canvasWidth();
+    const int canvasHeight = dialog.canvasHeight();
+    const int marginPctW = resWidth > 0
+                               ? qMax(0, qRound((canvasWidth - resWidth) * 100.0 / resWidth))
+                               : 0;
+    const int marginPctH = resHeight > 0
+                               ? qMax(0, qRound((canvasHeight - resHeight) * 100.0 / resHeight))
+                               : 0;
+    const bool uniformMargin = qAbs(marginPctW - marginPctH) <= 1;
+    const int marginPct = uniformMargin ? qMax(0, (marginPctW + marginPctH) / 2) : marginPctW;
+
+    projectJson["projectName"] = projectName;
+    projectJson["projectId"] = projectName;
+    projectJson["projectPath"] = targetProjectDir;
+    projectJson["aspectRatio"] = dialog.aspectRatio();
+    projectJson["director"] = dialog.director();
+    projectJson["estimatedDuration"] = dialog.estimatedDuration();
+    projectJson["fps"] = dialog.fps();
+    projectJson["notes"] = dialog.notes();
+    projectJson["projectCode"] = dialog.projectCode();
+    projectJson["resolution"] = QJsonArray{resWidth, resHeight};
+    projectJson["safeFrame"] = dialog.safeFrame();
+    projectJson["canvas"] = QJsonArray{canvasWidth, canvasHeight};
+    projectJson["canvas_margin"] = uniformMargin ? QString::number(marginPct) : QString("Custom");
+    projectJson["canvas_percent"] = marginPct;
+    projectJson["canvas_preset"] = dialog.canvasPreset();
+    projectJson["subtitle"] = dialog.subtitle();
+    projectJson["episode_format"] = dialog.episodeFormat();
+    projectJson["copyright"] = dialog.copyright();
+    projectJson["start_tc"] = dialog.startTC();
+
+    ProjectContext::instance().setCurrentProjectName(projectName);
+    ProjectContext::instance().setCurrentProjectPath(targetProjectDir);
+    logger->setProjectPath(targetProjectDir);
+    paint->getPaintArea()->setProjectPath(targetProjectDir);
+    paint->getPaintArea()->setCanvasSize(canvasWidth, canvasHeight);
+    paint->getPaintArea()->setOutputResolution(resWidth, resHeight);
+    paint->getPaintArea()->update();
+
+    if (!rehomeExternalProjectDependencies(oldProjectDir, targetProjectDir, &errorMessage)) {
+        ProjectContext::instance().projectJson() = oldProjectJson;
+        ProjectContext::instance().setCurrentProjectName(oldProjectName);
+        ProjectContext::instance().setCurrentProjectPath(oldProjectDir);
+        logger->setProjectPath(oldProjectDir);
+        paint->getPaintArea()->setProjectPath(oldProjectDir);
+        const QJsonArray oldCanvas = oldProjectJson["canvas"].toArray();
+        const QJsonArray oldResolution = oldProjectJson["resolution"].toArray();
+        if (oldCanvas.size() >= 2) {
+            paint->getPaintArea()->setCanvasSize(oldCanvas[0].toInt(), oldCanvas[1].toInt());
+        }
+        if (oldResolution.size() >= 2) {
+            paint->getPaintArea()->setOutputResolution(oldResolution[0].toInt(), oldResolution[1].toInt());
+        }
+        paint->getPaintArea()->update();
+        QMessageBox::critical(this, tr("Save Project As"), errorMessage);
+        return;
+    }
+
+    if (scriptBreakdown) {
+        for (auto& scene : scriptBreakdown->getScenes()) {
+            scene.dirty = true;
+        }
+    }
+
+    saveProject();
+    if (!saveProjectMetadataFile(targetProjectDir, &errorMessage)) {
+        QMessageBox::critical(this, tr("Save Project As"), errorMessage);
+        return;
+    }
+
+    QMessageBox::information(this,
+                             tr("Save Project As"),
+                             tr("Project duplicated successfully to:\n%1").arg(QDir::toNativeSeparators(targetProjectDir)));
 }
 
 QString generateUniquePanelName(GameFusion::Shot* shot) {
