@@ -5132,10 +5132,12 @@ void MainWindow::populateLayerList(GameFusion::Panel* panel) {
     //    return;
 
     QString preservedLayerUuid = selectedLayerUuid;
-    if (QListWidgetItem* currentItem = ui->layerListWidget->currentItem()) {
-        const QString currentUuid = currentItem->data(Qt::UserRole).toString();
-        if (!currentUuid.isEmpty() && currentUuid != "REFERENCE") {
-            preservedLayerUuid = currentUuid;
+    if (preservedLayerUuid.isEmpty()) {
+        if (QListWidgetItem* currentItem = ui->layerListWidget->currentItem()) {
+            const QString currentUuid = currentItem->data(Qt::UserRole).toString();
+            if (!currentUuid.isEmpty() && currentUuid != "REFERENCE") {
+                preservedLayerUuid = currentUuid;
+            }
         }
     }
 
@@ -10501,6 +10503,7 @@ void MainWindow::addLayer(const GameFusion::Layer& layer, const QString& panelUu
         }
 
     panelContext.panel->layers.insert(panelContext.panel->layers.begin() + index, layer);
+    selectedLayerUuid = QString::fromStdString(layer.uuid);
 
     panelContext.scene->dirty = true;
     updateWindowTitle(true);
