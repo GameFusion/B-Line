@@ -126,6 +126,49 @@ QPointF centeredImageLayerTranslation(const QSize& imageSize, const QSize& outpu
     return QPointF(tx, ty);
 }
 
+void applyWindowsScrollbarStyleOverride()
+{
+#ifdef Q_OS_WIN
+    if (qApp == nullptr) {
+        return;
+    }
+
+    const QString markerBegin = QStringLiteral("/* BLINE_WINDOWS_SCROLLBAR_OVERRIDE_BEGIN */");
+    const QString markerEnd = QStringLiteral("/* BLINE_WINDOWS_SCROLLBAR_OVERRIDE_END */");
+
+    QString stylesheet = qApp->styleSheet();
+    const int markerStart = stylesheet.indexOf(markerBegin);
+    if (markerStart >= 0) {
+        const int markerStop = stylesheet.indexOf(markerEnd, markerStart);
+        if (markerStop >= 0) {
+            stylesheet.remove(markerStart, markerStop + markerEnd.size() - markerStart);
+        }
+    }
+
+    stylesheet += QStringLiteral(R"(
+/* BLINE_WINDOWS_SCROLLBAR_OVERRIDE_BEGIN */
+QScrollBar:vertical {
+    width: 14px;
+}
+
+QScrollBar:horizontal {
+    height: 14px;
+}
+
+QScrollBar::handle:vertical {
+    min-height: 20px;
+}
+
+QScrollBar::handle:horizontal {
+    min-width: 20px;
+}
+/* BLINE_WINDOWS_SCROLLBAR_OVERRIDE_END */
+)");
+
+    qApp->setStyleSheet(stylesheet);
+#endif
+}
+
 bool copyDirectoryRecursively(const QString& sourcePath, const QString& targetPath, QString* errorMessage) {
     QDir sourceDir(sourcePath);
     if (!sourceDir.exists()) {
@@ -1921,6 +1964,7 @@ MainWindow::MainWindow(QWidget *parent)
     undoStack = new QUndoStack(this); // Initialize undo stack
 
     ui->setupUi(this);
+    applyWindowsScrollbarStyleOverride();
 
     ProjectContext::instance().projectJson()["resolution"] = QJsonArray{1920, 1080};
     ProjectContext::instance().projectJson()["canvas_margin"] = QString("20");
@@ -2643,16 +2687,19 @@ void MainWindow::setWhiteTheme()
 {
     printf("set to white\n");
     SetWhiteTheme();
+    applyWindowsScrollbarStyleOverride();
 }
 
 void MainWindow::setDarkTheme()
 {
     SetDarkTheme();
+    applyWindowsScrollbarStyleOverride();
 }
 
 void MainWindow::setBlackTheme()
 {
     SetBlackTheme();
+    applyWindowsScrollbarStyleOverride();
 }
 MainWindow::~MainWindow()
 {
