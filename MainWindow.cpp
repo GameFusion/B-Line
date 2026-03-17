@@ -5131,9 +5131,19 @@ void MainWindow::populateLayerList(GameFusion::Panel* panel) {
     //if(currentPanelUuid == panel->uuid.c_str())
     //    return;
 
+    QString preservedLayerUuid = selectedLayerUuid;
+    if (QListWidgetItem* currentItem = ui->layerListWidget->currentItem()) {
+        const QString currentUuid = currentItem->data(Qt::UserRole).toString();
+        if (!currentUuid.isEmpty() && currentUuid != "REFERENCE") {
+            preservedLayerUuid = currentUuid;
+        }
+    }
+
+    ui->layerListWidget->blockSignals(true);
     ui->layerListWidget->clear();
 
     if (panel->layers.empty()) {
+        ui->layerListWidget->blockSignals(false);
         GameFusion::Log().info() << "No layers in panel " << panel->uuid.c_str() << "\n";
         return;
     }
@@ -5201,16 +5211,27 @@ void MainWindow::populateLayerList(GameFusion::Panel* panel) {
             }
         }
 
+    QListWidgetItem* targetItem = nullptr;
     for (int i = 0; i < ui->layerListWidget->count(); ++i) {
         QListWidgetItem* item = ui->layerListWidget->item(i);
         if (!item) {
             continue;
         }
 
-        if (item->data(Qt::UserRole).toString() == preferredLayerUuid) {
-            ui->layerListWidget->setCurrentItem(item);
+        const QString itemUuid = item->data(Qt::UserRole).toString();
+        if (!preservedLayerUuid.isEmpty() && itemUuid == preservedLayerUuid) {
+            targetItem = item;
             break;
         }
+
+        if (!targetItem && itemUuid == preferredLayerUuid) {
+            targetItem = item;
+        }
+    }
+
+    ui->layerListWidget->blockSignals(false);
+    if (targetItem) {
+        ui->layerListWidget->setCurrentItem(targetItem);
     }
 
 
