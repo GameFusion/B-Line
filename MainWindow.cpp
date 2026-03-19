@@ -30,6 +30,7 @@
 #include <QTextFragment>
 #include <QTextImageFormat>
 #include <QCoreApplication>
+#include <QMenuBar>
 #include <QSignalBlocker>
 #include <QUrl>
 #include <QPixmap>
@@ -2333,6 +2334,11 @@ MainWindow::MainWindow(QWidget *parent)
     setupDockPanels();
 
     paint = new MainWindowPaint;
+    if (paint->menuBar() != nullptr) {
+        paint->menuBar()->hide();
+        paint->menuBar()->setMaximumHeight(0);
+        paint->menuBar()->setMinimumHeight(0);
+    }
     ui->splitter->insertWidget(1, paint);
     paint->show();
 
