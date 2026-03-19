@@ -14,6 +14,7 @@
 #include <QMessageBox>
 #include <QFileDialog>
 #include <QThread>
+#include <QDockWidget>
 #include <QButtonGroup>
 #include <QInputDialog>
 #include <QLabel>
@@ -29,6 +30,7 @@
 #include <QTextFragment>
 #include <QTextImageFormat>
 #include <QCoreApplication>
+#include <QSignalBlocker>
 #include <QUrl>
 #include <QPixmap>
 #include <QHash>
@@ -167,6 +169,16 @@ QScrollBar::handle:horizontal {
 
     qApp->setStyleSheet(stylesheet);
 #endif
+}
+
+bool anyDockVisible(const std::initializer_list<QDockWidget*> &docks)
+{
+    for (QDockWidget *dock : docks) {
+        if (dock != nullptr && dock->isVisible()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool copyDirectoryRecursively(const QString& sourcePath, const QString& targetPath, QString* errorMessage) {
@@ -1965,6 +1977,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     ui->setupUi(this);
     applyWindowsScrollbarStyleOverride();
+    ui->shotsTreeWidget->setMinimumWidth(0);
+    ui->shotsTreeWidget->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
 
     ProjectContext::instance().projectJson()["resolution"] = QJsonArray{1920, 1080};
     ProjectContext::instance().projectJson()["canvas_margin"] = QString("20");
@@ -2298,6 +2312,24 @@ MainWindow::MainWindow(QWidget *parent)
         saveSettings();
     });
 
+    toggleLeftSidebarAct = ui->menuWindows->addAction(tr("Left Sidebar"));
+    toggleLeftSidebarAct->setCheckable(true);
+    toggleLeftSidebarAct->setShortcut(QKeySequence(tr("Ctrl+Alt+L")));
+    toggleLeftSidebarAct->setStatusTip(tr("Show or hide the left sidebar group (Shot List, Shots Panel, Script)."));
+    connect(toggleLeftSidebarAct, &QAction::toggled, this, &MainWindow::onToggleLeftSidebar);
+
+    toggleRightSidebarAct = ui->menuWindows->addAction(tr("Right Sidebar"));
+    toggleRightSidebarAct->setCheckable(true);
+    toggleRightSidebarAct->setShortcut(QKeySequence(tr("Ctrl+Alt+R")));
+    toggleRightSidebarAct->setStatusTip(tr("Show or hide the right sidebar group (Layers, Cameras, Stroke Attributes)."));
+    connect(toggleRightSidebarAct, &QAction::toggled, this, &MainWindow::onToggleRightSidebar);
+
+    toggleBottomTimelineAct = ui->menuWindows->addAction(tr("Bottom Timeline"));
+    toggleBottomTimelineAct->setCheckable(true);
+    toggleBottomTimelineAct->setShortcut(QKeySequence(tr("Ctrl+Alt+T")));
+    toggleBottomTimelineAct->setStatusTip(tr("Show or hide the bottom timeline section."));
+    connect(toggleBottomTimelineAct, &QAction::toggled, this, &MainWindow::onToggleBottomTimeline);
+
     setupDockPanels();
 
     paint = new MainWindowPaint;
@@ -2583,6 +2615,25 @@ QComboBox, QSpinBox {
 
     ui->dockCameras->setMaximumWidth(350);
     strokeDock->setMaximumWidth(350);
+    ui->dockLayers->setMinimumWidth(0);
+    ui->dockCameras->setMinimumWidth(0);
+    strokeDock->setMinimumWidth(0);
+    connect(ui->dockLayers, &QDockWidget::visibilityChanged, this, [this](bool) {
+        syncRightSidebarToggleAction();
+    });
+    connect(ui->dockCameras, &QDockWidget::visibilityChanged, this, [this](bool) {
+        syncRightSidebarToggleAction();
+    });
+    connect(strokeDock, &QDockWidget::visibilityChanged, this, [this](bool) {
+        syncRightSidebarToggleAction();
+    });
+    syncRightSidebarToggleAction();
+    ui->dockControlls->setMinimumHeight(0);
+    ui->timeline->setMinimumHeight(0);
+    connect(ui->dockControlls, &QDockWidget::visibilityChanged, this, [this](bool) {
+        syncBottomTimelineToggleAction();
+    });
+    syncBottomTimelineToggleAction();
 
     // Load settings
 
@@ -2627,12 +2678,14 @@ void MainWindow::setupDockPanels()
     // Create and configure shotPanel inside a scroll area
     shotPanel = new ShotPanelWidget;
     shotPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    shotPanel->setMinimumWidth(0);
 
     QScrollArea *scrollArea = new QScrollArea;
     scrollArea->setWidget(shotPanel);
     scrollArea->setWidgetResizable(true);
     scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setMinimumWidth(0);
 
 
     // 1. Ensure existing dockShots is set up
@@ -2640,47 +2693,187 @@ void MainWindow::setupDockPanels()
                                QDockWidget::DockWidgetFloatable |
                                QDockWidget::DockWidgetClosable);
     ui->dockShots->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    ui->dockShots->setMinimumWidth(0);
     addDockWidget(Qt::LeftDockWidgetArea, ui->dockShots);  // Dock to left if not already
 
     // 2. Create new dock for Shots (scrollArea)
-    QDockWidget *dockShotsNew = new QDockWidget(tr("Shots Panel"), this);
-    dockShotsNew->setObjectName("dockShotsNew");
-    dockShotsNew->setFeatures(QDockWidget::DockWidgetMovable |
-                              QDockWidget::DockWidgetFloatable |
-                              QDockWidget::DockWidgetClosable);
-    dockShotsNew->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-    dockShotsNew->setWidget(scrollArea);  // Assuming scrollArea is your shots/timeline widget
+    shotPanelDock = new QDockWidget(tr("Shots Panel"), this);
+    shotPanelDock->setObjectName("dockShotsNew");
+    shotPanelDock->setFeatures(QDockWidget::DockWidgetMovable |
+                               QDockWidget::DockWidgetFloatable |
+                               QDockWidget::DockWidgetClosable);
+    shotPanelDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    shotPanelDock->setMinimumWidth(0);
+    shotPanelDock->setWidget(scrollArea);  // Assuming scrollArea is your shots/timeline widget
 
     // 3. Create new dock for Script (perfectScript)
     perfectScript = new PerfectScriptWidget(this);
-    QDockWidget *dockScript = new QDockWidget(tr("Script"), this);
-    dockScript->setObjectName("dockScript");
-    dockScript->setFeatures(QDockWidget::DockWidgetMovable |
-                             QDockWidget::DockWidgetFloatable |
-                             QDockWidget::DockWidgetClosable);
-    dockScript->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-    dockScript->setWidget(perfectScript);
+    perfectScript->setMinimumWidth(0);
+    scriptDock = new QDockWidget(tr("Script"), this);
+    scriptDock->setObjectName("dockScript");
+    scriptDock->setFeatures(QDockWidget::DockWidgetMovable |
+                            QDockWidget::DockWidgetFloatable |
+                            QDockWidget::DockWidgetClosable);
+    scriptDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    scriptDock->setMinimumWidth(0);
+    scriptDock->setWidget(perfectScript);
 
     // 4. Dock both new docks to left and tabify them with existing dockShots
-    addDockWidget(Qt::LeftDockWidgetArea, dockShotsNew);
-    addDockWidget(Qt::LeftDockWidgetArea, dockScript);
+    addDockWidget(Qt::LeftDockWidgetArea, shotPanelDock);
+    addDockWidget(Qt::LeftDockWidgetArea, scriptDock);
 
     // Tabify: Stack as tabs in the same area (order: dockShots on top, then Shots, then Script)
-    tabifyDockWidget(ui->dockShots, dockShotsNew);
-    tabifyDockWidget(dockShotsNew, dockScript);  // Chains them
+    tabifyDockWidget(ui->dockShots, shotPanelDock);
+    tabifyDockWidget(shotPanelDock, scriptDock);  // Chains them
 
     // 5. Raise the first tab (dockShots) as default
     ui->dockShots->raise();
 
     // 6. Optional: Set initial sizes (adjust as needed)
-    ui->dockShots->setMinimumWidth(300);
-    dockShotsNew->setMinimumWidth(300);
-    dockScript->setMinimumWidth(300);
+    ui->dockShots->setMinimumWidth(0);
+    shotPanelDock->setMinimumWidth(0);
+    scriptDock->setMinimumWidth(0);
 
     ui->dockShots->setWindowTitle("Shot List");
 
+    connect(ui->dockShots, &QDockWidget::visibilityChanged, this, [this](bool) {
+        syncLeftSidebarToggleAction();
+    });
+    connect(shotPanelDock, &QDockWidget::visibilityChanged, this, [this](bool) {
+        syncLeftSidebarToggleAction();
+    });
+    connect(scriptDock, &QDockWidget::visibilityChanged, this, [this](bool) {
+        syncLeftSidebarToggleAction();
+    });
+    syncLeftSidebarToggleAction();
+
     // Remove old splitter insertion if any
     // (No longer needed since docks handle layout)
+}
+
+bool MainWindow::isLeftSidebarVisible() const
+{
+    return anyDockVisible({ui->dockShots, shotPanelDock, scriptDock});
+}
+
+bool MainWindow::isRightSidebarVisible() const
+{
+    return anyDockVisible({ui->dockLayers, ui->dockCameras, strokeDock});
+}
+
+bool MainWindow::isBottomTimelineVisible() const
+{
+    return ui->dockControlls != nullptr && ui->dockControlls->isVisible();
+}
+
+void MainWindow::syncLeftSidebarToggleAction()
+{
+    if (toggleLeftSidebarAct == nullptr) {
+        return;
+    }
+
+    const QSignalBlocker blocker(toggleLeftSidebarAct);
+    toggleLeftSidebarAct->setChecked(isLeftSidebarVisible());
+}
+
+void MainWindow::syncRightSidebarToggleAction()
+{
+    if (toggleRightSidebarAct == nullptr) {
+        return;
+    }
+
+    const QSignalBlocker blocker(toggleRightSidebarAct);
+    toggleRightSidebarAct->setChecked(isRightSidebarVisible());
+}
+
+void MainWindow::syncBottomTimelineToggleAction()
+{
+    if (toggleBottomTimelineAct == nullptr) {
+        return;
+    }
+
+    const QSignalBlocker blocker(toggleBottomTimelineAct);
+    toggleBottomTimelineAct->setChecked(isBottomTimelineVisible());
+}
+
+void MainWindow::onToggleLeftSidebar(bool enabled)
+{
+    if (enabled) {
+        ui->dockShots->show();
+        if (shotPanelDock != nullptr) {
+            shotPanelDock->show();
+        }
+        if (scriptDock != nullptr) {
+            scriptDock->show();
+        }
+        ui->dockShots->raise();
+    } else {
+        if (scriptDock != nullptr) {
+            scriptDock->hide();
+        }
+        if (shotPanelDock != nullptr) {
+            shotPanelDock->hide();
+        }
+        ui->dockShots->hide();
+    }
+
+    syncLeftSidebarToggleAction();
+}
+
+void MainWindow::onToggleRightSidebar(bool enabled)
+{
+    if (enabled) {
+        if (rightSidebarRestoreLayers && ui->dockLayers != nullptr) {
+            ui->dockLayers->show();
+            ui->dockLayers->raise();
+        }
+
+        if (rightSidebarRestoreCameraDock && ui->dockCameras != nullptr) {
+            ui->dockCameras->show();
+            ui->dockCameras->raise();
+        } else if (ui->dockCameras != nullptr) {
+            ui->dockCameras->hide();
+        }
+
+        if (rightSidebarRestoreStrokeDock && strokeDock != nullptr) {
+            strokeDock->show();
+            strokeDock->raise();
+        } else if (strokeDock != nullptr) {
+            strokeDock->hide();
+        }
+    } else {
+        rightSidebarRestoreLayers = (ui->dockLayers != nullptr) && ui->dockLayers->isVisible();
+        rightSidebarRestoreCameraDock = (ui->dockCameras != nullptr) && ui->dockCameras->isVisible();
+        rightSidebarRestoreStrokeDock = (strokeDock != nullptr) && strokeDock->isVisible();
+
+        if (strokeDock != nullptr) {
+            strokeDock->hide();
+        }
+        if (ui->dockCameras != nullptr) {
+            ui->dockCameras->hide();
+        }
+        if (ui->dockLayers != nullptr) {
+            ui->dockLayers->hide();
+        }
+    }
+
+    syncRightSidebarToggleAction();
+}
+
+void MainWindow::onToggleBottomTimeline(bool enabled)
+{
+    if (ui->dockControlls == nullptr) {
+        return;
+    }
+
+    if (enabled) {
+        ui->dockControlls->show();
+        ui->dockControlls->raise();
+    } else {
+        ui->dockControlls->hide();
+    }
+
+    syncBottomTimelineToggleAction();
 }
 
 void MainWindow::setWhiteTheme()
