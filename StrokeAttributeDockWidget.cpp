@@ -123,6 +123,8 @@ StrokeAttributeDockWidget::StrokeAttributeDockWidget(QWidget *parent)
     colorLayout->addStretch(1);
     layout->addLayout(colorLayout);
 
+    layout->addWidget(new QLabel("Pen Color:"));
+
     // Color mode combo box
     layout->addWidget(new QLabel("Color Mode:"));
     colorModeCombo = new QComboBox;
@@ -130,31 +132,18 @@ StrokeAttributeDockWidget::StrokeAttributeDockWidget(QWidget *parent)
     colorModeCombo->setCurrentIndex(0); // Default: Solid Foreground
     layout->addWidget(colorModeCombo);
 
-
-
-
-
-    ColorPaletteWidget *colorPalette = new ColorPaletteWidget();  // parented to dock for proper cleanup
-
-    // Optional: set reasonable size
-    //colorPalette->resize(400, 360);
-
-    // Connect the color selection signal
-    connect(colorPalette, &ColorPaletteWidget::colorPicked,
-        this, [this, colorPalette](const QColor &color) {
-            if (color.isValid() && color != foregroundColor) {
+    foregroundColorPicker = new ColorPaletteWidget(contentWidget);
+    foregroundColorPicker->setColor(foregroundColor);
+    connect(foregroundColorPicker, &ColorPaletteWidget::colorChanged,
+            this, [this](const QColor &color) {
+                if (!color.isValid() || color == foregroundColor) {
+                    return;
+                }
                 foregroundColor = color;
-                //updateColorSwatchStyle();
-                emitStrokeProperties();  // Update preview and PaintArea
-            }
-            colorPalette->close();  // auto-close on pick (nice UX)
-    });
-
-
-    // Update palette to current color before showing
-    //colorPalette->setCurrentColor(foregroundColor);
-
-    layout->addWidget(colorPalette);
+                updateColorButtonStyle(foregroundColorButton, foregroundColor);
+                emitStrokeProperties();
+            });
+    layout->addWidget(foregroundColorPicker);
 
 
 
@@ -239,47 +228,9 @@ void StrokeAttributeDockWidget::updateTaperLabel(int value)
 
 void StrokeAttributeDockWidget::selectForegroundColor()
 {
-    /***
-    ColorPaletteWidget *colorPalette = nullptr;
-
-    // Create only once – reuse if already exists
-    if (!colorPalette) {
-        colorPalette = new ColorPaletteWidget();  // parented to dock for proper cleanup
-        colorPalette->setWindowModality(Qt::WindowModal);  // blocks rest of app
-        colorPalette->setWindowTitle("Color Palette");
-
-        // Optional: set reasonable size
-        colorPalette->resize(400, 360);
-
-        // Connect the color selection signal
-        connect(colorPalette, &ColorPaletteWidget::colorPicked,
-                this, [this, colorPalette](const QColor &color) {
-                    if (color.isValid() && color != foregroundColor) {
-                        foregroundColor = color;
-                        //updateColorSwatchStyle();
-                        emitStrokeProperties();  // Update preview and PaintArea
-                    }
-                    colorPalette->close();  // auto-close on pick (nice UX)
-                });
-    }
-
-    // Update palette to current color before showing
-    //colorPalette->setCurrentColor(foregroundColor);
-
-    // Show centered over the main window (or dock)
-    colorPalette->move(mapToGlobal(rect().center()) - QPoint(colorPalette->width()/2, colorPalette->height()/2));
-    colorPalette->show();
-    colorPalette->raise();
-    colorPalette->activateWindow();
-
-    return;
-***/
-
-    QColor color = QColorDialog::getColor(foregroundColor, this, "Select Foreground Color");
-    if (color.isValid()) {
-        foregroundColor = color;
-        updateColorButtonStyle(foregroundColorButton, foregroundColor);
-        emitStrokeProperties();
+    if (foregroundColorPicker) {
+        foregroundColorPicker->setColor(foregroundColor);
+        foregroundColorPicker->setFocus(Qt::OtherFocusReason);
     }
 }
 
@@ -421,6 +372,9 @@ void StrokeAttributeDockWidget::setStrokeProperties(const StrokeProperties &prop
     colorModeCombo->setCurrentIndex(static_cast<int>(props.colorMode));
     foregroundColor = props.foregroundColor;
     updateColorButtonStyle(foregroundColorButton, foregroundColor);
+    if (foregroundColorPicker) {
+        foregroundColorPicker->setColor(foregroundColor);
+    }
     backgroundColor = props.backgroundColor;
     updateColorButtonStyle(backgroundColorButton, backgroundColor);
 

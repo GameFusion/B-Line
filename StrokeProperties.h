@@ -25,7 +25,7 @@ struct StrokeProperties {
     VariableWidthMode variableWidthMode=Uniform;
     int stepCount=20; // Bézier sampling steps
     QColor foregroundColor = Qt::black;
-    QColor backgroundColor = Qt::gray;
+    QColor backgroundColor = Qt::white;
     ColorMode colorMode = SolidForeground;
 
 

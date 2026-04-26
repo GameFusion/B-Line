@@ -64,9 +64,6 @@ protected:
         painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
         // Set pen for variable width, color, etc. (from your strokeProperties)
 
-        strokeProperties.foregroundColor = Qt::red;
-        strokeProperties.maxWidth = 7;
-
         QPen pen(strokeProperties.foregroundColor, strokeProperties.maxWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
         painter.setPen(pen);
         painter.drawPath(m_path);

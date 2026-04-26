@@ -47,6 +47,12 @@ RESOURCES += $$GF/Applications/CommonQt/qdarkstyle/style.qrc
 RESOURCES += ../Boarder.qrc
 
 macx {
+    contains(QMAKE_APPLE_DEVICE_ARCHS, arm64)|contains(QMAKE_HOST.arch, arm64) {
+        message("Applying Apple Silicon arm_acle preinclude workaround for Qt qyieldcpu")
+        QMAKE_CFLAGS += -include arm_acle.h
+        QMAKE_CXXFLAGS += -include arm_acle.h
+    }
+
         QMAKE_CXXFLAGS += -std=c++20
 
     DEFINES += ENABLE_PLUGIN_SUPPORT

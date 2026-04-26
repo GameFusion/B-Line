@@ -2526,6 +2526,10 @@ MainWindow::MainWindow(QWidget *parent)
     connect(strokeDock, &StrokeAttributeDockWidget::strokePropertiesChanged,
             paintCanvas, &PaintCanvas::setStrokeProperties);
 
+    const StrokeProperties initialStrokeProperties = strokeDock->getStrokeProperties();
+    paint->getPaintArea()->setStrokeProperties(initialStrokeProperties);
+    paintCanvas->setStrokeProperties(initialStrokeProperties);
+
     strokeDock->setStyleSheet("QLabel { font-size: 10px; } QSlider, QComboBox, QSpinBox { margin-bottom: 4px; }");
 
     strokeDock->setStyleSheet(R"(

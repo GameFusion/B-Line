@@ -12,6 +12,7 @@
 #include "StrokeProperties.h"
 
 class PaintArea;
+class ColorPaletteWidget;
 
 class StrokeAttributeDockWidget : public QDockWidget
 {
@@ -58,6 +59,7 @@ private:
     QComboBox *colorModeCombo;
     QColor foregroundColor;
     QColor backgroundColor;
+    ColorPaletteWidget *foregroundColorPicker;
 
     PaintArea *previewArea;
 
