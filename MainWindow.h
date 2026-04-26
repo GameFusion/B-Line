@@ -31,6 +31,7 @@ class TrackItem;
 class QPdfWriter;
 class QUndoStack;
 class QLabel;
+class QDockWidget;
 
 namespace Ui {
 	class MainWindowBoarder;
@@ -360,6 +361,9 @@ public slots:
     void colorPalette();
     void onToggleFullScreen(bool enabled);
     void onToggleDetachedPip(bool enabled);
+    void onToggleLeftSidebar(bool enabled);
+    void onToggleRightSidebar(bool enabled);
+    void onToggleBottomTimeline(bool enabled);
     void refreshDetachedPip();
 
 protected:
@@ -489,6 +493,12 @@ protected:
     QAction *toggleFullScreenAct = nullptr;
     QAction *toggleDetachedPipAct = nullptr;
     QAction *toggleLowLatencyScrubAct = nullptr;
+    QAction *toggleLeftSidebarAct = nullptr;
+    QAction *toggleRightSidebarAct = nullptr;
+    QAction *toggleBottomTimelineAct = nullptr;
+
+    QDockWidget *shotPanelDock = nullptr;
+    QDockWidget *scriptDock = nullptr;
 
     GameFusion::Panel clipboardPanel; // Clipboard for copy/cut/paste
     bool hasClipboardPanel = false;
@@ -500,6 +510,12 @@ protected:
     bool hasClipboardLayer = false;
 
 private:
+    void syncLeftSidebarToggleAction();
+    bool isLeftSidebarVisible() const;
+    void syncRightSidebarToggleAction();
+    bool isRightSidebarVisible() const;
+    void syncBottomTimelineToggleAction();
+    bool isBottomTimelineVisible() const;
     void loadSettings();
     void saveSettings();
     bool saveProjectMetadataFile(const QString& projectDir, QString* errorMessage = nullptr);
@@ -520,6 +536,9 @@ private:
     QTimer *autoSaveTimer;
     bool autoSave = false;
     bool savePending = false;
+    bool rightSidebarRestoreLayers = true;
+    bool rightSidebarRestoreStrokeDock = true;
+    bool rightSidebarRestoreCameraDock = false;
     //QAction *autoSaveAction;
 
     PaintCanvas *paintCanvas = nullptr;
