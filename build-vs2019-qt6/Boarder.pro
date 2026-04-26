@@ -53,6 +53,8 @@ macx {
         QMAKE_CXXFLAGS += -include arm_acle.h
     }
 
+    QMAKE_INFO_PLIST = $$PWD/Info.plist
+
         QMAKE_CXXFLAGS += -std=c++20
 
     DEFINES += ENABLE_PLUGIN_SUPPORT
