@@ -25,6 +25,12 @@ For first-time local onboarding (new project -> default scene/shot/panel -> firs
 
 - [docs/getting-started-local-101.md](docs/getting-started-local-101.md)
 
+## Publishing
+
+For the Windows installer packaging and SyncPipeline publishing runbook, see:
+
+- [docs/publishing-pipeline.md](docs/publishing-pipeline.md)
+
 ## Current Features
 
 ### Shot Management
