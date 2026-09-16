@@ -1,0 +1,33 @@
+codex-workspace/
+
+# Local projects and workspace metadata
+/Projects/
+.stargit/
+.gitree
+.DS_Store
+.qtcreator/
+*.pro.user
+*.pro.user.*
+
+# Build products and packaged dependencies
+/build-vs2019-qt6/build/
+/build-vs2019-qt6/build-old/
+/build-vs2019-qt6/Frameworks/
+*.app/
+*.dmg
+
+# Python environments, credentials, and caches
+.env
+.env.*
+!.env.example
+!.env.sample
+.venv/
+__pycache__/
+*.py[cod]
+*.p8
+*.p12
+
+# Runtime logs and document lock files
+/log-*.txt
+/file_history.txt
+~$*
