@@ -66,6 +66,8 @@
 #include "ErrorDialog.h"
 #include "CameraSidePanel.h"
 #include "PerfectScriptWidget.h"
+#include "ScriptDocument.h"
+#include "Paragraph.h"
 #include "OptionsDialog.h"
 #include "ProjectContext.h"
 #include "NewShotDialog.h"
@@ -4522,6 +4524,10 @@ void MainWindow::loadProject(QString projectDir){
         scriptBreakdown = nullptr;
     }
     timeLineView->clear();
+    // clear() removes the tracks as well as their contents. Project loading
+    // requires storyboard track 0 and an initial audio track at index 1.
+    timeLineView->addTrack(new Track("Track 1", 0, 500000, TrackType::Storyboard));
+    timeLineView->addTrack(new Track("Track 2", 0, 150000, TrackType::Audio));
 
     currentPanel = nullptr;
 
@@ -4750,7 +4756,20 @@ void MainWindow::loadScript() {
         }
         else{
             Log().info() << "Imported script: " << scriptBreakdown->fileName() << "\n";
-            perfectScript->loadScript(scriptBreakdown);
+            // Adapt the loaded breakdown to the shared screenplay editor's document API.
+            QList<ScriptElement> elements;
+            for (int i = 0; i < scriptBreakdown->paragraphs().length(); ++i) {
+                GameFusion::Paragraph& paragraph = scriptBreakdown->paragraphs()[i];
+                ScriptElement element;
+                element.text = QString::fromUtf8(paragraph.text().c_str());
+                element.sourceType = QString::fromUtf8(paragraph.styleName().c_str());
+                element.type = scriptElementTypeFromFdxName(element.sourceType);
+                elements.append(element);
+            }
+            ScriptDocument document;
+            document.setSourcePath(fileName);
+            document.replaceElements(elements);
+            perfectScript->loadDocument(document);
         }
     }
     else
@@ -7033,7 +7052,7 @@ void MainWindow::loadAudioTracks() {
         else{
             // Create and add track
             track = new Track(name, 0, 170000, TrackType::Audio);
-            TrackItem *trackItem = timeLineView->addTrack(track);
+            trackItem = timeLineView->addTrack(track);
         }
 
         track->setUuid(uuid);

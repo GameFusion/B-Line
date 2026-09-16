@@ -328,8 +328,12 @@ HEADERS += $$GF/Applications/TimeLineProject/TimeLineView.h \
 
 #
 # Perfect Script
-SOURCES += $$GF/Applications/PerfectScript/PerfectScriptWidget.cpp
-HEADERS += $$GF/Applications/PerfectScript/PerfectScriptWidget.h
+SOURCES += $$GF/Applications/PerfectScript/PerfectScriptWidget.cpp \
+           $$GF/Applications/PerfectScript/ScriptDocument.cpp \
+           $$GF/Applications/PerfectScript/PerfectScriptTheme.cpp
+HEADERS += $$GF/Applications/PerfectScript/PerfectScriptWidget.h \
+           $$GF/Applications/PerfectScript/ScriptDocument.h \
+           $$GF/Applications/PerfectScript/PerfectScriptTheme.h
 INCLUDEPATH += $$GF/Applications/PerfectScript
 
 #
