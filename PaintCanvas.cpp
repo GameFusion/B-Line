@@ -2,6 +2,7 @@
 
 #include <QActionGroup>
 #include <QGraphicsScene>
+#include <QFontDatabase>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMouseEvent>
@@ -9,6 +10,7 @@
 #include <QSignalBlocker>
 #include <QTabletEvent>
 #include <QToolBar>
+#include <QToolButton>
 #include <cmath>
 
 PaintCanvas::PaintCanvas(QWidget *parent) : QGraphicsView(parent),
@@ -33,34 +35,60 @@ PaintCanvas::PaintCanvas(QWidget *parent) : QGraphicsView(parent),
     setBackgroundBrush(Qt::white);
     m_toolbar->setMovable(false);
     m_toolbar->setFloatable(false);
-    m_toolbar->setIconSize(QSize(16, 16));
+    m_toolbar->setObjectName("workspaceToolbar");
+    m_toolbar->setIconSize(QSize(18, 18));
+    m_toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    m_toolbar->setStyleSheet(
+        "QToolBar { background: #1D2330; border: 0; spacing: 4px; padding: 5px; }"
+        "QToolButton { background: #1D2330; border: 1px solid #2E3950;"
+        " border-radius: 6px; padding: 5px 7px; color: #D7DEEA; }"
+        "QToolButton:hover { background: #273149; border-color: #3A4A6B; }"
+        "QToolButton:checked { background: #0AA2FF; border-color: #3EC8FF; }"
+        "QToolButton:pressed { background: #0587DA; }"
+        "QLabel { color: #D7DEEA; padding: 0 5px; }"
+        "QToolBar::separator { background: #3A4A6B; width: 1px; margin: 4px; }");
     m_tools->setExclusive(true);
-    const QList<QPair<QString, PaintArea::ToolMode>> tools = {
-        {tr("Draw"), PaintArea::ToolMode::Paint}, {tr("Text"), PaintArea::ToolMode::Text},
-        {tr("Select"), PaintArea::ToolMode::Select}, {tr("Erase"), PaintArea::ToolMode::Erase},
-        {tr("Edit"), PaintArea::ToolMode::Edit}, {tr("Camera"), PaintArea::ToolMode::Camera},
-        {tr("Layer"), PaintArea::ToolMode::Layer}};
+    struct Tool { QString label; PaintArea::ToolMode mode; ushort glyph; };
+    // Match the Font Awesome symbols used by MainWindowPaint::createTools.
+    const QList<Tool> tools = {
+        {tr("Draw"), PaintArea::ToolMode::Paint, 0xf1fc},
+        {tr("Text"), PaintArea::ToolMode::Text, 0xf031},
+        {tr("Select"), PaintArea::ToolMode::Select, 0xf245},
+        {tr("Erase"), PaintArea::ToolMode::Erase, 0xf12d},
+        {tr("Vector edit"), PaintArea::ToolMode::Edit, 0xf5ad},
+        {tr("Camera"), PaintArea::ToolMode::Camera, 0xf03d},
+        {tr("Layer"), PaintArea::ToolMode::Layer, 0xf5fd}};
     for (const auto &tool : tools) {
-        QAction *action = m_toolbar->addAction(tool.first);
+        QAction *action = addIconAction(tool.label, tool.glyph);
         action->setCheckable(true);
-        action->setData(int(tool.second));
+        action->setData(int(tool.mode));
         m_tools->addAction(action);
         connect(action, &QAction::triggered, this, [this, tool] {
-            if (m_area && !m_editing) m_area->setToolMode(tool.second);
+            if (m_area && !m_editing) m_area->setToolMode(tool.mode);
             updateToolActions();
         });
     }
     m_toolbar->addSeparator();
-    m_toolbar->addAction(tr("−"), this, [this] { applyZoom(zoomFactor() / 1.25); });
+    connect(addIconAction(tr("Zoom out"), 0xf010), &QAction::triggered,
+            this, [this] { applyZoom(zoomFactor() / 1.25); });
     m_toolbar->addWidget(m_zoomLabel);
-    m_toolbar->addAction(tr("+"), this, [this] { applyZoom(zoomFactor() * 1.25); });
-    m_toolbar->addAction(tr("100%"), this, [this] { applyZoom(1.0); });
-    m_toolbar->addAction(tr("Fit"), this, &PaintCanvas::fitToBase);
+    connect(addIconAction(tr("Zoom in"), 0xf00e), &QAction::triggered,
+            this, [this] { applyZoom(zoomFactor() * 1.25); });
+    connect(addIconAction(tr("Actual size (100%)"), 0xf002), &QAction::triggered,
+            this, [this] { applyZoom(1.0); });
+    connect(addIconAction(tr("Fit canvas (F)"), 0xf31e), &QAction::triggered,
+            this, &PaintCanvas::fitToBase);
     m_toolbar->addSeparator();
-    QAction *lightTable = m_toolbar->addAction(tr("Light table"));
-    lightTable->setCheckable(true);
-    connect(lightTable, &QAction::toggled, this, [this](bool on) { if (m_area) m_area->setLightTableMode(on); });
-    QAction *pip = m_toolbar->addAction(tr("Camera preview"));
+    m_lightTable = addIconAction(tr("Light table"), 0xf0eb);
+    m_lightTable->setObjectName("workspaceLightTable");
+    m_lightTable->setCheckable(true);
+    // Feature toggles use the same amber accent as the integrated toolbar.
+    m_toolbar->widgetForAction(m_lightTable)->setStyleSheet(
+        "QToolButton:checked { background: #FF9F1C; border-color: #FFD28A; }");
+    connect(m_lightTable, &QAction::toggled, this, [this](bool on) {
+        if (m_area) m_area->setLightTableMode(on);
+    });
+    QAction *pip = addIconAction(tr("Camera preview"), 0xf108);
     pip->setCheckable(true);
     pip->setChecked(true);
     connect(pip, &QAction::toggled, this, [this](bool on) { m_showPip = on; viewport()->update(); });
@@ -68,6 +96,45 @@ PaintCanvas::PaintCanvas(QWidget *parent) : QGraphicsView(parent),
     connect(horizontalScrollBar(), &QScrollBar::valueChanged, this, &PaintCanvas::invalidateDrawing);
     connect(verticalScrollBar(), &QScrollBar::valueChanged, this, &PaintCanvas::invalidateDrawing);
     updateZoomLabel();
+}
+
+QAction *PaintCanvas::addIconAction(const QString &label, ushort glyph)
+{
+    static const QString family = [] {
+        const int id = QFontDatabase::addApplicationFont(":/fa-solid-900.ttf");
+        return QFontDatabase::applicationFontFamilies(id).value(0);
+    }();
+    QIcon icon;
+    if (!family.isEmpty()) {
+        QFont font(family);
+        font.setPixelSize(16);
+        for (auto mode : {QIcon::Normal, QIcon::Disabled}) {
+            for (auto state : {QIcon::Off, QIcon::On}) {
+                QPixmap pixmap(36, 36);
+                pixmap.setDevicePixelRatio(2);
+                pixmap.fill(Qt::transparent);
+                QPainter painter(&pixmap);
+                painter.setRenderHint(QPainter::TextAntialiasing);
+                painter.setFont(font);
+                painter.setPen(mode == QIcon::Disabled ? QColor("#68758A") :
+                               state == QIcon::On ? QColor(Qt::white) : QColor("#D7DEEA"));
+                painter.drawText(QRectF(0, 0, 18, 18), Qt::AlignCenter, QChar(glyph));
+                painter.end();
+                icon.addPixmap(pixmap, mode, state);
+            }
+        }
+    }
+    QAction *action = m_toolbar->addAction(icon, label);
+    action->setToolTip(label);
+    m_toolbar->widgetForAction(action)->setAccessibleName(label);
+    return action;
+}
+
+void PaintCanvas::updateLightTableAction()
+{
+    const QSignalBlocker block(m_lightTable);
+    m_lightTable->setEnabled(m_area);
+    m_lightTable->setChecked(m_area && m_area->lightTableMode());
 }
 
 void PaintCanvas::setPaintArea(PaintArea *area)
@@ -82,10 +149,14 @@ void PaintCanvas::setPaintArea(PaintArea *area)
         for (auto *action : area->actions()) addAction(action);
         connect(area, &PaintArea::workspaceChanged, this, &PaintCanvas::invalidateDrawing);
         connect(area, &PaintArea::toolModeChanged, this, &PaintCanvas::updateToolActions);
-        connect(area, &QObject::destroyed, this, [this] { m_drawing = QPicture(); invalidateDrawing(); });
+        connect(area, &PaintArea::lightTableModeChanged, this, &PaintCanvas::updateLightTableAction);
+        connect(area, &QObject::destroyed, this, [this] {
+            m_drawing = QPicture(); updateToolActions(); updateLightTableAction(); invalidateDrawing();
+        });
     }
     m_drawing = QPicture();
     updateToolActions();
+    updateLightTableAction();
     invalidateDrawing();
     if (area && isVisible() && !m_fitted) fitToBase();
 }
@@ -93,10 +164,20 @@ void PaintCanvas::setPaintArea(PaintArea *area)
 void PaintCanvas::setHistoryActions(QAction *undo, QAction *redo)
 {
     m_toolbar->addSeparator();
-    m_toolbar->addAction(undo);
-    m_toolbar->addAction(redo);
-    addAction(undo);
-    addAction(redo);
+    for (const auto &entry : {qMakePair(undo, ushort(0xf0e2)), qMakePair(redo, ushort(0xf01e))}) {
+        QAction *source = entry.first;
+        QAction *button = addIconAction(source->text(), entry.second);
+        auto sync = [source, button] {
+            button->setEnabled(source->isEnabled());
+            button->setText(source->text());
+            button->setToolTip(source->text());
+        };
+        connect(source, &QAction::changed, button, sync);
+        connect(source, &QObject::destroyed, button, [button] { button->setEnabled(false); });
+        connect(button, &QAction::triggered, source, &QAction::trigger);
+        sync();
+        addAction(source); // Preserve the shared Undo/Redo keyboard shortcuts.
+    }
 }
 
 void PaintCanvas::invalidateDrawing()

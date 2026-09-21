@@ -40,6 +40,8 @@ protected:
     bool viewportEvent(QEvent *event) override;
 
 private:
+    QAction *addIconAction(const QString &label, ushort glyph);
+    void updateLightTableAction();
     void forwardMouse(QMouseEvent *event);
     void invalidateDrawing();
     void updateToolActions();
@@ -49,6 +51,7 @@ private:
     QToolBar *m_toolbar;
     QActionGroup *m_tools;
     QLabel *m_zoomLabel;
+    QAction *m_lightTable;
     QPicture m_drawing;
     double m_sourceZoom = 1.0;
     bool m_dirty = true;

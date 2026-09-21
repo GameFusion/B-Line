@@ -12,7 +12,15 @@ shares the integrated `PaintArea` document and editing controller.
 - Resizing preserves zoom. Workspace navigation never resizes the document or
   changes the integrated view's zoom. Drawing can extend beyond the output and
   overscan boundaries; export still uses the project's output/camera framing.
-- Light table and camera preview are available in the workspace toolbar.
+- The toolbar uses Font Awesome icons matching the integrated editor, with
+  tooltips, blue selected tools and an amber Light table toggle. Navigation,
+  camera preview and Undo/Redo also use icons; shared history shortcuts remain.
+- Light table fades the reference image and non-active layers together to 25%,
+  after compositing their overlaps and blend modes. The active layer stays on
+  top with its authored transform, opacity and visibility. Both editor windows
+  share the light-table setting and selected tool; newly opened workspaces
+  inherit them. Camera previews, timeline thumbnails and movie output keep the
+  full scene, including the active layer.
 - Closing and reopening the window retains the document and navigation state.
 
 ## Implementation
@@ -29,8 +37,10 @@ this avoids applying opacity repeatedly where stroke segments overlap. Cache
 invalidation is driven by document and controller updates. There is no polling
 loop, OpenGL viewport, per-line graphics item or competing stroke worker.
 
-The source renderer retains its existing layer animation, camera and export
-semantics. This change does not redesign the integrated renderer's algorithms.
+The two editors share light-table composition. Its temporary background surface
+is bounded to the visible region and rendered at the view's display density;
+vector layer commands remain cached. The full document composite remains
+independent of light-table mode for camera previews, thumbnails and exports.
 The workspace view is limited to +/- 1,000,000 logical pixels, with 2–3200% zoom.
 
 ## Verification
@@ -48,5 +58,11 @@ independent navigation, resize stability, layer visibility/opacity/compositing,
 images, text, animation, camera interaction, synthetic tablet input, panel
 switching, empty panels and controller detachment. It writes diagnostic renders
 to `/tmp/boarder-workspace-*.png` and reports a cached 300-stroke redraw timing.
+The light-table regression fixture covers the panel reference, image layers,
+blended overlaps, off-canvas ink, active-layer opacity/visibility, panel changes,
+export isolation, initial toggle state and shared history actions. The native
+window capture is `/tmp/boarder-workspace-lighttable.png`. PlaybackSmoke checks
+mode synchronization through both actual MainWindow toolbars.
+
 Native stylus hardware and large production-project playback still need user
 acceptance; the synthetic benchmark is not a production performance guarantee.

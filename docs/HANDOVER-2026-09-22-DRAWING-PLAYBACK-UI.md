@@ -4,6 +4,27 @@
 
 The work below was resumed after the user's “continue with handover” request. The drawing/playback draft was stabilized and the three UI requests were implemented. The current build and native drawing/playback/audio tests pass; the movie encoder/player and the actual Export Movie path were exercised with temporary fixtures. See [EDITOR-PREVIEW-AND-EXPORT.md](EDITOR-PREVIEW-AND-EXPORT.md) for final behavior, verification, and limits. The historical stop-point sections below are retained as an audit trail, not the current completion status.
 
+## Follow-up review: standalone toolbar and light table
+
+Before starting this follow-up, the three prior implementation heads were pushed
+and their remote refs verified: B-Line `63395e4`, plugandpaint `761b9cb`, and
+TimeLineProject `ce7b700`. The latest work replaces text toolbar buttons with
+matching Font Awesome icons and fixes light-table reference/background fading,
+compositing overlaps, shared toolbar state and active-layer retention in the
+camera/export composite. Source changes span B-Line and plugandpaint;
+TimeLineProject requires no further changes. The shared drawing dependency is
+plugandpaint commit `696a6f3` (pushed to its `github/master` remote). See the current behavior and test
+record in [DRAWING_WORKSPACE.md](DRAWING_WORKSPACE.md) and
+[EDITOR-PREVIEW-AND-EXPORT.md](EDITOR-PREVIEW-AND-EXPORT.md).
+
+The handover priorities are addressed: File > Open Recent; standalone drawing
+workspace; deferred secondary drawing updates; playback/timecode; Shot List
+presentation/filter choices; narrow Layers/Stroke Attributes docks; and the
+post-export movie player with reveal/copy-path actions. Remaining acceptance
+limits are native stylus hardware, large production projects, long-duration A/V
+drift and the untested Windows Explorer branch. Audio mixing remains first-track
+only, as documented. These limits are not claims of completed validation.
+
 ## Stop point and user priorities
 
 The user explicitly asked to **stop implementation and create a handover**. Implementation stopped. The changes below are unfinished, uncommitted, and not pushed. Do not interpret this document as evidence that the features work or that the current source builds.

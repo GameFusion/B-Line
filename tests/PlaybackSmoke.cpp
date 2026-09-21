@@ -1,5 +1,7 @@
 #include "MainWindow.h"
 #include "ProjectContext.h"
+#include "PaintCanvas.h"
+#include "mainwindowpaint.h"
 #include "../../TimeLineProject/TimeLineView.h"
 #include "../../TimeLineProject/TrackItem.h"
 #include "../../TimeLineProject/Track.h"
@@ -44,6 +46,20 @@ int main(int argc,char **argv) {
     ProjectContext::instance().projectJson()["fps"]=25;
     ProjectContext::instance().projectJson()["start_tc"]="01:00:00:00";
     MainWindow window;
+    auto *workspace=window.findChild<PaintCanvas*>();
+    auto *editor=window.findChild<MainWindowPaint*>();
+    QAction *embeddedLight=nullptr,*embeddedSelect=nullptr;
+    for(auto *action:editor->findChildren<QAction*>()) {
+        if(action->toolTip()=="Light Table Mode")embeddedLight=action;
+        if(action->toolTip()=="Selection Mode")embeddedSelect=action;
+    }
+    auto *workspaceLight=workspace->findChild<QAction*>("workspaceLightTable");
+    require(embeddedLight && embeddedSelect && workspaceLight,"both editor toolbars expose shared modes");
+    workspaceLight->trigger();require(embeddedLight->isChecked(),"workspace light-table toggle synchronizes embedded button");
+    embeddedLight->trigger();require(!workspaceLight->isChecked(),"embedded light-table toggle synchronizes workspace button");
+    editor->getPaintArea()->setToolMode(PaintArea::ToolMode::Select);
+    require(embeddedSelect->isChecked(),"shared tool changes synchronize embedded selection button");
+    editor->getPaintArea()->setToolMode(PaintArea::ToolMode::Paint);
     auto *timeline=window.findChild<TimeLineView*>();
     auto *label=window.findChild<QLabel*>("playbackTimecode");
     require(timeline && label,"transport UI constructed");

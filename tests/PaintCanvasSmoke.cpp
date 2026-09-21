@@ -1,6 +1,8 @@
 #include "PaintCanvas.h"
 #include "PlaybackTiming.h"
 #include <QApplication>
+#include <QAction>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QMouseEvent>
 #include <QScrollBar>
@@ -37,8 +39,84 @@ static void sendMouse(PaintCanvas &view,QEvent::Type type,QPointF scene,Qt::Mous
     QMouseEvent event(type,pos,view.viewport()->mapToGlobal(pos.toPoint()),button,buttons,Qt::NoModifier);
     QCoreApplication::sendEvent(view.viewport(),&event);
 }
+static void lightTableChecks(QApplication &app) {
+    QTemporaryDir assets;
+    QDir().mkpath(assets.filePath("movies"));
+    QImage reference(320,240,QImage::Format_ARGB32_Premultiplied);
+    reference.fill(QColor(80,100,120)); reference.save(assets.filePath("movies/background.png"));
+    QImage patch(320,240,QImage::Format_ARGB32_Premultiplied); patch.fill(Qt::transparent);
+    {QPainter p(&patch);p.fillRect(QRect(240,160,60,60),QColor(130,40,180));}
+    patch.save(assets.filePath("patch.png"));
+    GameFusion::Panel panel;panel.uuid="light-table";panel.image="background.png";
+    GameFusion::Layer active;active.uuid="active";active.x=20;
+    active.strokes.push_back(line(-100,60,270,60,Qt::red));
+    GameFusion::Layer upper;upper.uuid="upper";
+    upper.strokes.push_back(line(150,110,150,210,Qt::blue));
+    upper.blendMode=GameFusion::BlendMode::Multiply;
+    GameFusion::Layer lower;lower.uuid="lower";
+    lower.strokes.push_back(line(-100,150,290,150,Qt::green));
+    lower.imageFilePath=assets.filePath("patch.png").toStdString();
+    panel.layers={active,upper,lower};
+    PaintArea area;area.setDimensions(320,240,320,240);
+    area.toggleOutputFrame(false);area.toggleActionSafe(false);area.toggleTitleSafe(false);area.setPipDisplay(false);
+    area.setProjectPath(assets.path());area.setPanel(panel);area.setActiveLayer("active");
+    // Compare scene pixels independently of the physical mouse's brush cursor.
+    area.setToolMode(PaintArea::ToolMode::Select);
+    PaintCanvas view;view.resize(1000,650);view.setPaintArea(&area);view.show();
+    app.processEvents();view.fitToBase();
+    auto *toolbar=view.findChild<QToolBar*>("workspaceToolbar");
+    auto *light=view.findChild<QAction*>("workspaceLightTable");
+    require(toolbar && light,"workspace has named toolbar and light-table control");
+    int icons=0;for(auto *action:toolbar->actions())if(!action->icon().isNull())++icons;
+    require(icons==13,"Font Awesome icons cover tools, navigation and preview toggles");
+    QAction undo("Undo stroke",&view),redo("Redo stroke",&view);undo.setEnabled(false);
+    view.setHistoryActions(&undo,&redo);
+    QAction *undoButton=nullptr;for(auto *action:toolbar->actions())if(action->text()==undo.text())undoButton=action;
+    require(undoButton && !undoButton->icon().isNull() && !undoButton->isEnabled(),"icon Undo retains shared enabled state");
+    bool undone=false;QObject::connect(&undo,&QAction::triggered,&view,[&]{undone=true;});
+    undo.setEnabled(true);undoButton->trigger();require(undone,"workspace Undo invokes original history action");
+    QImage normal=pictureImage(area),exportBefore(320,240,QImage::Format_ARGB32_Premultiplied);
+    area.renderFrameToImage(exportBefore);
+    area.setLightTableMode(true);
+    require(light->isChecked(),"source light-table change checks workspace toggle");
+    PaintCanvas second;second.setPaintArea(&area);
+    require(second.findChild<QAction*>("workspaceLightTable")->isChecked(),"new workspace inherits current light-table state");
+    QImage faded=pictureImage(area);
+    auto expectedFade=[](QColor c){return QColor(qRound(255*0.75+c.red()*0.25),qRound(255*0.75+c.green()*0.25),qRound(255*0.75+c.blue()*0.25));};
+    auto near=[](QColor a,QColor b){return qAbs(a.red()-b.red())<=2&&qAbs(a.green()-b.green())<=2&&qAbs(a.blue()-b.blue())<=2;};
+    require(near(pixel(faded,200,200),expectedFade(pixel(normal,200,200))),"panel reference image fades to 25 percent");
+    require(near(pixel(faded,260,180),expectedFade(pixel(normal,260,180))),"image layer fades with background");
+    require(near(pixel(faded,150,150),expectedFade(pixel(normal,150,150))),"background overlap and multiply blend fade once as a group");
+    require(near(pixel(faded,-70,150),expectedFade(pixel(normal,-70,150))),"light table preserves off-canvas background strokes");
+    require(pixel(faded,-70,60).red()>240 && pixel(faded,-70,60).green()<10,"active off-canvas ink stays full strength");
+    QImage integrated(320,240,QImage::Format_ARGB32_Premultiplied);integrated.fill(Qt::white);
+    {QPainter p(&integrated);area.renderScene(p);}
+    require(near(integrated.pixelColor(150,150),pixel(faded,150,150)) &&
+            near(integrated.pixelColor(200,200),pixel(faded,200,200)),"integrated and workspace light table agree");
+    QImage exportAfter(320,240,QImage::Format_ARGB32_Premultiplied);area.renderFrameToImage(exportAfter);
+    require(exportBefore==exportAfter && area.compositedImage().pixelColor(140,60).green()<10,
+            "light table leaves active ink in export and camera source composite");
+    area.setLayerVisibility("active",false);
+    require(pixel(pictureImage(area),140,60).green()>200,"hidden active layer remains hidden in light table");
+    area.setLayerVisibility("active",true);active.opacity=0.5;area.updateLayer(active);
+    require(pixel(pictureImage(area),140,60).green()>90 && pixel(pictureImage(area),140,60).green()<130,
+            "active layer retains its authored opacity");
+    area.setActiveLayer("lower");
+    require(pixel(pictureImage(area),100,150).green()>240 && pixel(pictureImage(area),100,150).red()<10,
+            "changing active layer moves full-strength highlight");
+    area.setActiveLayer("active");active.opacity=1;area.updateLayer(active);
+    app.processEvents();view.grab().save("/tmp/boarder-workspace-lighttable.png");
+    light->trigger();require(!area.lightTableMode(),"workspace toggle updates shared light-table state");
+    require(pictureImage(area)==normal,"turning light table off restores the full scene");
+    GameFusion::Panel next;next.uuid="next-light-table";active.uuid="next-active";active.opacity=0.5;
+    next.layers={active};area.setLightTableMode(true);area.setPanel(next);
+    require(qAbs(pixel(pictureImage(area),140,60).green()-128)<=2,
+            "panel switch excludes the default active layer from faded background");
+}
+
 int main(int argc,char **argv) {
     QApplication app(argc,argv);
+    lightTableChecks(app);
     PaintArea area;
     area.setDimensions(320,240,320,240);
     area.toggleOutputFrame(false); area.toggleActionSafe(false); area.toggleTitleSafe(false); area.setPipDisplay(false);
