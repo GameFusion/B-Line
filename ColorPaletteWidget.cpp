@@ -135,7 +135,7 @@ Notes:
             delete child->widget(); delete child;
         }
 
-        const int cols = 8;
+        const int cols = qMax(1, (width() - 24) / 34);
         for (int gi=0; gi<m_groups.size(); ++gi) {
             const PaletteGroup &g = m_groups[gi];
             QLabel *lbl = new QLabel(g.name);
@@ -179,6 +179,7 @@ Notes:
         //setMinimumSize(420, 360);
         QVBoxLayout *main = new QVBoxLayout(this);
         main->setSpacing(4);
+        main->setContentsMargins(0,0,0,0);
 
         // Top: HSV bars + opacity
         //QGroupBox *controlsBox = new QGroupBox("Color Controls");
@@ -231,19 +232,24 @@ Notes:
 
 
 
-        QHBoxLayout *swControls = new QHBoxLayout;
+        QGridLayout *swControls = new QGridLayout;
         QPushButton *addGroupBtn = new QPushButton("+ Grp"); // Add Group
         QPushButton *addColorBtn = new QPushButton("+ Clr"); // Add Color
         QPushButton *removeColorBtn = new QPushButton("- Clr"); // Remove Color
         QPushButton *saveBtn = new QPushButton("S"); // Save
         QPushButton *loadBtn = new QPushButton("L"); // Load
 
-        swControls->addWidget(addGroupBtn);
-        swControls->addWidget(addColorBtn);
-        swControls->addWidget(removeColorBtn);
-        swControls->addStretch();
-        swControls->addWidget(saveBtn);
-        swControls->addWidget(loadBtn);
+        swControls->setSpacing(3);
+        swControls->addWidget(addGroupBtn,0,0);
+        swControls->addWidget(addColorBtn,0,1);
+        swControls->addWidget(removeColorBtn,0,2);
+        swControls->addWidget(saveBtn,1,0);
+        swControls->addWidget(loadBtn,1,1);
+        saveBtn->setText("Save"); loadBtn->setText("Load");
+        for (auto *button : {addGroupBtn,addColorBtn,removeColorBtn,saveBtn,loadBtn}) {
+            button->setMinimumWidth(0);
+            button->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Fixed);
+        }
 
         sbLayout->addLayout(swControls);
 
@@ -381,3 +387,8 @@ int main(int argc, char **argv) {
 }
 #endif
 
+
+void ColorSwatchGrid::resizeEvent(QResizeEvent *event) {
+    QWidget::resizeEvent(event);
+    rebuild();
+}

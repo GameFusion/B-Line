@@ -1,4 +1,5 @@
 #include "PaintCanvas.h"
+#include "PlaybackTiming.h"
 #include <QApplication>
 #include <QElapsedTimer>
 #include <QMouseEvent>
@@ -173,6 +174,76 @@ int main(int argc,char **argv) {
     QElapsedTimer performance;performance.start();
     for(int i=0;i<20;++i)view.grab();
     printf("Cached workspace redraw, 300 strokes: %.2f ms/frame\n",performance.elapsed()/20.0);
+    // Inactive views and camera previews stay frozen until release, from either origin.
+    area.setPlaybackDisplay("Playing  01:00:00:12");
+    area.setPipDisplay(true); area.show(); app.processEvents(); view.grab();
+    int workspaceUpdates = 0, thumbnails = 0;
+    QObject::connect(&area, &PaintArea::workspaceChanged, &area, [&] { ++workspaceUpdates; });
+    QObject::connect(&area, &PaintArea::compositImageModified, &area, [&] { ++thumbnails; });
+    auto legacyMouse = [&](QEvent::Type type, QPointF pos, Qt::MouseButton button, Qt::MouseButtons buttons) {
+        QMouseEvent e(type, pos, area.mapToGlobal(pos.toPoint()), button, buttons, Qt::NoModifier);
+        QCoreApplication::sendEvent(&area, &e);
+    };
+    area.setPipDisplay(false); // Keep legacy input clear of the draggable preview.
+    workspaceUpdates = 0; thumbnails = 0;
+    legacyMouse(QEvent::MouseButtonPress, {40,40}, Qt::LeftButton, Qt::LeftButton);
+    for (int i=1;i<=15;++i) {
+        legacyMouse(QEvent::MouseMove, {40.0+i*5,40.0+i}, Qt::NoButton, Qt::LeftButton);
+        app.processEvents(); QThread::msleep(2);
+    }
+    require(area.interactionActive() && !area.workspaceInteractionActive(), "legacy owns held stroke");
+    require(workspaceUpdates == 0 && thumbnails == 0, "legacy stroke defers workspace and thumbnails");
+    const int priorLegacy = modifications;
+    legacyMouse(QEvent::MouseButtonRelease, {115,55}, Qt::LeftButton, Qt::NoButton);
+    wait.restart(); while(modifications==priorLegacy && wait.elapsed()<5000) {app.processEvents();QThread::msleep(5);}
+    require(!area.interactionActive() && workspaceUpdates>0 && thumbnails>0, "legacy release refreshes secondary views");
+    area.setPipDisplay(true); view.grab();
+    const QImage cameraBefore = area.currentPipImage();
+    thumbnails=0;
+    sendMouse(view,QEvent::MouseButtonPress,{40,170},Qt::LeftButton,Qt::LeftButton);
+    for(int i=1;i<=12;++i)sendMouse(view,QEvent::MouseMove,{40.0+i*8,170.0+i},Qt::NoButton,Qt::LeftButton);
+    view.grab();
+    require(area.workspaceInteractionActive(), "workspace owns held stroke");
+    require(cameraBefore == area.currentPipImage() && thumbnails==0, "camera and thumbnails stay frozen while drawing");
+    const int beforeRapid = modifications;
+    sendMouse(view,QEvent::MouseButtonRelease,{136,182},Qt::LeftButton,Qt::NoButton);
+    sendMouse(view,QEvent::MouseButtonPress,{40,200},Qt::LeftButton,Qt::LeftButton);
+    for(int i=1;i<=12;++i)sendMouse(view,QEvent::MouseMove,{40.0+i*8,200.0+i},Qt::NoButton,Qt::LeftButton);
+    sendMouse(view,QEvent::MouseButtonRelease,{136,212},Qt::LeftButton,Qt::NoButton);
+    wait.restart(); while(modifications<beforeRapid+2 && wait.elapsed()<5000) {app.processEvents();QThread::msleep(5);}
+    require(modifications==beforeRapid+2, "rapid consecutive strokes both finish exactly once");
+    require(changed.strokes.size()==303, "rapid strokes preserve original layer and earlier ink");
+    area.setPlaybackMode(true); thumbnails=0;
+    area.updateCompositeImage();
+    require(thumbnails==0, "playback does not rebuild timeline thumbnails");
+    area.setPlaybackMode(false);
+    require(thumbnails>0, "pause flushes timeline thumbnail");
+    view.grab().save("/tmp/boarder-playback-workspace.png");
+    QImage exportBefore(320,240,QImage::Format_ARGB32_Premultiplied), exportAfter(320,240,QImage::Format_ARGB32_Premultiplied);
+    area.renderFrameToImage(exportBefore);
+    area.setPlaybackDisplay("Paused  12:34:56:20");
+    area.renderFrameToImage(exportAfter);
+    require(!exportBefore.isNull() && exportBefore == exportAfter, "timecode overlay never burns into exported frame");
+    require(PlaybackTiming::timecode(1040,25,"01:00:00:00")=="01:00:01:01", "sequence offset and project fps timecode");
+    require(PlaybackTiming::timecode(60000,24)=="00:01:00:00", "timecode rolls across minute");
+    require(PlaybackTiming::timecode(33,30)=="00:00:00:01", "rounded millisecond cursor retains frame identity");
+    require(PlaybackTiming::lastFrame(1000,24)==958, "natural end holds last valid frame");
+    require(PlaybackTiming::frameTime(100,25)==80, "elapsed clock skips to current frame without accumulating drift");
+    int offscreenStrokes=0;
+    QObject::connect(&area,&PaintArea::strokeCompleted,&area,[&](const QString &panelId,const QString &layerId,const GameFusion::BezierCurve &curve){
+        require(panelId=="dense" && layerId=="dense-ink" && !curve.empty(),"late fit retains original panel and layer identity");++offscreenStrokes;
+    });
+    sendMouse(view,QEvent::MouseButtonPress,{20,40},Qt::LeftButton,Qt::LeftButton);
+    sendMouse(view,QEvent::MouseMove,{95,60},Qt::NoButton,Qt::LeftButton);
+    sendMouse(view,QEvent::MouseButtonRelease,{95,60},Qt::LeftButton,Qt::NoButton);
+    GameFusion::Panel next;next.uuid="next";GameFusion::Layer nextLayer;nextLayer.uuid="next-ink";next.layers.push_back(nextLayer);
+    area.setPanel(next);area.setActiveLayer("next-ink");area.finishPendingStrokes();
+    require(offscreenStrokes==1,"panel navigation delivers pending ink to original model");
+    sendMouse(view,QEvent::MouseButtonPress,{30,50},Qt::LeftButton,Qt::LeftButton);
+    sendMouse(view,QEvent::MouseMove,{100,70},Qt::NoButton,Qt::LeftButton);
+    QFocusEvent focusOut(QEvent::FocusOut);QCoreApplication::sendEvent(&view,&focusOut);
+    area.finishPendingStrokes();
+    require(!area.interactionActive(),"lost workspace focus finishes held stroke and unfreezes views");
     view.setPaintArea(nullptr);view.grab();
     require(view.paintArea()==nullptr,"source detachment is safe");
     wait.restart();while(wait.elapsed()<250){app.processEvents();QThread::msleep(5);}

@@ -118,7 +118,7 @@ void PaintCanvas::drawBackground(QPainter *painter, const QRectF &rect)
 {
     painter->fillRect(rect, Qt::white);
     if (!m_area) return;
-    if (m_dirty) {
+    if (m_dirty && !(m_area->interactionActive() && !m_area->workspaceInteractionActive())) {
         m_dirty = false;
         m_sourceZoom = m_area->zoomFactor();
         const QRectF visible = viewportTransform().inverted().mapRect(QRectF(viewport()->rect()));
@@ -145,6 +145,10 @@ void PaintCanvas::paintEvent(QPaintEvent *event)
         const QRect preview(QPoint(16, qMax(16, viewport()->height() - size.height() - 16)), size);
         painter.fillRect(preview.adjusted(-2, -2, 2, 2), QColor(40, 40, 40));
         painter.drawImage(preview, m_area->currentPipImage());
+        m_area->drawPlaybackOverlay(painter, preview);
+    } else if (m_area) {
+        QPainter painter(viewport());
+        m_area->drawPlaybackOverlay(painter, viewport()->rect());
     }
 }
 
@@ -285,6 +289,8 @@ void PaintCanvas::keyReleaseEvent(QKeyEvent *event)
 
 void PaintCanvas::focusOutEvent(QFocusEvent *event)
 {
+    if (m_editing && m_area) m_area->finishInteraction();
+    m_editing = false;
     m_spaceDown = m_panning = false;
     viewport()->unsetCursor();
     QGraphicsView::focusOutEvent(event);

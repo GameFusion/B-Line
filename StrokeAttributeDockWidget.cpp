@@ -32,9 +32,14 @@ StrokeAttributeDockWidget::StrokeAttributeDockWidget(QWidget *parent)
     previewArea->setFixedHeight(100);
     previewArea->setFpsDisplay(false);
     previewArea->setPipDisplay(false);
+    previewArea->toggleOutputFrame(false);
+    previewArea->toggleActionSafe(false);
+    previewArea->toggleTitleSafe(false);
     // Preview should not use overscan margins; make canvas == output for this local widget.
     previewArea->setDimensions(300, 100, 300, 100);
     previewArea->resetZoom();
+    previewArea->setMinimumWidth(0);
+    previewArea->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     layout->addWidget(previewArea);
 
     setupPreviewCurve();
@@ -116,9 +121,9 @@ StrokeAttributeDockWidget::StrokeAttributeDockWidget(QWidget *parent)
     backgroundColorButton->setFixedSize(30, 30);
     backgroundColor = Qt::white;
     updateColorButtonStyle(backgroundColorButton, backgroundColor);
-    colorLayout->addWidget(new QLabel("Foreground:"));
+    colorLayout->addWidget(new QLabel("Ink"));
     colorLayout->addWidget(foregroundColorButton);
-    colorLayout->addWidget(new QLabel("Background:"));
+    colorLayout->addWidget(new QLabel("Fill"));
     colorLayout->addWidget(backgroundColorButton);
     colorLayout->addStretch(1);
     layout->addLayout(colorLayout);
@@ -155,6 +160,17 @@ StrokeAttributeDockWidget::StrokeAttributeDockWidget(QWidget *parent)
 
     // Set the widget for the dock
     setWidget(scrollArea);
+    setMinimumWidth(180);
+    scrollArea->setMinimumWidth(0);
+    scrollArea->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
+    contentWidget->setMinimumWidth(0);
+    contentWidget->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    for (auto *combo : contentWidget->findChildren<QComboBox*>()) {
+        combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        combo->setMinimumContentsLength(8);
+        combo->setMinimumWidth(0);
+        combo->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    }
 
     // Optional: style the scroll area
     scrollArea->setStyleSheet(

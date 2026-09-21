@@ -82,6 +82,9 @@ signals:
 
 private:
     void rebuild();
+protected:
+    void resizeEvent(QResizeEvent *event) override;
+private:
 
     QVBoxLayout *m_layout{nullptr};
     QScrollArea *m_scroll{nullptr};

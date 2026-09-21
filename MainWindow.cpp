@@ -9,6 +9,12 @@
 #include "AttributeEditor.h"
 
 #include <QTimer>
+#include <QScopedValueRollback>
+#include <QFontDatabase>
+#include "PlaybackTiming.h"
+#include "ShotListPresentation.h"
+#include "MoviePlayerWindow.h"
+#include <QScopeGuard>
 #include <QDragEnterEvent>
 #include <QMimeData>
 #include <QMessageBox>
@@ -34,6 +40,7 @@
 #include <QSignalBlocker>
 #include <QUrl>
 #include <QPixmap>
+#include <QPixmapCache>
 #include <QHash>
 #include <QPdfWriter>
 #include <QPageSize>
@@ -1622,9 +1629,27 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     playButton->setFont(fontAwesome);
     // todo add connection to play
 
+    playButton->setToolTip(QObject::tr("Play from cursor / resume"));
+    QToolButton *stopButton = new QToolButton(&parent);
+    stopButton->setText(QChar(0xf04d));
+    stopButton->setFont(fontAwesome);
+    stopButton->setToolTip(QObject::tr("Stop and return to start"));
+    QToolButton *loopButton = new QToolButton(&parent);
+    loopButton->setText(QObject::tr("Loop"));
+    loopButton->setCheckable(true);
+    for (auto *button : {stopButton, loopButton})
+        button->setStyleSheet("QToolButton { color: #f0f3f8; background: #252933; padding: 4px; border-radius: 4px; } QToolButton:checked { background: #306b98; }");
+    loopButton->setToolTip(QObject::tr("Loop the sequence"));
+    QLabel *timecodeLabel = new QLabel(QObject::tr("Stopped  00:00:00:00"), &parent);
+    timecodeLabel->setObjectName("playbackTimecode");
+    timecodeLabel->setStyleSheet("color: #f0f3f8; background: #252933; border-radius: 4px; padding: 5px 9px;");
+    timecodeLabel->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    timecodeLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    timecodeLabel->setToolTip(QObject::tr("Sequence timecode (HH:MM:SS:FF), using the project start timecode and frame rate"));
     QToolButton *pauseButton = new QToolButton(&parent);
     pauseButton->setText(QChar(0xf04c));  // Area selection icon
     pauseButton->setFont(fontAwesome);
+    pauseButton->setToolTip(QObject::tr("Pause at current frame"));
     // todo add connection to go pause
 
     QToolButton *forwardStepButton = new QToolButton(&parent);
@@ -1662,7 +1687,7 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
 
     // Create a QSpinBox for scale control
     QSpinBox *scaleControl = new QSpinBox(&parent);
-    scaleControl->setFixedWidth(100);
+    scaleControl->setMaximumWidth(72);
     scaleControl->setRange(10, 200); // Set range from 1x to 10x
     scaleControl->setValue(100); // Initial scale factor set to 1
     scaleControl->setPrefix("Scale: ");
@@ -1673,7 +1698,8 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     CustomSlider *scaleSlider = new CustomSlider(Qt::Horizontal, &parent);
     scaleSlider->setRange(10, 200); // Matching range with the spin box
     scaleSlider->setValue(100); // Initial value matching the spin box
-    scaleSlider->setFixedWidth(400);
+    scaleSlider->setMinimumWidth(60);
+    scaleSlider->setMaximumWidth(220);
 
     // Create a new QGraphicsView as a custom scrollbar
     ScrollbarView *scrollbarView = new ScrollbarView(&parent);
@@ -1835,7 +1861,7 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
 
     // Grouping for toggle buttons (play/pause)
     QButtonGroup *toggleGroup = new QButtonGroup(&parent);
-    toggleGroup->setExclusive(true);
+    toggleGroup->setExclusive(false);
     toggleGroup->addButton(playButton);
     toggleGroup->addButton(pauseButton);
 
@@ -1886,12 +1912,17 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     hlayout->addWidget(shiftRightButton);
     hlayout->addWidget(editButton);
     hlayout->addWidget(trashButton);
-    hlayout->addWidget(backwardFastButton);
-    hlayout->addWidget(backwardStepButton);
-    hlayout->addWidget(playButton);
-    hlayout->addWidget(pauseButton);
-    hlayout->addWidget(forwardStepButton);
-    hlayout->addWidget(forwardFastButton);
+    auto *transportLayout = new QHBoxLayout;
+    transportLayout->addWidget(backwardFastButton);
+    transportLayout->addWidget(backwardStepButton);
+    transportLayout->addWidget(playButton);
+    transportLayout->addWidget(pauseButton);
+    transportLayout->addWidget(stopButton);
+    transportLayout->addWidget(loopButton);
+    transportLayout->addWidget(timecodeLabel);
+    transportLayout->addWidget(forwardStepButton);
+    transportLayout->addWidget(forwardFastButton);
+    transportLayout->addStretch();
     hlayout->addWidget(settingsButton);
     hlayout->addWidget(viewModeButton); // Add toggle button
 
@@ -1900,6 +1931,7 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     gfxlayout->addWidget(scrollbarView);
 
     toplayout->addLayout(hlayout);
+    toplayout->addLayout(transportLayout);
     toplayout->addLayout(gfxlayout);
 
     // Create audio meter
@@ -1923,6 +1955,14 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
         timelineView->onDeletePanel();
     });
 
+    QObject::connect(stopButton, &QToolButton::clicked, myMainWindow, &MainWindow::stop);
+    QObject::connect(loopButton, &QToolButton::toggled, myMainWindow, &MainWindow::setPlaybackLoop);
+    QObject::connect(myMainWindow, &MainWindow::playbackDisplayChanged, timecodeLabel,
+                     [timecodeLabel, playButton, pauseButton](const QString &text, bool playing, bool paused) {
+        timecodeLabel->setText(text);
+        playButton->setChecked(playing);
+        pauseButton->setChecked(paused);
+    });
     QObject::connect(playButton, &QToolButton::clicked, myMainWindow, &MainWindow::play);
     QObject::connect(pauseButton, &QToolButton::clicked, myMainWindow, &MainWindow::pause);
     QObject::connect(forwardStepButton, &QToolButton::clicked, myMainWindow, &MainWindow::nextShot);
@@ -2249,6 +2289,7 @@ MainWindow::MainWindow(QWidget *parent)
     timer->start(1000);
 
     playbackTimer = new QTimer(this);
+    playbackTimer->setTimerType(Qt::PreciseTimer);
     connect(playbackTimer, &QTimer::timeout, this, &MainWindow::onPlaybackTick);
 
     setAcceptDrops(true);
@@ -2450,12 +2491,28 @@ MainWindow::MainWindow(QWidget *parent)
 
     //ui->layerListWidget->setColumnWidth(0, 240); // Thumbnail column
     //ui->layerListWidget->setColumnWidth(1, 200); // Name column
-    ui->layerListWidget->setIconSize(QSize(240, 135)); // Match thumbnail size
+    ui->layerListWidget->setIconSize(QSize(72, 40));
+    ui->layerListWidget->setMinimumSize(0, 80);
+    ui->layerListWidget->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
+    ui->layerListWidget->setTextElideMode(Qt::ElideRight);
+    ui->layerListWidget->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     //ui->layerListWidget->setViewMode(QListView::ListMode);
     ui->layerListWidget->setSelectionMode(QAbstractItemView::SingleSelection);
 
     // Connect PaintArea's layerThumbnailComputed signal
     connect(this->paint->getPaintArea(), &PaintArea::layerThumbnailComputed, this, &MainWindow::updateLayerThumbnail);
+    connect(paint->getPaintArea(), &PaintArea::strokeCompleted, this,
+            [this](const QString &panelId, const QString &layerId, const GameFusion::BezierCurve &curve) {
+        auto context = findPanelByUuid(panelId.toStdString());
+        if (!context.isValid()) return;
+        for (const auto &original : context.panel->layers) {
+            if (original.uuid != layerId.toStdString()) continue;
+            auto changed = original;
+            changed.strokes.push_back(curve);
+            undoStack->push(new LayerPaintCommand(original, changed, layerId, panelId, this));
+            break;
+        }
+    });
 
     //ui->layerListWidget->setSelectionMode(QAbstractItemView::SingleSelection);
 
@@ -2522,11 +2579,9 @@ MainWindow::MainWindow(QWidget *parent)
     }
 )");
 
-    ui->shotsTreeWidget->setStyleSheet(R"(
-    QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QTreeWidget, QListWidget, QPushButton {
-        font-size: 10pt;
-    }
-)");
+    auto *shotPresentation = new ShotListPresentation(ui->shotsTreeWidget);
+    if (auto *shotLayout = qobject_cast<QVBoxLayout*>(ui->shotsTreeWidget->parentWidget()->layout()))
+        shotLayout->insertWidget(0, shotPresentation->toolbar());
 
     shotPanel->setStyleSheet(R"(
     QLabel, QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QTreeWidget, QListWidget, QPushButton {
@@ -2639,7 +2694,16 @@ QComboBox, QSpinBox {
 
     ui->dockCameras->setMaximumWidth(350);
     strokeDock->setMaximumWidth(350);
-    ui->dockLayers->setMinimumWidth(0);
+    ui->dockLayers->setMinimumWidth(180);
+    ui->dockLayers->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    ui->dockLayers->widget()->setMinimumWidth(0);
+    ui->dockLayers->widget()->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
+    ui->dockLayers->widget()->layout()->setSizeConstraint(QLayout::SetNoConstraint);
+    ui->gridLayout->setColumnStretch(1, 1);
+    for (auto *control : ui->dockLayers->findChildren<QAbstractSpinBox*>()) {
+        control->setMinimumWidth(0);
+        control->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    }
     ui->dockCameras->setMinimumWidth(0);
     strokeDock->setMinimumWidth(0);
     connect(ui->dockLayers, &QDockWidget::visibilityChanged, this, [this](bool) {
@@ -2920,6 +2984,8 @@ void MainWindow::setBlackTheme()
 }
 MainWindow::~MainWindow()
 {
+    if (playbackTimer) playbackTimer->stop();
+    if (auto *audio = GameFusion::SoundServer::context()) audio->stop();
 
 }
 
@@ -3468,6 +3534,18 @@ void addShot(QTreeWidgetItem* shotItem, const GameFusion::Shot &shot, float fps)
     characterDialogSummary = characterDialogSummary.trimmed();
     */
 
+    shotItem->setData(0, ShotListRoles::Kind, "shot");
+    shotItem->setData(0, ShotListRoles::Summary, QString::fromStdString(shot.description));
+    shotItem->setData(0, ShotListRoles::Duration, QString("%1 s · %2 panel%3").arg(shot.frameCount / PlaybackTiming::validFps(fps), 0, 'f', 1).arg(shot.panels.size()).arg(shot.panels.size() == 1 ? "" : "s"));
+    if (!shot.panels.empty()) {
+        const auto &first = shot.panels.front();
+        // Clicking a shot opens its first panel, just as clicking a panel does.
+        shotItem->setData(0, Qt::UserRole, QString::fromStdString(first.uuid));
+        QString preview = ProjectContext::instance().currentProjectPath() + "/thumbnails/panel_" + QString::fromStdString(first.uuid) + ".png";
+        if (!QFileInfo::exists(preview)) preview = ProjectContext::instance().currentProjectPath() + "/movies/" + QString::fromStdString(first.image);
+        shotItem->setData(0, ShotListRoles::Thumbnail, preview);
+    }
+    shotItem->setToolTip(0, QString::fromStdString(shot.description));
     shotItem->setText(0, QString::fromStdString(shot.name));
     shotItem->setText(1, QString::fromStdString(shot.type));
     shotItem->setText(2, QString::fromStdString(shot.transition));
@@ -3486,12 +3564,13 @@ void addShot(QTreeWidgetItem* shotItem, const GameFusion::Shot &shot, float fps)
     if(!shot.characters.empty()){
         for (const auto& c : shot.characters) {
             auto* charItem = new QTreeWidgetItem(shotItem);
+            charItem->setData(0, ShotListRoles::Kind, "dialogue");
             charItem->setText(0, QString::fromStdString(c.name));
-            charItem->setText(1, QString::number(c.dialogNumber));
-            charItem->setText(2, QString::fromStdString(c.emotion));
-            charItem->setText(3, QString::fromStdString(c.intent));
-            charItem->setText(4, c.onScreen ? "on screen" : "off screen");
-            charItem->setText(5, QString::fromStdString(c.dialogParenthetical));
+            charItem->setText(1, QObject::tr("Dialogue"));
+            charItem->setText(11, QString("#%1 | %2 | %3 | %4").arg(c.dialogNumber)
+                .arg(QString::fromStdString(c.emotion), c.onScreen ? "on screen" : "off screen", QString::fromStdString(c.dialogParenthetical)));
+            charItem->setText(12, QString::fromStdString(c.intent));
+            charItem->setToolTip(0, charItem->text(11));
             charItem->setText(6, QString::fromStdString(c.dialogue));
         }
     }
@@ -3501,11 +3580,12 @@ void addShot(QTreeWidgetItem* shotItem, const GameFusion::Shot &shot, float fps)
     if (!shot.panels.empty()) {
         for (const auto& panel : shot.panels) {
             QTreeWidgetItem* panelItem = new QTreeWidgetItem(shotItem);
+            panelItem->setData(0, ShotListRoles::Kind, "panel");
             panelItem->setText(0, QString::fromStdString(panel.name));
-            panelItem->setText(1, QString::fromStdString(panel.description));
-            panelItem->setText(2, QString::number(panel.startTime/mspf));
-            panelItem->setText(3, QString::number(panel.durationTime/mspf));
-            panelItem->setText(4, QString::fromStdString(panel.uuid));
+            panelItem->setText(1, QObject::tr("Panel"));
+            panelItem->setText(6, QString::fromStdString(panel.description));
+            panelItem->setText(7, QString::number(qRound(panel.durationTime / mspf)));
+            panelItem->setToolTip(0, QString::fromStdString(panel.description));
 
             // Store UUID or full Panel pointer (if lifetime is stable)
             panelItem->setData(0, Qt::UserRole, QString::fromStdString(panel.uuid));
@@ -4581,6 +4661,9 @@ void MainWindow::loadProject() {
 }
 
 void MainWindow::loadProject(QString projectDir){
+    paint->getPaintArea()->finishPendingStrokes();
+    stop();
+    if (auto *audio = GameFusion::SoundServer::context()) audio->clearLayers();
 
     // Clear the undo stack
     undoStack->clear();
@@ -5491,7 +5574,7 @@ void MainWindow::populateLayerList(GameFusion::Panel* panel) {
     const QString preferredLayerUuid = QString::fromStdString(panel->layers.back().uuid);
 
     // Set a consistent icon size for all items
-    ui->layerListWidget->setIconSize(QSize(240, 135));
+    ui->layerListWidget->setIconSize(QSize(72, 40));
 
     for (auto& layer : panel->layers) {
         QString label = QString::fromStdString(layer.name);
@@ -6405,6 +6488,13 @@ bool MainWindow::isInLowLatencyScrubWindow() const
 
 void MainWindow::onTimeCursorMoved(double time)
 {
+    currentPlayTime = qMax(0L, qRound64(time));
+    if (isPlaying && !advancingPlayback) {
+        playbackAnchor = currentPlayTime;
+        playbackClock.restart();
+        startPlaybackAudio();
+    }
+    updatePlaybackDisplay();
     constexpr qint64 kScrubBurstThresholdMs = 35;
     const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
     const bool scrubBurstActive = (lastCursorMoveMs > 0) &&
@@ -6427,7 +6517,7 @@ void MainWindow::onTimeCursorMoved(double time)
         return;
     }
 
-    if (lowLatencyScrubMode &&
+    if ((isPlaying || lowLatencyScrubMode) &&
         currentPanel &&
         currentPanelStartMs >= 0.0 &&
         currentPanelEndMs > currentPanelStartMs &&
@@ -6510,6 +6600,8 @@ void MainWindow::onTimeCursorMoved(double time)
 
     if (theShot) {
         paint->getPaintArea()->setPanel(*currentPanel, panelStartTime, fps, theShot->cameraAnimation);
+        paint->getPaintArea()->setCurrentTime(time - panelStartTime);
+        paint->getPaintArea()->update();
 
         const bool updateSecondaryUi = !isPlaying && !(lowLatencyScrubMode && scrubBurstActive);
         if (updateSecondaryUi) {
@@ -6520,6 +6612,7 @@ void MainWindow::onTimeCursorMoved(double time)
 }
 
 void MainWindow::saveProject(){
+    paint->getPaintArea()->finishPendingStrokes();
 
     if(scriptBreakdown){
         scriptBreakdown->saveModifiedScenes(ProjectContext::instance().currentProjectPath());
@@ -6878,56 +6971,95 @@ void MainWindow::timelineOptions(){
     }
 }
 
-void MainWindow::play() {
-    qDebug() << "Play pressed";
+void MainWindow::startPlaybackAudio()
+{
+    auto *audio = GameFusion::SoundServer::context();
+    if (!audio) return;
+    audio->stop();
+    audio->clearLayers();
+    // Previously only a mouse scrub attached a stream; pressing Play on a
+    // freshly opened project could therefore play silence or a stale stream.
+    for (auto *track : timeLineView->trackItems()) {
+        if (track->track()->getType() == TrackType::Storyboard) continue;
+        if (auto *stream = track->getSoundStream()) {
+            audio->setStream(stream, 0);
+            audio->seek(currentPlayTime);
+            audio->releaseFrameMode();
+            audio->play();
+            break;
+        }
+    }
+}
 
-    if (isPlaying) return;
+void MainWindow::updatePlaybackDisplay()
+{
+    const auto &project = ProjectContext::instance().projectJson();
+    const double fps = PlaybackTiming::validFps(project["fps"].toDouble());
+    const QString tc = PlaybackTiming::timecode(currentPlayTime, fps, project["start_tc"].toString());
+    const QString text = tr("%1  %2  %3 fps").arg(playbackState, tc).arg(fps, 0, 'g', 4);
+    if (paint && paint->getPaintArea())
+        paint->getPaintArea()->setPlaybackDisplay(tr("%1  %2").arg(playbackState, tc));
+    emit playbackDisplayChanged(text, isPlaying, playbackState == tr("Paused"));
+}
 
+void MainWindow::play()
+{
+    if (isPlaying) { updatePlaybackDisplay(); return; }
+    if (paint->getPaintArea()->interactionActive()) { updatePlaybackDisplay(); return; }
+    paint->getPaintArea()->finishPendingStrokes();
+    playbackEnd = episodeDuration.durationMs;
+    // Include actual audio/video clips, not the empty extent of a track.
+    for (auto *track : timeLineView->trackItems())
+        for (auto *segment : track->segments())
+            playbackEnd = qMax(playbackEnd, long(qCeil(segment->timePosition() + segment->getDuration())));
+    if (playbackEnd <= playbackStart) {
+        playbackState = tr("No sequence");
+        updatePlaybackDisplay();
+        return;
+    }
+    const double fps = PlaybackTiming::validFps(ProjectContext::instance().projectJson()["fps"].toDouble());
+    currentPlayTime = qMax(playbackStart, long(qRound64(timeLineView->getCursorTime())));
+    if (currentPlayTime >= PlaybackTiming::lastFrame(playbackEnd, fps)) currentPlayTime = playbackStart;
+    playbackAnchor = currentPlayTime;
     isPlaying = true;
-
-    paint->getPaintArea()->setFpsDisplay(true);
+    timeLineView->setPlaybackActive(true);
+    playbackState = tr("Playing");
+    paint->getPaintArea()->setPlaybackMode(true);
     paint->getPaintArea()->startPlayback();
-
-    // If range not set, default to full timeline length
-    if (playbackEnd <= playbackStart)
-        playbackEnd = 10000 * 1000; // e.g., 10 milliseconds
-
-    currentPlayTime = playbackStart;
-    timeLineView->setTimeCursor(currentPlayTime);
-
-    GameFusion::SoundServer::context()->seek(currentPlayTime);
-    GameFusion::SoundServer::context()->play();
-
-    playbackTimer->start(playbackIntervalMs);
+    {
+        QScopedValueRollback<bool> advancing(advancingPlayback, true);
+        timeLineView->setTimeCursor(currentPlayTime);
+    }
+    startPlaybackAudio();
+    playbackClock.start();
+    playbackTimer->start(qMax(1, qRound(1000.0 / fps)));
+    updatePlaybackDisplay();
 }
 
-void MainWindow::pause() {
-    qDebug() << "Pause pressed";
-
-    paint->getPaintArea()->setFpsDisplay(false);
-
-    GameFusion::SoundServer::context()->stop();
-
-    if (!isPlaying) return;
-
-
+void MainWindow::pause()
+{
     playbackTimer->stop();
+    if (auto *audio = GameFusion::SoundServer::context()) audio->stop();
     isPlaying = false;
+    timeLineView->setPlaybackActive(false);
+    playbackState = tr("Paused");
+    paint->getPaintArea()->setFpsDisplay(false);
+    paint->getPaintArea()->setPlaybackMode(false);
+    updatePlaybackDisplay();
 }
 
-void MainWindow::stop() {
-
-    paint->getPaintArea()->setFpsDisplay(false);
-
-    GameFusion::SoundServer::context()->stop();
-
-    if (!isPlaying) return;
-
-
+void MainWindow::stop()
+{
     playbackTimer->stop();
+    if (auto *audio = GameFusion::SoundServer::context()) audio->stop();
     isPlaying = false;
+    timeLineView->setPlaybackActive(false);
+    playbackState = tr("Stopped");
+    paint->getPaintArea()->setFpsDisplay(false);
+    paint->getPaintArea()->setPlaybackMode(false);
     currentPlayTime = playbackStart;
     timeLineView->setTimeCursor(currentPlayTime);
+    updatePlaybackDisplay();
 }
 
 void MainWindow::nextShot() {
@@ -6954,28 +7086,35 @@ void MainWindow::prevScene() {
     timeLineView->gotoPrevScene();
 }
 
-void MainWindow::onPlaybackTick(){
-
-    // TODO implement a system to collect the
-
-
-    //currentPlayTime += playbackIntervalMs;
-    //long currentPlayTime = *GameFusion::GameContext->gameTime();
-    //currentPlayTime += playbackIntervalMs;
-
-    long currentPlayTime = GameFusion::SoundDevice::Context()->currentTime();
-
-    if (currentPlayTime > playbackEnd) {
-        if (loopEnabled) {
-            currentPlayTime = playbackStart;
+void MainWindow::onPlaybackTick()
+{
+    if (!isPlaying || !playbackClock.isValid()) return;
+    const double fps = PlaybackTiming::validFps(ProjectContext::instance().projectJson()["fps"].toDouble());
+    qint64 position = playbackAnchor + playbackClock.elapsed();
+    if (position >= playbackEnd) {
+        if (loopEnabled && playbackEnd > playbackStart) {
+            position = playbackStart + (position - playbackStart) % (playbackEnd - playbackStart);
+            playbackAnchor = position;
+            playbackClock.restart();
+            currentPlayTime = position;
+            startPlaybackAudio();
         } else {
-            stop(); // calls pause + reset
+            // Hold the last image at natural end; explicit Stop returns to start.
+            currentPlayTime = PlaybackTiming::lastFrame(playbackEnd, fps);
+            {
+                QScopedValueRollback<bool> advancing(advancingPlayback, true);
+                timeLineView->setTimeCursor(currentPlayTime);
+            }
+            pause();
+            playbackState = tr("Ended");
+            updatePlaybackDisplay();
             return;
         }
     }
-
-    // timelineView->setFrameCursorPosition(currentPlayTime);
-    timeLineView->setTimeCursor(currentPlayTime);
+    const long frameTime = PlaybackTiming::frameTime(position, fps);
+    if (frameTime == currentPlayTime) return;
+    QScopedValueRollback<bool> advancing(advancingPlayback, true);
+    timeLineView->setTimeCursor(frameTime);
 }
 
 void MainWindow::addAudioTrack() {
@@ -7490,7 +7629,7 @@ void MainWindow::updateLayerThumbnail(const QString& uuid, const QImage& thumbna
 
     // Set thumbnail and name
     item->setIcon(QIcon(layerThumbnailPixmap));
-    ui->layerListWidget->setIconSize(QSize(240, 135));
+    ui->layerListWidget->setIconSize(QSize(72, 40));
 
     item->setText(layerName); // Second column: name
     // Re-enable signals
@@ -7562,6 +7701,7 @@ void MainWindow::refreshDetachedPip()
     if (!pipPreviewWindow || !pipPreviewLabel || !paint || !paint->getPaintArea())
         return;
 
+    if (paint->getPaintArea()->interactionActive()) return;
     const QImage &img = paint->getPaintArea()->currentPipImage();
     if (img.isNull()) {
         pipPreviewLabel->clear();
@@ -7576,11 +7716,16 @@ void MainWindow::refreshDetachedPip()
         targetSize,
         Qt::KeepAspectRatio,
         Qt::SmoothTransformation);
+    {
+        QPainter painter(&pix);
+        paint->getPaintArea()->drawPlaybackOverlay(painter, QRectF(QPointF(), pix.deviceIndependentSize()));
+    }
     pipPreviewLabel->setPixmap(pix);
 }
 
 void MainWindow::onPaintAreaImageModified(const QString& uuid, const QImage& image, bool isEditing)
 {
+    if (isPlaying || paint->getPaintArea()->interactionActive()) return;
     if (uuid.isEmpty())
         return;
 
@@ -7722,6 +7867,8 @@ void MainWindow::onPaintAreaImageModified(const QString& uuid, const QImage& ima
         QString imagePath = ProjectContext::instance().currentProjectPath() + "/thumbnails/panel_" + uuid + ".png";
         QDir().mkpath(QFileInfo(imagePath).absolutePath()); // Ensure the directory exists
         resizedImage.save(imagePath, "PNG");
+        QPixmapCache::remove(imagePath);
+        ui->shotsTreeWidget->viewport()->update();
     }
 
     // Set the resized thumbnail in the marker
@@ -8398,6 +8545,20 @@ void MainWindow::exportMovie() {
         return;
     }
 
+    if (MoviePlayerWindow::encoderPath().isEmpty()) {
+        QMessageBox::warning(this, tr("Export Movie"), tr("FFmpeg is required to create an MP4 movie. Install it or add it to PATH."));
+        return;
+    }
+    paint->getPaintArea()->finishPendingStrokes();
+    pause();
+    const double savedCursor = timeLineView->getCursorTime();
+    paint->getPaintArea()->setPlaybackMode(true); // Defer thumbnails during offline rendering.
+    const auto restoreEditor = qScopeGuard([this, savedCursor] {
+        paint->getPaintArea()->setExportMode(false);
+        onTimeCursorMoved(savedCursor);
+        paint->getPaintArea()->setPlaybackMode(false);
+    });
+
     // Pre-scan to compute total duration
     qint64 totalDurationMs = 0;
     float fps = ProjectContext::instance().projectJson()["fps"].toDouble(25.0);  // Default to 25 if not set
@@ -8412,7 +8573,7 @@ void MainWindow::exportMovie() {
         }
     }
 
-    int totalFrames = static_cast<int>((totalDurationMs / 1000.0) * fps);
+    int totalFrames = qRound((totalDurationMs / 1000.0) * fps);
     if (totalFrames == 0) {
         QMessageBox::warning(this, "Error", "No frames to export.");
         return;
@@ -8429,7 +8590,7 @@ void MainWindow::exportMovie() {
 
     // Progress dialog
     QProgressDialog progress("Exporting movie frames...", "Cancel", 0, totalFrames, this);
-    progress.setWindowModality(Qt::WindowModal);
+    progress.setWindowModality(Qt::ApplicationModal);
 
     // Export frame by frame
     qint64 currentTimeMs = 0;
@@ -8470,25 +8631,38 @@ void MainWindow::exportMovie() {
         }
 
         // Advance to next frame
-        currentTimeMs += static_cast<qint64>(1000.0 / fps);
         frameNumber++;
+        currentTimeMs = qRound64(frameNumber * 1000.0 / fps);
         progress.setValue(frameNumber);
         QApplication::processEvents();  // Keep UI responsive
     }
 
     progress.setValue(totalFrames);
 
-    // Export Audio
-    QString audioPath = exportDir + "/AudioTrack" + ".wav";
-    TrackItem *track = timeLineView->getTrack(1);
+    // Preserve the current first-track audio export, including silent projects.
+    QString audioPath;
+    for (auto *track : timeLineView->trackItems()) {
+        if (auto *audio = dynamic_cast<GameFusion::SoundTrack*>(track->getSoundStream())) {
+            if (audio->sequenceList().isEmpty()) continue;
+            audioPath = exportDir + "/AudioTrack.wav";
+            if (!audio->saveToFile(audioPath.toUtf8().constData(), totalDurationMs)) {
+                QMessageBox::warning(this, tr("Export Movie"), tr("Could not write the movie audio."));
+                return;
+            }
+            break;
+        }
+    }
+    progress.hide();
+    const QString moviePath = exportDir + "/" + safeProjectName + ".mp4";
+    QString error;
+    if (!MoviePlayerWindow::encode(exportDir, audioPath, moviePath, fps, totalFrames / double(fps), this, &error)) {
+        QMessageBox::warning(this, tr("Export Movie"), error);
+        return;
+    }
+    auto *player = new MoviePlayerWindow(moviePath, this);
+    player->show();
+    player->raise();
 
-    GameFusion::SoundStream *stream = track->getSoundStream();
-    GameFusion::SoundTrack *atrack = (GameFusion::SoundTrack*)stream; // TODO safe cast and verify not null
-    atrack->saveToFile(audioPath.toUtf8().constData());
-    Log().info() << "Export audio track to << "<<audioPath.toUtf8().constData()<<"\n";
-    QMessageBox::information(this, "Success", "Movie exported to: " + exportDir);
-
-    paint->getPaintArea()->setExportMode(false);
 }
 
 
@@ -11039,10 +11213,12 @@ void MainWindow::updateLayer(const QString& layerUuid, const QString& panelUuid,
         *it = layer; // Deep copy to update layer
         panelContext.scene->dirty = true;
         updateWindowTitle(true);
+        if (currentPanel == panelContext.panel) {
         paint->getPaintArea()->updateLayer(*it);
         populateLayerList(panelContext.panel);
         paint->getPaintArea()->invalidateAllLayers();
         paint->getPaintArea()->updateCompositeImage();
+        }
     }
 }
 

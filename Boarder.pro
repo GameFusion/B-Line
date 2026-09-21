@@ -177,3 +177,7 @@ macx-xcode {
         ##### win32:LIBS = $$member(LIBS, 0) $$member(LIBS, 1)d
     }
 }
+
+QT += multimedia multimediawidgets
+SOURCES += ShotListPresentation.cpp MoviePlayerWindow.cpp
+HEADERS += ShotListPresentation.h MoviePlayerWindow.h PlaybackTiming.h

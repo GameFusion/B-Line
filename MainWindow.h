@@ -4,6 +4,7 @@
 
 
 #include <QMainWindow>
+#include <QElapsedTimer>
 #include "ui_BoarderMainWindow.h"
 #include "List.h"
 #include "GameVar.h"
@@ -190,6 +191,7 @@ public:
 
 signals:
     void windowShown();
+    void playbackDisplayChanged(const QString &text, bool playing, bool paused);
 
 public slots:
 
@@ -230,6 +232,7 @@ public slots:
     void prevShot();
     void prevScene();
     void onPlaybackTick();
+    void setPlaybackLoop(bool enabled) { loopEnabled = enabled; }
 
     void onNewScene();
     void onSplitScene();
@@ -436,7 +439,12 @@ protected:
     long playbackStart = 0;
     long playbackEnd = 0;
     long currentPlayTime = 0;
-    int playbackIntervalMs = 33; // ~30 FPS
+    QElapsedTimer playbackClock;
+    qint64 playbackAnchor = 0;
+    bool advancingPlayback = false;
+    QString playbackState = QStringLiteral("Stopped");
+    void updatePlaybackDisplay();
+    void startPlaybackAudio();
 
     // Camera side panel and attribute editor
     CameraSidePanel *cameraSidePanel = nullptr;

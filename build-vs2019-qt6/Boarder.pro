@@ -365,3 +365,7 @@ macx-xcode {
 		#LIBS += -lpnp_basictools
 	}
 }
+
+QT += multimedia multimediawidgets
+SOURCES += ../ShotListPresentation.cpp ../MoviePlayerWindow.cpp
+HEADERS += ../ShotListPresentation.h ../MoviePlayerWindow.h ../PlaybackTiming.h
