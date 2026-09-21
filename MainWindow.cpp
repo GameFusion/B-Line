@@ -2259,6 +2259,13 @@ MainWindow::MainWindow(QWidget *parent)
     ui->actionSave_As->setShortcutContext(Qt::ApplicationShortcut);
 
     QObject::connect(ui->actionOpen, SIGNAL(triggered()), this, SLOT(loadProject()));
+    recentProjectsMenu = new QMenu(tr("Open &Recent"), ui->menuFile);
+    recentProjectsMenu->setObjectName("menuOpenRecent");
+    recentProjectsMenu->setToolTipsVisible(true);
+    ui->menuFile->insertMenu(ui->actionSave, recentProjectsMenu);
+    connect(recentProjectsMenu, &QMenu::aboutToShow, this, &MainWindow::refreshRecentProjectsMenu);
+    refreshRecentProjectsMenu();
+
     QObject::connect(ui->actionNew, SIGNAL(triggered()), this, SLOT(newProject()));
     QObject::connect(ui->actionEdit_Project, SIGNAL(triggered()), this, SLOT(editProject()));
     QObject::connect(ui->actionSave, SIGNAL(triggered()), this, SLOT(saveProject()));
@@ -4509,6 +4516,62 @@ bool loadJsonWithDetails(const QString &filePath, QJsonDocument &docOut, QString
     return true;
 }
 
+void MainWindow::rememberRecentProject(const QString& projectDir)
+{
+    QFileInfo info(projectDir);
+    QString path = info.canonicalFilePath();
+    if (path.isEmpty()) path = QDir::cleanPath(info.absoluteFilePath());
+    QSettings settings("B-Line", "Storyboard");
+    QStringList projects = settings.value("recentProjects").toStringList();
+    projects.removeAll(path);
+    projects.prepend(path);
+    while (projects.size() > 10) projects.removeLast();
+    settings.setValue("recentProjects", projects);
+    refreshRecentProjectsMenu();
+}
+
+void MainWindow::refreshRecentProjectsMenu()
+{
+    if (!recentProjectsMenu) return;
+    recentProjectsMenu->clear();
+    QSettings settings("B-Line", "Storyboard");
+    QStringList projects = settings.value("recentProjects").toStringList();
+    projects.removeAll(QString());
+    projects.removeDuplicates();
+    projects = projects.mid(0, 10);
+    if (projects.isEmpty()) {
+        recentProjectsMenu->addAction(tr("No Recent Projects"))->setEnabled(false);
+        return;
+    }
+
+    QHash<QString, int> nameCounts;
+    for (const QString& path : projects) ++nameCounts[QFileInfo(path).fileName()];
+    for (const QString& path : projects) {
+        const QFileInfo info(path);
+        QString label = info.fileName();
+        if (nameCounts.value(label) > 1) label += " - " + QDir::toNativeSeparators(info.absolutePath());
+        const bool available = QFileInfo(QDir(path).filePath("project.json")).isFile()
+                               && QDir(QDir(path).filePath("scenes")).exists();
+        if (!available) label += tr(" (unavailable)");
+        QAction *action = recentProjectsMenu->addAction(label.replace('&', "&&"));
+        action->setData(path);
+        action->setToolTip(QDir::toNativeSeparators(path));
+        action->setStatusTip(QDir::toNativeSeparators(path));
+        action->setEnabled(available);
+        connect(action, &QAction::triggered, this, [this, path] {
+            // Let the native menu close before opening dialogs or rebuilding it.
+            QTimer::singleShot(0, this, [this, path] { loadProject(path); });
+        });
+    }
+    recentProjectsMenu->addSeparator();
+    QAction *clear = recentProjectsMenu->addAction(tr("Clear Recent Projects"));
+    connect(clear, &QAction::triggered, this, [this] {
+        QSettings settings("B-Line", "Storyboard");
+        settings.remove("recentProjects");
+        QTimer::singleShot(0, this, &MainWindow::refreshRecentProjectsMenu);
+    });
+}
+
 void MainWindow::loadProject() {
     QString projectDir = QFileDialog::getExistingDirectory(this, "Select Project Folder");
     if (projectDir.isEmpty())
@@ -4738,6 +4801,7 @@ void MainWindow::loadProject(QString projectDir){
     }
 
     this->updateWindowTitle(bootstrapChanged);
+    rememberRecentProject(projectDir);
 
 
 }
@@ -6613,6 +6677,7 @@ void MainWindow::saveProjectAs() {
         return;
     }
 
+    rememberRecentProject(targetProjectDir);
     QMessageBox::information(this,
                              tr("Save Project As"),
                              tr("Project duplicated successfully to:\n%1").arg(QDir::toNativeSeparators(targetProjectDir)));

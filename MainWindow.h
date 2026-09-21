@@ -516,6 +516,9 @@ private:
     bool isRightSidebarVisible() const;
     void syncBottomTimelineToggleAction();
     bool isBottomTimelineVisible() const;
+    void refreshRecentProjectsMenu();
+    void rememberRecentProject(const QString& projectDir);
+    QMenu *recentProjectsMenu = nullptr;
     void loadSettings();
     void saveSettings();
     bool saveProjectMetadataFile(const QString& projectDir, QString* errorMessage = nullptr);
