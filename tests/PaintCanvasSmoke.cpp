@@ -1,0 +1,181 @@
+#include "PaintCanvas.h"
+#include <QApplication>
+#include <QElapsedTimer>
+#include <QMouseEvent>
+#include <QScrollBar>
+#include <QTemporaryDir>
+#include <QThread>
+#include <QToolBar>
+#include <QTimer>
+#include <QTabletEvent>
+#include <cstdio>
+#include <cstdlib>
+
+static int checks = 0;
+static void require(bool result, const char *message) {
+    ++checks;
+    if (!result) { fprintf(stderr, "FAIL: %s\n", message); std::exit(1); }
+}
+static GameFusion::BezierCurve line(float x1, float y1, float x2, float y2, QColor color) {
+    GameFusion::BezierCurve c;
+    c += GameFusion::BezierControl({x1,y1,0},{0,0,0},{0,0,0});
+    c += GameFusion::BezierControl({x2,y2,0},{0,0,0},{0,0,0});
+    StrokeProperties p; p.foregroundColor=color; p.maxWidth=8; p.minWidth=2; p.smoothness=0.5;
+    c.setStrokeProperties(p); c.assess(20,false); return c;
+}
+static QImage pictureImage(PaintArea &area) {
+    QPicture picture=area.workspacePicture();
+    QImage image(900,600,QImage::Format_ARGB32_Premultiplied); image.fill(Qt::white);
+    QPainter p(&image); p.translate(160,80);
+    p.scale(qreal(picture.logicalDpiX())/image.logicalDpiX(),qreal(picture.logicalDpiY())/image.logicalDpiY());
+    p.drawPicture(QPointF(),picture); p.end(); return image;
+}
+static QColor pixel(const QImage &image, int x, int y) { return image.pixelColor(x+160,y+80); }
+static void sendMouse(PaintCanvas &view,QEvent::Type type,QPointF scene,Qt::MouseButton button,Qt::MouseButtons buttons) {
+    QPointF pos=view.mapFromScene(scene);
+    QMouseEvent event(type,pos,view.viewport()->mapToGlobal(pos.toPoint()),button,buttons,Qt::NoModifier);
+    QCoreApplication::sendEvent(view.viewport(),&event);
+}
+int main(int argc,char **argv) {
+    QApplication app(argc,argv);
+    PaintArea area;
+    area.setDimensions(320,240,320,240);
+    area.toggleOutputFrame(false); area.toggleActionSafe(false); area.toggleTitleSafe(false); area.setPipDisplay(false);
+    GameFusion::Panel panel; panel.uuid="workspace-test";
+    GameFusion::Layer ink; ink.uuid="ink"; ink.name="Ink";
+    ink.strokes.push_back(line(-100,80,480,80,Qt::red));
+    panel.layers.push_back(ink);
+    area.setPanel(panel); area.setActiveLayer("ink");
+    PaintCanvas view; view.resize(1000,650); view.setPaintArea(&area); view.show();
+    app.processEvents(); view.fitToBase();
+    require(!view.viewport()->inherits("QOpenGLWidget"),"ordinary QWidget viewport");
+    QImage image=pictureImage(area);
+    image.save("/tmp/boarder-workspace-render.png");
+    require(pixel(image,140,80).red()>220 && pixel(image,140,80).green()<60,"stroke inside output");
+    require(pixel(image,-70,80).red()>220 && pixel(image,-70,80).green()<60,"negative-space stroke survives");
+    require(pixel(image,430,80).green()<60,"stroke beyond canvas survives");
+    require(pixel(image,140,140)==QColor(Qt::white),"no diagnostic diagonal");
+    QImage integrated(320,240,QImage::Format_ARGB32_Premultiplied); integrated.fill(Qt::white);
+    {QPainter p(&integrated); area.renderScene(p);}
+    require(integrated.pixelColor(140,80)==pixel(image,140,80),"integrated and workspace color agree");
+    auto hidden=ink; hidden.visible=false; area.updateLayer(hidden);
+    require(pixel(pictureImage(area),140,80)==QColor(Qt::white),"layer visibility updates both views");
+    ink.opacity=0.5; area.updateLayer(ink); image=pictureImage(area);
+    require(pixel(image,140,80).green()>100 && pixel(image,140,80).green()<160,"layer opacity retained in cached picture");
+    ink.strokes.push_back(line(140,30,140,160,Qt::red)); area.updateLayer(ink);
+    image=pictureImage(area);
+    require(qAbs(pixel(image,140,80).green()-pixel(image,100,80).green())<5,
+            "overlapping strokes receive layer opacity once");
+    ink.strokes.pop_back();
+    ink.opacity=1; ink.x=0; ink.y=40; area.updateLayer(ink); image=pictureImage(area);
+    require(pixel(image,140,120).green()<60 && pixel(image,140,80)==QColor(Qt::white),"layer transform moves content");
+    ink.y=0; area.updateLayer(ink);
+    const QSize original=area.size(); const double sourceZoom=area.zoomFactor();
+    view.applyZoom(2.0); view.resize(900,620); app.processEvents();
+    require(area.size()==original && area.zoomFactor()==sourceZoom,"workspace zoom/resize never resizes document");
+    require(qAbs(view.zoomFactor()-2)<0.001,"resize preserves workspace zoom");
+    view.centerOn(120,100);
+    area.applyZoom(0.5); app.processEvents();
+    const QPointF source=view.sourcePosition(view.mapFromScene(QPointF(120,100)));
+    require(QLineF(source,QPointF(60,50)).length()<1,"input accounts for independent zoom and pan");
+    require(qAbs(view.zoomFactor()-2)<0.001,"integrated zoom leaves workspace zoom unchanged");
+    int modifications=0; GameFusion::Layer changed;
+    QObject::connect(&area,&PaintArea::layerModified,&area,[&](const GameFusion::Layer &layer){++modifications;changed=layer;});
+    area.setToolMode(PaintArea::ToolMode::Paint);
+    sendMouse(view,QEvent::MouseButtonPress,{30,150},Qt::LeftButton,Qt::LeftButton);
+    for(int i=1;i<=12;++i){sendMouse(view,QEvent::MouseMove,{30.0+i*8,150.0+i},Qt::NoButton,Qt::LeftButton);app.processEvents();}
+    sendMouse(view,QEvent::MouseButtonRelease,{126,162},Qt::LeftButton,Qt::NoButton);
+    QElapsedTimer wait; wait.start();
+    while(modifications==0 && wait.elapsed()<5000){app.processEvents();QThread::msleep(5);}
+    require(modifications>0 && changed.strokes.size()==2,"standalone drawing updates shared document");
+    const auto &first=changed.strokes.back()[0].point;
+    require(qAbs(first.x()-30)<3 && qAbs(first.y()-150)<3,"stroke coordinates independent of view transforms");
+    area.setToolMode(PaintArea::ToolMode::Select);
+    sendMouse(view,QEvent::MouseButtonPress,{15,140},Qt::LeftButton,Qt::LeftButton);
+    sendMouse(view,QEvent::MouseMove,{145,180},Qt::NoButton,Qt::LeftButton);
+    sendMouse(view,QEvent::MouseButtonRelease,{145,180},Qt::LeftButton,Qt::NoButton);
+    QKeyEvent erase(QEvent::KeyPress,Qt::Key_Delete,Qt::NoModifier);
+    QCoreApplication::sendEvent(&view,&erase);
+    require(changed.strokes.size()==1,"selection and deletion use existing controller");
+    const int count=modifications;
+    const int h=view.horizontalScrollBar()->value();
+    sendMouse(view,QEvent::MouseButtonPress,{100,100},Qt::MiddleButton,Qt::MiddleButton);
+    sendMouse(view,QEvent::MouseMove,{125,100},Qt::NoButton,Qt::MiddleButton);
+    sendMouse(view,QEvent::MouseButtonRelease,{125,100},Qt::MiddleButton,Qt::NoButton);
+    require(view.horizontalScrollBar()->value()!=h && modifications==count,"middle drag pans without drawing");
+    area.applyZoom(2); area.setToolMode(PaintArea::ToolMode::Paint);
+    view.fitToBase();app.processEvents();view.grab().save("/tmp/boarder-workspace-window.png");
+    GameFusion::Panel empty;empty.uuid="empty";area.setPanel(empty);app.processEvents();
+    require(pixel(pictureImage(area),140,80)==QColor(Qt::white),"panel switch clears cached drawing");
+    sendMouse(view,QEvent::MouseButtonPress,{40,40},Qt::LeftButton,Qt::LeftButton);
+    sendMouse(view,QEvent::MouseButtonRelease,{40,40},Qt::LeftButton,Qt::NoButton);
+    require(modifications==count,"empty panel input is safe");
+    // Image, text, pressure/taper/gradient strokes, animated layers and camera guides.
+    QTemporaryDir assets;
+    QImage tile(64,48,QImage::Format_ARGB32_Premultiplied);tile.fill(QColor(30,160,220));
+    const QString imagePath=assets.filePath("reference.png");tile.save(imagePath);
+    GameFusion::Panel rich;rich.uuid="rich";
+    GameFusion::Layer foreground;foreground.uuid="foreground";
+    foreground.strokes.push_back(line(20,70,290,70,Qt::darkGreen));
+    StrokeProperties pressure;pressure.maxWidth=20;pressure.minWidth=2;
+    pressure.variableWidthMode=StrokeProperties::TaperOut;pressure.colorMode=StrokeProperties::GradientFGtoBG;
+    pressure.foregroundColor=Qt::blue;pressure.backgroundColor=Qt::red;
+    auto curve=line(20,115,290,115,Qt::blue);curve.setStrokeProperties(pressure);foreground.strokes.push_back(curve);
+    GameFusion::Layer::TextContent label;label.text="Shared drawing workspace";label.fontName="Arial";
+    label.fontSize=18;label.color="#ff101010";label.x=20;label.y=45;foreground.textContents.push_back(label);
+    GameFusion::Layer::MotionKeyFrame a,b;a.time=0;b.time=25;b.x=40;
+    foreground.motionKeyframes={a,b};
+    GameFusion::Layer background;background.uuid="background";background.imageFilePath=imagePath.toStdString();
+    rich.layers={foreground,background};
+    GameFusion::CameraAnimation cameras;GameFusion::CameraFrame camera;camera.panelUuid=rich.uuid;
+    camera.name="Opening";camera.x=0;camera.y=0;camera.zoom=0.8;cameras.frames.push_back(camera);
+    area.setPanel(rich,0,25,cameras);area.setActiveLayer("foreground");
+    area.setCurrentTime(0); image=pictureImage(area);
+    require(pixel(image,220,180).blue()>180 && pixel(image,220,180).red()<70,"image layer renders");
+    require(pixel(image,140,70).green()<170 && pixel(image,140,70).blue()<100,"foreground order over image");
+    int darkText=0;for(int y=20;y<47;++y)for(int x=20;x<260;++x){auto c=pixel(image,x,y);if(c.red()<60&&c.green()<60&&c.blue()<60)++darkText;}
+    require(darkText>50,"text uses shared font rendering");
+    foreground.blendMode=GameFusion::BlendMode::Multiply;
+    foreground.strokes[0]=line(20,70,290,70,Qt::red);area.updateLayer(foreground);
+    const QColor multiplied=pixel(pictureImage(area),140,70);
+    require(multiplied.red()<60 && multiplied.green()<20 && multiplied.blue()<20,"layer multiply blends with lower image");
+    foreground.blendMode=GameFusion::BlendMode::Opacity;area.updateLayer(foreground);
+    area.setCurrentTime(1000); area.update();
+    require(pictureImage(area)!=image,"timeline animation changes workspace");
+    area.setCurrentTime(0);area.setPipDisplay(true);area.setToolMode(PaintArea::ToolMode::Camera);
+    area.toggleOutputFrame(true);area.toggleActionSafe(true);area.toggleTitleSafe(true);
+    view.fitToBase();app.processEvents();view.grab().save("/tmp/boarder-workspace-rich-window.png");
+    require(area.hasPipImage(),"camera preview available through shared renderer");
+    int cameraChanges=0;QObject::connect(&area,&PaintArea::cameraFrameUpdated,&area,[&](const GameFusion::CameraFrame &,bool){++cameraChanges;});
+    // Camera move handle uses the exact same coordinates and controller in both views.
+    sendMouse(view,QEvent::MouseButtonPress,{128,96},Qt::LeftButton,Qt::LeftButton);
+    sendMouse(view,QEvent::MouseMove,{145,105},Qt::NoButton,Qt::LeftButton);
+    sendMouse(view,QEvent::MouseButtonRelease,{145,105},Qt::LeftButton,Qt::NoButton);
+    require(cameraChanges>0,"camera interaction updates shared model");
+    area.setPipDisplay(false);area.setToolMode(PaintArea::ToolMode::Paint);
+    const int beforeTablet=modifications;
+    auto tabletEvent=[&](QEvent::Type type,QPointF scene,qreal pressureValue,Qt::MouseButton button,Qt::MouseButtons buttons){
+        QPointF pos=view.mapFromScene(scene);
+        QTabletEvent e(type,QPointingDevice::primaryPointingDevice(),pos,view.viewport()->mapToGlobal(pos.toPoint()),
+                       pressureValue,0,0,0,0,0,Qt::NoModifier,button,buttons);
+        QCoreApplication::sendEvent(view.viewport(),&e);
+    };
+    tabletEvent(QEvent::TabletPress,{30,190},0.2,Qt::LeftButton,Qt::LeftButton);
+    for(int i=1;i<=12;++i)tabletEvent(QEvent::TabletMove,{30.0+i*8,190.0+i},0.2+i*0.05,Qt::NoButton,Qt::LeftButton);
+    tabletEvent(QEvent::TabletRelease,{126,202},0,Qt::LeftButton,Qt::NoButton);
+    wait.restart();while(modifications==beforeTablet && wait.elapsed()<5000){app.processEvents();QThread::msleep(5);}
+    require(modifications>beforeTablet,"tablet drawing reaches shared stroke worker");
+    view.hide();view.show();app.processEvents();
+    GameFusion::Panel dense;dense.uuid="dense";GameFusion::Layer denseLayer;denseLayer.uuid="dense-ink";
+    for(int i=0;i<300;++i)denseLayer.strokes.push_back(line(-50,i*2,370,i*2,QColor::fromHsv(i%360,180,180)));
+    dense.layers.push_back(denseLayer);area.setPanel(dense);area.setActiveLayer("dense-ink");
+    view.fitToBase();app.processEvents();view.grab();
+    QElapsedTimer performance;performance.start();
+    for(int i=0;i<20;++i)view.grab();
+    printf("Cached workspace redraw, 300 strokes: %.2f ms/frame\n",performance.elapsed()/20.0);
+    view.setPaintArea(nullptr);view.grab();
+    require(view.paintArea()==nullptr,"source detachment is safe");
+    wait.restart();while(wait.elapsed()<250){app.processEvents();QThread::msleep(5);}
+    printf("PaintCanvasSmoke: PASS (%d checks)\n",checks);
+    return 0;
+}

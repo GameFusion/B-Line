@@ -1989,7 +1989,7 @@ MainWindow::MainWindow(QWidget *parent)
     ProjectContext::instance().projectJson()["canvas_preset"] = QString("Overscan 20% (Recommended)");
     ProjectContext::instance().projectJson()["canvas"] = QJsonArray{2304, 1296}; // For 20% margin: 1920 + 384, etc.
 
-    paintCanvas = new PaintCanvas();
+    paintCanvas = new PaintCanvas(this);
     paintCanvas->show();
 
 
@@ -2343,6 +2343,14 @@ MainWindow::MainWindow(QWidget *parent)
     }
     ui->splitter->insertWidget(1, paint);
     paint->show();
+    paintCanvas->setPaintArea(paint->getPaintArea());
+    paintCanvas->setHistoryActions(undoAction, redoAction);
+    QAction *workspaceAction = ui->menuWindows->addAction(tr("Drawing Workspace"));
+    connect(workspaceAction, &QAction::triggered, this, [this] {
+        paintCanvas->show();
+        paintCanvas->raise();
+        paintCanvas->activateWindow();
+    });
 
     /* Create a default dump panel scene
      *
@@ -2563,12 +2571,9 @@ MainWindow::MainWindow(QWidget *parent)
     connect(strokeDock, &StrokeAttributeDockWidget::strokePropertiesChanged,
             paint->getPaintArea(), &PaintArea::setStrokeProperties);
 
-    connect(strokeDock, &StrokeAttributeDockWidget::strokePropertiesChanged,
-            paintCanvas, &PaintCanvas::setStrokeProperties);
 
     const StrokeProperties initialStrokeProperties = strokeDock->getStrokeProperties();
     paint->getPaintArea()->setStrokeProperties(initialStrokeProperties);
-    paintCanvas->setStrokeProperties(initialStrokeProperties);
 
     strokeDock->setStyleSheet("QLabel { font-size: 10px; } QSlider, QComboBox, QSpinBox { margin-bottom: 4px; }");
 
