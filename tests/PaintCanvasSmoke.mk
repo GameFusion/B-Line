@@ -1,8 +1,16 @@
 # Run from build-vs2019-qt6/build/<configuration> after building Boarder.
 include Makefile
-SMOKE_OBJECTS = PaintCanvasSmoke.o PlaybackSmoke.o MoviePlayerSmoke.o ExportMovieSmoke.o StrokeLatency.o
+SMOKE_OBJECTS = PaintCanvasSmoke.o PlaybackSmoke.o MoviePlayerSmoke.o ExportMovieSmoke.o StrokeLatency.o ProjectPlaybackBenchmark.o TimelinePaintSmoke.o
 $(SMOKE_OBJECTS): ../../../tests/PaintCanvasSmoke.mk
 -include $(SMOKE_OBJECTS:.o=.d)
+TimelinePaintSmoke.o: ../../../tests/TimelinePaintSmoke.cpp
+	$(CXX) -c -MMD -MP $(CXXFLAGS) $(INCPATH) -o $@ $<
+TimelinePaintSmoke: TimelinePaintSmoke.o $(filter-out main.o,$(OBJECTS))
+	$(LINK) $(LFLAGS) -o $@ $^ $(LIBS)
+ProjectPlaybackBenchmark.o: ../../../tests/ProjectPlaybackBenchmark.cpp ../../../MainWindow.h
+	$(CXX) -c -MMD -MP $(CXXFLAGS) $(INCPATH) -o $@ $<
+ProjectPlaybackBenchmark: ProjectPlaybackBenchmark.o $(filter-out main.o,$(OBJECTS))
+	$(LINK) $(LFLAGS) -o $@ $^ $(LIBS)
 StrokeLatency.o: ../../../tests/StrokeLatency.cpp ../../../PaintCanvas.h
 	$(CXX) -c -MMD -MP $(CXXFLAGS) $(INCPATH) -o $@ $<
 StrokeLatency: StrokeLatency.o $(filter-out main.o,$(OBJECTS))

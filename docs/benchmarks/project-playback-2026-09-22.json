@@ -1,0 +1,599 @@
+{
+  "date": "2026-09-22",
+  "machine": "Apple M3 Max",
+  "os": "macOS 26.6.2",
+  "qt": "6.10.2",
+  "build": "Debug, -g, no optimization flag",
+  "measurement": "Actual loaded project, elapsed-clock transport, unique Qt paint completions; not display scanout",
+  "baseline": {
+    "B-Line": "042ecba61ccebcc2f984f9eb64abb740fd61f39a",
+    "plugandpaint": "9222997b9348e0192f96f19f4f3895a38e0ab918",
+    "TimeLineProject": "ce7b700d6f89eaebdf6882806cbb09f631953826"
+  },
+  "project": {
+    "scenes": 7,
+    "shots": 60,
+    "panels": 63,
+    "layers": 134,
+    "animated_layers": 8,
+    "camera_frames": 4,
+    "sequence_ms": 37165,
+    "fps": 24,
+    "output": [
+      960,
+      540
+    ],
+    "canvas": [
+      1536,
+      864
+    ],
+    "source_metadata_sha256": "6207501949fb04ce165bc2565042c69afbf66194944988f62e4a1f040282a797"
+  },
+  "method": {
+    "main_window": [
+      1440,
+      900
+    ],
+    "workspace": [
+      1200,
+      800
+    ],
+    "offscreen_dpr": 2,
+    "project_copy": true,
+    "settings_isolated": true,
+    "profiled_runs_in_table": false,
+    "composites_field": "Editing-only notifications are intentionally suppressed during playback; this is not a count of renderer composites.",
+    "offscreen_audio": false,
+    "native_comparison": "Native baseline has audio disabled; final native runs enable audio. These are additional checks, not the paired raster comparison."
+  },
+  "runs": {
+    "before_workspace": [
+      {
+        "dpr": 2,
+        "load_ms": 416,
+        "panels": 63,
+        "phase": "loaded",
+        "platform": "offscreen",
+        "qt": "6.10.2",
+        "sequence_ms": 37165
+      },
+      {
+        "duration_ms": 37165,
+        "phase": "measuring",
+        "start_ms": 0,
+        "target_fps": 24,
+        "view": "workspace"
+      },
+      {
+        "composites": 0,
+        "cursor_ms": 37125,
+        "frame_interval": {
+          "count": 805,
+          "max_ms": 219.23737500000016,
+          "mean_ms": 46.020407660869566,
+          "p50_ms": 42.04470799999763,
+          "p95_ms": 64.69674999999916,
+          "total_ms": 37046.428167
+        },
+        "main_paint": {
+          "count": 1,
+          "max_ms": 3.280708,
+          "mean_ms": 3.280708,
+          "p50_ms": 3.280708,
+          "p95_ms": 3.280708,
+          "total_ms": 3.280708
+        },
+        "painted_panels": 63,
+        "panel_transition": {
+          "count": 62,
+          "max_ms": 27.747,
+          "mean_ms": 3.3777352741935487,
+          "p50_ms": 2.226667,
+          "p95_ms": 10.04475,
+          "total_ms": 209.419587
+        },
+        "phase": "result",
+        "render_fps": 21.683494957808403,
+        "target_fps": 24,
+        "tick": {
+          "count": 805,
+          "max_ms": 27.747,
+          "mean_ms": 0.5545234745341607,
+          "p50_ms": 0.220375,
+          "p95_ms": 2.323625,
+          "total_ms": 446.3913969999994
+        },
+        "timeline_paint": {
+          "count": 806,
+          "max_ms": 45.21375,
+          "mean_ms": 12.063933585607936,
+          "p50_ms": 6.993792,
+          "p95_ms": 41.050917,
+          "total_ms": 9723.530469999996
+        },
+        "transport": "Playing  00:00:37:03\nRender 23.9 fps / Target 24 fps  Workspace",
+        "unique_frames": 806,
+        "view": "workspace",
+        "wall_ms": 37171.129542,
+        "workspace_paint": {
+          "count": 806,
+          "max_ms": 173.337833,
+          "mean_ms": 14.635249204714656,
+          "p50_ms": 11.483917,
+          "p95_ms": 32.123666,
+          "total_ms": 11796.010859000013
+        },
+        "wrong_view_frames": 0
+      }
+    ],
+    "before_integrated": [
+      {
+        "dpr": 2,
+        "load_ms": 409,
+        "panels": 63,
+        "phase": "loaded",
+        "platform": "offscreen",
+        "qt": "6.10.2",
+        "sequence_ms": 37165
+      },
+      {
+        "duration_ms": 37165,
+        "phase": "measuring",
+        "start_ms": 0,
+        "target_fps": 24,
+        "view": "integrated"
+      },
+      {
+        "composites": 0,
+        "cursor_ms": 37125,
+        "frame_interval": {
+          "count": 854,
+          "max_ms": 78.93791699999929,
+          "mean_ms": 43.46845935831382,
+          "p50_ms": 41.95933299999888,
+          "p95_ms": 56.472999999999956,
+          "total_ms": 37122.064292
+        },
+        "main_paint": {
+          "count": 32889,
+          "max_ms": 7.073083,
+          "mean_ms": 0.3647936024506678,
+          "p50_ms": 0.235459,
+          "p95_ms": 0.338834,
+          "total_ms": 11997.696791000013
+        },
+        "painted_panels": 63,
+        "panel_transition": {
+          "count": 62,
+          "max_ms": 25.960625,
+          "mean_ms": 3.082786338709677,
+          "p50_ms": 2.011792,
+          "p95_ms": 8.4895,
+          "total_ms": 191.13275299999998
+        },
+        "phase": "result",
+        "render_fps": 23.005438489022175,
+        "target_fps": 24,
+        "tick": {
+          "count": 854,
+          "max_ms": 25.960625,
+          "mean_ms": 0.5221721170960184,
+          "p50_ms": 0.17775,
+          "p95_ms": 2.321792,
+          "total_ms": 445.93498799999975
+        },
+        "timeline_paint": {
+          "count": 857,
+          "max_ms": 59.371208,
+          "mean_ms": 12.410847281213515,
+          "p50_ms": 6.802583,
+          "p95_ms": 42.688958,
+          "total_ms": 10636.096119999982
+        },
+        "transport": "Playing  00:00:37:03\nRender 24.0 fps / Target 24 fps  Main view",
+        "unique_frames": 855,
+        "view": "integrated",
+        "wall_ms": 37165.125125,
+        "workspace_paint": {
+          "count": 0
+        },
+        "wrong_view_frames": 0
+      }
+    ],
+    "after_workspace": [
+      {
+        "dpr": 2,
+        "load_ms": 398,
+        "panels": 63,
+        "phase": "loaded",
+        "platform": "offscreen",
+        "qt": "6.10.2",
+        "sequence_ms": 37165
+      },
+      {
+        "duration_ms": 37165,
+        "phase": "measuring",
+        "start_ms": 0,
+        "target_fps": 24,
+        "view": "workspace"
+      },
+      {
+        "composites": 0,
+        "cursor_ms": 37125,
+        "frame_interval": {
+          "count": 889,
+          "max_ms": 190.04220800000007,
+          "mean_ms": 41.74563174915635,
+          "p50_ms": 41.648583000000144,
+          "p95_ms": 47.18254200000047,
+          "total_ms": 37111.866624999995
+        },
+        "main_paint": {
+          "count": 2,
+          "max_ms": 3.46325,
+          "mean_ms": 1.96125,
+          "p50_ms": 0.45925,
+          "p95_ms": 3.46325,
+          "total_ms": 3.9225
+        },
+        "painted_panels": 63,
+        "panel_transition": {
+          "count": 62,
+          "max_ms": 31.093625,
+          "mean_ms": 4.024962370967742,
+          "p50_ms": 2.939625,
+          "p95_ms": 9.407667,
+          "total_ms": 249.54766700000002
+        },
+        "phase": "result",
+        "render_fps": 23.939998589973893,
+        "target_fps": 24,
+        "tick": {
+          "count": 889,
+          "max_ms": 31.093625,
+          "mean_ms": 0.5526406299212601,
+          "p50_ms": 0.170208,
+          "p95_ms": 3.284625,
+          "total_ms": 491.2975200000002
+        },
+        "timeline_paint": {
+          "count": 891,
+          "max_ms": 51.735625,
+          "mean_ms": 2.9755294994388257,
+          "p50_ms": 0.836041,
+          "p95_ms": 8.811625,
+          "total_ms": 2651.196783999994
+        },
+        "transport": "Playing  00:00:37:03\nRender 23.9 fps / Target 24 fps  Workspace",
+        "unique_frames": 890,
+        "view": "workspace",
+        "wall_ms": 37176.276208,
+        "workspace_paint": {
+          "count": 890,
+          "max_ms": 121.829958,
+          "mean_ms": 4.598146121348316,
+          "p50_ms": 3.797292,
+          "p95_ms": 7.161583,
+          "total_ms": 4092.350048000001
+        },
+        "wrong_view_frames": 0
+      }
+    ],
+    "after_integrated": [
+      {
+        "dpr": 2,
+        "load_ms": 390,
+        "panels": 63,
+        "phase": "loaded",
+        "platform": "offscreen",
+        "qt": "6.10.2",
+        "sequence_ms": 37165
+      },
+      {
+        "duration_ms": 37165,
+        "phase": "measuring",
+        "start_ms": 0,
+        "target_fps": 24,
+        "view": "integrated"
+      },
+      {
+        "composites": 0,
+        "cursor_ms": 37125,
+        "frame_interval": {
+          "count": 891,
+          "max_ms": 84.60375000000022,
+          "mean_ms": 41.658796671156004,
+          "p50_ms": 41.69287500000064,
+          "p95_ms": 46.26558300000033,
+          "total_ms": 37117.987834
+        },
+        "main_paint": {
+          "count": 893,
+          "max_ms": 9.416375,
+          "mean_ms": 4.052949922732367,
+          "p50_ms": 3.626208,
+          "p95_ms": 6.659125,
+          "total_ms": 3619.2842810000034
+        },
+        "painted_panels": 63,
+        "panel_transition": {
+          "count": 62,
+          "max_ms": 32.879041,
+          "mean_ms": 4.228154483870968,
+          "p50_ms": 3.325625,
+          "p95_ms": 8.8065,
+          "total_ms": 262.145578
+        },
+        "phase": "result",
+        "render_fps": 23.99994113040449,
+        "target_fps": 24,
+        "tick": {
+          "count": 891,
+          "max_ms": 32.879041,
+          "mean_ms": 0.5834325263748599,
+          "p50_ms": 0.1805,
+          "p95_ms": 3.387875,
+          "total_ms": 519.8383810000001
+        },
+        "timeline_paint": {
+          "count": 893,
+          "max_ms": 51.229375,
+          "mean_ms": 2.7861383796192563,
+          "p50_ms": 0.537292,
+          "p95_ms": 8.851166,
+          "total_ms": 2488.021572999996
+        },
+        "transport": "Playing  00:00:37:03\nRender 24.0 fps / Target 24 fps  Main view",
+        "unique_frames": 892,
+        "view": "integrated",
+        "wall_ms": 37166.757833,
+        "workspace_paint": {
+          "count": 0
+        },
+        "wrong_view_frames": 0
+      }
+    ],
+    "native_before_workspace": [
+      {
+        "dpr": 2,
+        "load_ms": 476,
+        "panels": 63,
+        "phase": "loaded",
+        "platform": "cocoa",
+        "qt": "6.10.2",
+        "sequence_ms": 37165
+      },
+      {
+        "duration_ms": 37165,
+        "phase": "measuring",
+        "start_ms": 0,
+        "target_fps": 24,
+        "view": "workspace"
+      },
+      {
+        "composites": 0,
+        "cursor_ms": 37125,
+        "frame_interval": {
+          "count": 873,
+          "max_ms": 180.50316599999996,
+          "mean_ms": 42.46587795990837,
+          "p50_ms": 41.62412499999846,
+          "p95_ms": 45.70854099999997,
+          "total_ms": 37072.711459000006
+        },
+        "main_paint": {
+          "count": 1,
+          "max_ms": 0.651125,
+          "mean_ms": 0.651125,
+          "p50_ms": 0.651125,
+          "p95_ms": 0.651125,
+          "total_ms": 0.651125
+        },
+        "painted_panels": 63,
+        "panel_transition": {
+          "count": 62,
+          "max_ms": 28.972333,
+          "mean_ms": 3.256974516129033,
+          "p50_ms": 2.082875,
+          "p95_ms": 8.657416,
+          "total_ms": 201.93242000000004
+        },
+        "phase": "result",
+        "render_fps": 23.514541958414412,
+        "target_fps": 24,
+        "tick": {
+          "count": 873,
+          "max_ms": 28.972333,
+          "mean_ms": 0.5314403447880874,
+          "p50_ms": 0.233708,
+          "p95_ms": 2.135125,
+          "total_ms": 463.9474210000003
+        },
+        "timeline_paint": {
+          "count": 875,
+          "max_ms": 12.156459,
+          "mean_ms": 7.531221801142862,
+          "p50_ms": 6.651792,
+          "p95_ms": 11.443167,
+          "total_ms": 6589.819076000004
+        },
+        "transport": "Playing  00:00:37:03\nRender 24.1 fps / Target 24 fps  Workspace",
+        "unique_frames": 874,
+        "view": "workspace",
+        "wall_ms": 37168.48925,
+        "workspace_paint": {
+          "count": 875,
+          "max_ms": 130.583666,
+          "mean_ms": 10.671920283428571,
+          "p50_ms": 7.63475,
+          "p95_ms": 22.917625,
+          "total_ms": 9337.930248
+        },
+        "wrong_view_frames": 0
+      }
+    ],
+    "native_after_workspace_audio": [
+      {
+        "dpr": 2,
+        "load_ms": 467,
+        "panels": 63,
+        "phase": "loaded",
+        "platform": "cocoa",
+        "qt": "6.10.2",
+        "sequence_ms": 37165
+      },
+      {
+        "duration_ms": 37165,
+        "phase": "measuring",
+        "start_ms": 0,
+        "target_fps": 24,
+        "view": "workspace"
+      },
+      {
+        "audio_playing": false,
+        "audio_requested": true,
+        "audio_stream_position": 13416,
+        "cursor_ms": 37125,
+        "editing_composite_notifications": 1,
+        "frame_interval": {
+          "count": 890,
+          "max_ms": 146.844875,
+          "mean_ms": 41.704988014606734,
+          "p50_ms": 41.717625000000226,
+          "p95_ms": 46.097499999999854,
+          "total_ms": 37117.439332999995
+        },
+        "main_paint": {
+          "count": 2,
+          "max_ms": 0.675916,
+          "mean_ms": 0.4369165,
+          "p50_ms": 0.197917,
+          "p95_ms": 0.675916,
+          "total_ms": 0.873833
+        },
+        "painted_panels": 63,
+        "panel_transition": {
+          "count": 62,
+          "max_ms": 30.28725,
+          "mean_ms": 4.8609174193548395,
+          "p50_ms": 4.184,
+          "p95_ms": 9.263417,
+          "total_ms": 301.37688
+        },
+        "phase": "result",
+        "render_fps": 23.963576896141305,
+        "target_fps": 24,
+        "tick": {
+          "count": 891,
+          "max_ms": 30.28725,
+          "mean_ms": 0.6441267317620651,
+          "p50_ms": 0.232792,
+          "p95_ms": 3.657292,
+          "total_ms": 573.916918
+        },
+        "timeline_paint": {
+          "count": 891,
+          "max_ms": 5.839084,
+          "mean_ms": 0.9671230897867569,
+          "p50_ms": 0.685667,
+          "p95_ms": 2.945917,
+          "total_ms": 861.7066730000004
+        },
+        "transport": "Ended  00:00:37:03  24 fps",
+        "unique_frames": 891,
+        "view": "workspace",
+        "wall_ms": 37181.427625,
+        "workspace_paint": {
+          "count": 892,
+          "max_ms": 79.41925,
+          "mean_ms": 2.8755136883408032,
+          "p50_ms": 2.202417,
+          "p95_ms": 4.580375,
+          "total_ms": 2564.9582099999966
+        },
+        "wrong_view_frames": 0
+      }
+    ],
+    "native_after_integrated_audio": [
+      {
+        "dpr": 2,
+        "load_ms": 429,
+        "panels": 63,
+        "phase": "loaded",
+        "platform": "cocoa",
+        "qt": "6.10.2",
+        "sequence_ms": 37165
+      },
+      {
+        "duration_ms": 37165,
+        "phase": "measuring",
+        "start_ms": 0,
+        "target_fps": 24,
+        "view": "integrated"
+      },
+      {
+        "audio_playing": true,
+        "audio_requested": true,
+        "audio_stream_position": 13416,
+        "cursor_ms": 37125,
+        "editing_composite_notifications": 0,
+        "frame_interval": {
+          "count": 891,
+          "max_ms": 73.61966700000016,
+          "mean_ms": 41.66955148709315,
+          "p50_ms": 41.73925000000054,
+          "p95_ms": 46.61645800000042,
+          "total_ms": 37127.570374999996
+        },
+        "main_paint": {
+          "count": 892,
+          "max_ms": 5.968667,
+          "mean_ms": 1.3592905437219736,
+          "p50_ms": 1.372458,
+          "p95_ms": 2.230083,
+          "total_ms": 1212.4871650000005
+        },
+        "painted_panels": 63,
+        "panel_transition": {
+          "count": 62,
+          "max_ms": 30.904209,
+          "mean_ms": 5.295637161290323,
+          "p50_ms": 4.756958,
+          "p95_ms": 10.975709,
+          "total_ms": 328.329504
+        },
+        "phase": "result",
+        "render_fps": 23.994950219901153,
+        "target_fps": 24,
+        "tick": {
+          "count": 891,
+          "max_ms": 30.904209,
+          "mean_ms": 0.6765205847362519,
+          "p50_ms": 0.235125,
+          "p95_ms": 4.123333,
+          "total_ms": 602.7798410000004
+        },
+        "timeline_paint": {
+          "count": 892,
+          "max_ms": 5.119166,
+          "mean_ms": 1.0332622421524666,
+          "p50_ms": 0.679709,
+          "p95_ms": 3.265042,
+          "total_ms": 921.6699200000002
+        },
+        "transport": "Playing  00:00:37:03\nRender 24.0 fps / Target 24 fps  Main view",
+        "unique_frames": 892,
+        "view": "integrated",
+        "wall_ms": 37174.488458,
+        "workspace_paint": {
+          "count": 0
+        },
+        "wrong_view_frames": 0
+      }
+    ]
+  },
+  "after_dependencies": {
+    "plugandpaint": "41f9a01a99b290e8ba5eecd5786a84fd58eb42ec",
+    "TimeLineProject": "ad3d477f4c43a182dcc41690e451ad2cdc304cd9"
+  }
+}

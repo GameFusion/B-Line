@@ -214,7 +214,9 @@ int main(int argc,char **argv) {
     window.show();window.raise();window.activateWindow();pump(150);
     require(area->playbackView()==PaintArea::PlaybackView::Integrated && area->compositedImage().cacheKey()!=hiddenComposite,
             "revealed canvas catches up to current animated frame");
-    window.pause();workspace->show();pump(80);
+    window.pause();workspace->show();pump(200);
+    mainPaints.paints=0;pump(160);
+    require(mainPaints.paints<=4,"unchanged camera overlay settles without a canvas repaint loop");
     require(area->playbackView()==PaintArea::PlaybackView::All && area->updatesEnabled() && workspace->viewport()->updatesEnabled(),
             "Pause restores both editing viewports");
     window.detachPreview(true);pump(100);

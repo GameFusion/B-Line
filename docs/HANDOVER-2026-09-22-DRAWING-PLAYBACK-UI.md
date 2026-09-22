@@ -51,6 +51,19 @@ The main remaining renderer target is repainting the entire fitted pressure
 stroke; first-cache-fill latency and real stylus/display latency also need
 separate measurement. Source changes span B-Line and plugandpaint only.
 
+## Follow-up: production-project playback performance
+
+The supplied 60-shot / 63-panel production project has now been measured using a
+disposable full copy. The 24 fps sequence improves from 21.68 to 23.94 fps in the
+standalone workspace and 23.01 to 24.00 fps in the integrated canvas in the paired
+2x offscreen Debug runs. Changes retain background pixels during playback, stop
+the camera-overlay repaint loop, cull timeline labels and restrict cursor redraws.
+Source changes span B-Line, plugandpaint and TimeLineProject. See
+[PROJECT-PLAYBACK-PERFORMANCE.md](PROJECT-PLAYBACK-PERFORMANCE.md) for measurements,
+validation, reproduction and the remaining panel-transition stalls. Historical
+large-project acceptance limits below are superseded only for this tested project;
+long-duration A/V drift and multi-track mixing remain separate work.
+
 ## Stop point and user priorities
 
 The user explicitly asked to **stop implementation and create a handover**. Implementation stopped. The changes below are unfinished, uncommitted, and not pushed. Do not interpret this document as evidence that the features work or that the current source builds.

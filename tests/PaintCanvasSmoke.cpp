@@ -129,9 +129,9 @@ static void strokeBackgroundChecks(QApplication &app) {
     sendMouse(view,QEvent::MouseButtonPress,{40,200},Qt::LeftButton,Qt::LeftButton);
     sendMouse(view,QEvent::MouseMove,{90,205},Qt::NoButton,Qt::LeftButton);
     const QRectF bounds(-160,-80,900,600);
-    auto background=area.strokeBackground(bounds,2);
+    auto background=area.viewportBackground(bounds,2);
     require(!background.isNull() && background.size()==QSize(1800,1200),"stroke background is bounded to the visible area at screen density");
-    require(background.cacheKey()==area.strokeBackground(bounds,2).cacheKey(),"held stroke reuses unchanged background pixels");
+    require(background.cacheKey()==area.viewportBackground(bounds,2).cacheKey(),"held stroke reuses unchanged background pixels");
     const QImage held=view.viewport()->grab().toImage();
     const QPoint inkPixel=view.mapFromScene(QPointF(100,70))*held.devicePixelRatio();
     require(held.pixelColor(inkPixel).red()>240 && held.pixelColor(inkPixel).green()<10,
@@ -140,20 +140,47 @@ static void strokeBackgroundChecks(QApplication &app) {
         QImage image(1800,1200,QImage::Format_ARGB32_Premultiplied);image.fill(Qt::white);
         QPicture commands=area.workspacePicture(bounds,2,!cached);
         QPainter p(&image);p.scale(2,2);p.translate(160,80);
-        if(cached)p.drawImage(bounds,area.strokeBackground(bounds,2));
+        if(cached)p.drawImage(bounds,area.viewportBackground(bounds,2));
         p.scale(qreal(commands.logicalDpiX())/image.logicalDpiX(),qreal(commands.logicalDpiY())/image.logicalDpiY());
         p.drawPicture(QPointF(),commands);p.end();return image;
     };
     require(render(false)==render(true),"cached stroke scene matches full light-table rendering including off-canvas ink and opacity");
     area.setLightTableMode(false);
-    require(background.cacheKey()!=area.strokeBackground(bounds,2).cacheKey() && render(false)==render(true),
+    require(background.cacheKey()!=area.viewportBackground(bounds,2).cacheKey() && render(false)==render(true),
             "light-table changes refresh the held-stroke background");
-    background=area.strokeBackground(bounds,2);area.setLayerVisibility("bg",false);
-    require(background.cacheKey()!=area.strokeBackground(bounds,2).cacheKey() && render(false)==render(true),
+    background=area.viewportBackground(bounds,2);area.setLayerVisibility("bg",false);
+    require(background.cacheKey()!=area.viewportBackground(bounds,2).cacheKey() && render(false)==render(true),
             "layer changes refresh the held-stroke background");
-    require(area.strokeBackground(QRectF(0,0,100,80),1).size()==QSize(100,80),"resize and density changes refresh the cache");
+    require(area.viewportBackground(QRectF(0,0,100,80),1).size()==QSize(100,80),"resize and density changes refresh the cache");
     sendMouse(view,QEvent::MouseButtonRelease,{90,205},Qt::LeftButton,Qt::NoButton);area.finishPendingStrokes();
-    require(area.strokeBackground(bounds,2).isNull(),"release stops using the stroke background cache");
+    require(area.viewportBackground(bounds,2).isNull(),"release stops using the stroke background cache");
+    area.setToolMode(PaintArea::ToolMode::Select);
+    area.setPlaybackMode(true);area.setCurrentTime(0);
+    background=area.viewportBackground(bounds,2);
+    require(!background.isNull() && render(false)==render(true),
+            "playback cache matches uncached reference image and off-canvas ink");
+    area.setCurrentTime(300);area.setPlaybackDisplay("Playing 00:00:00:08");
+    require(background.cacheKey()==area.viewportBackground(bounds,2).cacheKey(),
+            "timecode changes reuse a static panel background");
+    area.setPlaybackDisplay({});area.setLightTableMode(true);
+    require(background.cacheKey()!=area.viewportBackground(bounds,2).cacheKey() && render(false)==render(true),
+            "playback light-table toggle refreshes the background without changing pixels");
+    area.setLayerVisibility("bg",true);background=area.viewportBackground(bounds,2);area.setActiveLayer("bg");
+    require(background.cacheKey()!=area.viewportBackground(bounds,2).cacheKey() && render(false)==render(true),
+            "light-table active layer switch refreshes playback cache");
+    GameFusion::Layer::MotionKeyFrame a,b;a.time=0;b.time=25;b.x=100;
+    ink.motionKeyframes={a,b};area.updateLayer(ink);area.setCurrentTime(0);
+    background=area.viewportBackground(bounds,2);area.setCurrentTime(500);
+    require(background.cacheKey()!=area.viewportBackground(bounds,2).cacheKey() && render(false)==render(true),
+            "animated layer position invalidates cached playback pixels");
+    background=area.viewportBackground(bounds,2);panel.uuid="next-cached-panel";panel.image.clear();panel.layers={bg};
+    area.setPanel(panel);
+    require(background.cacheKey()!=area.viewportBackground(bounds,2).cacheKey() && render(false)==render(true),
+            "panel transition replaces the cached reference image and ink");
+    QImage exportBefore(320,240,QImage::Format_ARGB32_Premultiplied),exportAfter(exportBefore.size(),exportBefore.format());
+    area.renderFrameToImage(exportBefore);area.setPlaybackMode(false);area.renderFrameToImage(exportAfter);
+    require(area.viewportBackground(bounds,2).isNull() && exportBefore==exportAfter,
+            "pause releases the playback cache and preserves exported pixels");
 }
 
 int main(int argc,char **argv) {
