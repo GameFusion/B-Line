@@ -21,6 +21,13 @@ shares the integrated `PaintArea` document and editing controller.
   share the light-table setting and selected tool; newly opened workspaces
   inherit them. Camera previews, timeline thumbnails and movie output keep the
   full scene, including the active layer.
+- Playback renders only through the focused visible editor. Closing, hiding or
+  minimizing that window transfers playback to the other visible canvas; when
+  both are hidden, rendering pauses while the clock continues. Pause/Stop restore
+  both views. The inactive canvas retains its last snapshot.
+- During playback, the active preview/canvas shows measured / target FPS. The
+  main transport also names the viewport receiving frames. Counts reflect
+  distinct painted timeline frames, not timer ticks or export rendering.
 - Closing and reopening the window retains the document and navigation state.
 
 ## Implementation

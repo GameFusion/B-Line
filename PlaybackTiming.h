@@ -5,10 +5,44 @@
 #include <QtMath>
 
 namespace PlaybackTiming {
+// Counts distinct timeline frames actually painted, not timer ticks or exports.
+class FrameRateCounter {
+public:
+    void reset() { *this = FrameRateCounter(); }
+    void record(quint64 frameId, qint64 now) {
+        if (m_lastPaint >= 0 && frameId == m_lastFrame) return;
+        m_lastFrame = frameId;
+        m_lastPaint = now;
+        if (m_windowStart < 0) { m_windowStart = now; return; }
+        ++m_frames;
+        const qint64 elapsed = now - m_windowStart;
+        if (elapsed >= 500) {
+            m_rate = m_frames * 1000.0 / elapsed;
+            m_windowStart = now;
+            m_frames = 0;
+        }
+    }
+    double fps(qint64 now) const {
+        return m_lastPaint < 0 || now - m_lastPaint >= 1000 ? 0.0 : m_rate;
+    }
+private:
+    qint64 m_windowStart = -1, m_lastPaint = -1;
+    quint64 m_lastFrame = 0;
+    int m_frames = 0;
+    double m_rate = 0;
+};
+
 inline double validFps(double fps) { return qIsFinite(fps) && fps > 0 ? fps : 25.0; }
 inline qint64 frameTime(double milliseconds, double fps) {
     fps = validFps(fps);
     return qRound64(qFloor(qMax(0.0, milliseconds) * fps / 1000.0) * 1000.0 / fps);
+}
+// Re-align each wakeup to the next sequence frame instead of accumulating a
+// rounded timer interval (e.g. repeatedly using 33 ms for a 30 fps project).
+inline int nextFrameDelay(double milliseconds, double fps) {
+    fps = validFps(fps);
+    const double next = (qFloor(milliseconds * fps / 1000.0) + 1) * 1000.0 / fps;
+    return qMax(1, qCeil(next - milliseconds));
 }
 inline qint64 lastFrame(qint64 end, double fps) {
     fps = validFps(fps);

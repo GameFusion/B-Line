@@ -5,6 +5,7 @@
 
 #include <QMainWindow>
 #include <QElapsedTimer>
+#include "PlaybackTiming.h"
 #include "ui_BoarderMainWindow.h"
 #include "List.h"
 #include "GameVar.h"
@@ -444,6 +445,12 @@ protected:
     bool advancingPlayback = false;
     QString playbackState = QStringLiteral("Stopped");
     void updatePlaybackDisplay();
+    void refreshPlaybackView();
+    void scheduleNextPlaybackTick();
+    QElapsedTimer playbackRenderClock;
+    PlaybackTiming::FrameRateCounter playbackFrameRate;
+    quint64 playbackFrameId = 0;
+    PaintArea::PlaybackView lastPlaybackView = PaintArea::PlaybackView::Integrated;
     void startPlaybackAudio();
 
     // Camera side panel and attribute editor

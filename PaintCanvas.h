@@ -42,6 +42,7 @@ protected:
 private:
     QAction *addIconAction(const QString &label, ushort glyph);
     void updateLightTableAction();
+    void updatePlaybackView();
     void forwardMouse(QMouseEvent *event);
     void invalidateDrawing();
     void updateToolActions();
@@ -60,6 +61,8 @@ private:
     bool m_panning = false;
     bool m_editing = false;
     bool m_showPip = true;
+    bool m_capturingPlaybackSnapshot = false;
+    QPixmap m_frozenPlaybackView;
     QPoint m_panPosition;
 };
 #endif

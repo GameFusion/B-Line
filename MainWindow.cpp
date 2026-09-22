@@ -15,6 +15,7 @@
 #include "ShotListPresentation.h"
 #include "MoviePlayerWindow.h"
 #include <QScopeGuard>
+#include <QWindow>
 #include <QDragEnterEvent>
 #include <QMimeData>
 #include <QMessageBox>
@@ -1645,7 +1646,7 @@ TimeLineView* createTimeLine(QWidget &parent, MainWindow *myMainWindow)
     timecodeLabel->setStyleSheet("color: #f0f3f8; background: #252933; border-radius: 4px; padding: 5px 9px;");
     timecodeLabel->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
     timecodeLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    timecodeLabel->setToolTip(QObject::tr("Sequence timecode (HH:MM:SS:FF), using the project start timecode and frame rate"));
+    timecodeLabel->setToolTip(QObject::tr("Sequence timecode (HH:MM:SS:FF). Render FPS counts distinct frames painted by the active viewport; Target FPS is the project rate."));
     QToolButton *pauseButton = new QToolButton(&parent);
     pauseButton->setText(QChar(0xf04c));  // Area selection icon
     pauseButton->setFont(fontAwesome);
@@ -2289,6 +2290,7 @@ MainWindow::MainWindow(QWidget *parent)
     timer->start(1000);
 
     playbackTimer = new QTimer(this);
+    playbackTimer->setSingleShot(true);
     playbackTimer->setTimerType(Qt::PreciseTimer);
     connect(playbackTimer, &QTimer::timeout, this, &MainWindow::onPlaybackTick);
 
@@ -2393,6 +2395,17 @@ MainWindow::MainWindow(QWidget *parent)
     paint->show();
     paintCanvas->setPaintArea(paint->getPaintArea());
     paintCanvas->setHistoryActions(undoAction, redoAction);
+    installEventFilter(this);
+    paintCanvas->installEventFilter(this);
+    paint->getPaintArea()->installEventFilter(this);
+    connect(qApp, &QApplication::focusChanged, this, [this] {
+        if (isPlaying) refreshPlaybackView();
+    });
+    connect(paint->getPaintArea(), &PaintArea::playbackFramePainted, this, [this](quint64 frameId) {
+        if (isPlaying && playbackRenderClock.isValid())
+            playbackFrameRate.record(frameId, playbackRenderClock.elapsed());
+    });
+
     QAction *workspaceAction = ui->menuWindows->addAction(tr("Drawing Workspace"));
     connect(workspaceAction, &QAction::triggered, this, [this] {
         paintCanvas->show();
@@ -4601,7 +4614,7 @@ void MainWindow::rememberRecentProject(const QString& projectDir)
     QFileInfo info(projectDir);
     QString path = info.canonicalFilePath();
     if (path.isEmpty()) path = QDir::cleanPath(info.absoluteFilePath());
-    QSettings settings("B-Line", "Storyboard");
+    QSettings settings(QSettings::defaultFormat(), QSettings::UserScope, "B-Line", "Storyboard");
     QStringList projects = settings.value("recentProjects").toStringList();
     projects.removeAll(path);
     projects.prepend(path);
@@ -4614,7 +4627,7 @@ void MainWindow::refreshRecentProjectsMenu()
 {
     if (!recentProjectsMenu) return;
     recentProjectsMenu->clear();
-    QSettings settings("B-Line", "Storyboard");
+    QSettings settings(QSettings::defaultFormat(), QSettings::UserScope, "B-Line", "Storyboard");
     QStringList projects = settings.value("recentProjects").toStringList();
     projects.removeAll(QString());
     projects.removeDuplicates();
@@ -4646,7 +4659,7 @@ void MainWindow::refreshRecentProjectsMenu()
     recentProjectsMenu->addSeparator();
     QAction *clear = recentProjectsMenu->addAction(tr("Clear Recent Projects"));
     connect(clear, &QAction::triggered, this, [this] {
-        QSettings settings("B-Line", "Storyboard");
+        QSettings settings(QSettings::defaultFormat(), QSettings::UserScope, "B-Line", "Storyboard");
         settings.remove("recentProjects");
         QTimer::singleShot(0, this, &MainWindow::refreshRecentProjectsMenu);
     });
@@ -6489,6 +6502,7 @@ bool MainWindow::isInLowLatencyScrubWindow() const
 void MainWindow::onTimeCursorMoved(double time)
 {
     currentPlayTime = qMax(0L, qRound64(time));
+    if (isPlaying) paint->getPaintArea()->setPlaybackFrameId(++playbackFrameId);
     if (isPlaying && !advancingPlayback) {
         playbackAnchor = currentPlayTime;
         playbackClock.restart();
@@ -6991,14 +7005,61 @@ void MainWindow::startPlaybackAudio()
     }
 }
 
+void MainWindow::refreshPlaybackView()
+{
+    if (!isPlaying) return;
+    auto available = [](QWidget *widget) {
+        if (!widget || !widget->isVisible() || widget->window()->isMinimized() ||
+            widget->visibleRegion().isEmpty()) return false;
+        QWindow *window = widget->window()->windowHandle();
+        return !window || window->isExposed();
+    };
+    auto *area = paint->getPaintArea();
+    const bool mainVisible = available(area);
+    const bool workspaceVisible = available(paintCanvas);
+    QWidget *focusedWindow = QApplication::activeWindow();
+    using View = PaintArea::PlaybackView;
+    View selected = View::None;
+    if (workspaceVisible && focusedWindow == paintCanvas) selected = View::Workspace;
+    else if (mainVisible && focusedWindow == area->window()) selected = View::Integrated;
+    else if (workspaceVisible && lastPlaybackView == View::Workspace) selected = View::Workspace;
+    else if (mainVisible) selected = View::Integrated;
+    else if (workspaceVisible) selected = View::Workspace;
+    if (selected != View::None) lastPlaybackView = selected;
+    if (selected != area->playbackView()) {
+        playbackFrameRate.reset();
+        area->setPlaybackView(selected);
+        updatePlaybackDisplay();
+    }
+}
+
+void MainWindow::scheduleNextPlaybackTick()
+{
+    if (!isPlaying) return;
+    const double fps = PlaybackTiming::validFps(ProjectContext::instance().projectJson()["fps"].toDouble());
+    playbackTimer->start(PlaybackTiming::nextFrameDelay(playbackAnchor + playbackClock.elapsed(), fps));
+}
+
 void MainWindow::updatePlaybackDisplay()
 {
     const auto &project = ProjectContext::instance().projectJson();
     const double fps = PlaybackTiming::validFps(project["fps"].toDouble());
     const QString tc = PlaybackTiming::timecode(currentPlayTime, fps, project["start_tc"].toString());
-    const QString text = tr("%1  %2  %3 fps").arg(playbackState, tc).arg(fps, 0, 'g', 4);
-    if (paint && paint->getPaintArea())
-        paint->getPaintArea()->setPlaybackDisplay(tr("%1  %2").arg(playbackState, tc));
+    QString text = tr("%1  %2  %3 fps").arg(playbackState, tc).arg(fps, 0, 'g', 4);
+    if (paint && paint->getPaintArea()) {
+        auto *area = paint->getPaintArea();
+        QString rate;
+        if (isPlaying) {
+            const double measured = playbackFrameRate.fps(playbackRenderClock.elapsed());
+            rate = tr("%1 / %2 fps").arg(measured, 0, 'f', 1).arg(fps, 0, 'g', 4);
+            const QString view = area->playbackView() == PaintArea::PlaybackView::Workspace ? tr("Workspace") :
+                area->playbackView() == PaintArea::PlaybackView::Integrated ? tr("Main view") : tr("No visible view");
+            text = tr("%1  %2\nRender %3 fps / Target %4 fps  ").arg(playbackState, tc)
+                       .arg(measured, 0, 'f', 1).arg(fps, 0, 'g', 4) + view;
+        }
+        area->setPlaybackFpsText(rate);
+        area->setPlaybackDisplay(tr("%1  %2").arg(playbackState, tc));
+    }
     emit playbackDisplayChanged(text, isPlaying, playbackState == tr("Paused"));
 }
 
@@ -7024,7 +7085,11 @@ void MainWindow::play()
     isPlaying = true;
     timeLineView->setPlaybackActive(true);
     playbackState = tr("Playing");
+    playbackRenderClock.start();
+    playbackFrameRate.reset();
     paint->getPaintArea()->setPlaybackMode(true);
+    refreshPlaybackView();
+    if (pipPreviewTimer) pipPreviewTimer->stop();
     paint->getPaintArea()->startPlayback();
     {
         QScopedValueRollback<bool> advancing(advancingPlayback, true);
@@ -7032,7 +7097,7 @@ void MainWindow::play()
     }
     startPlaybackAudio();
     playbackClock.start();
-    playbackTimer->start(qMax(1, qRound(1000.0 / fps)));
+    scheduleNextPlaybackTick();
     updatePlaybackDisplay();
 }
 
@@ -7045,6 +7110,10 @@ void MainWindow::pause()
     playbackState = tr("Paused");
     paint->getPaintArea()->setFpsDisplay(false);
     paint->getPaintArea()->setPlaybackMode(false);
+    if (pipPreviewTimer && toggleDetachedPipAct && toggleDetachedPipAct->isChecked()) {
+        refreshDetachedPip();
+        pipPreviewTimer->start();
+    }
     updatePlaybackDisplay();
 }
 
@@ -7057,6 +7126,10 @@ void MainWindow::stop()
     playbackState = tr("Stopped");
     paint->getPaintArea()->setFpsDisplay(false);
     paint->getPaintArea()->setPlaybackMode(false);
+    if (pipPreviewTimer && toggleDetachedPipAct && toggleDetachedPipAct->isChecked()) {
+        refreshDetachedPip();
+        pipPreviewTimer->start();
+    }
     currentPlayTime = playbackStart;
     timeLineView->setTimeCursor(currentPlayTime);
     updatePlaybackDisplay();
@@ -7089,6 +7162,8 @@ void MainWindow::prevScene() {
 void MainWindow::onPlaybackTick()
 {
     if (!isPlaying || !playbackClock.isValid()) return;
+    const auto schedule = qScopeGuard([this] { scheduleNextPlaybackTick(); });
+    refreshPlaybackView();
     const double fps = PlaybackTiming::validFps(ProjectContext::instance().projectJson()["fps"].toDouble());
     qint64 position = playbackAnchor + playbackClock.elapsed();
     if (position >= playbackEnd) {
@@ -7112,7 +7187,7 @@ void MainWindow::onPlaybackTick()
         }
     }
     const long frameTime = PlaybackTiming::frameTime(position, fps);
-    if (frameTime == currentPlayTime) return;
+    if (frameTime == currentPlayTime) { updatePlaybackDisplay(); return; }
     QScopedValueRollback<bool> advancing(advancingPlayback, true);
     timeLineView->setTimeCursor(frameTime);
 }
@@ -7669,6 +7744,7 @@ void MainWindow::onToggleDetachedPip(bool enabled)
     if (!pipPreviewWindow) {
         pipPreviewWindow = new QWidget(this, Qt::Window);
         pipPreviewWindow->setWindowTitle(tr("Camera Preview (PiP)"));
+        pipPreviewWindow->setObjectName("detachedCameraPreview");
         pipPreviewWindow->setMinimumSize(480, 270);
         pipPreviewWindow->setAttribute(Qt::WA_DeleteOnClose, false);
         pipPreviewWindow->installEventFilter(this);
@@ -7690,12 +7766,13 @@ void MainWindow::onToggleDetachedPip(bool enabled)
     pipPreviewWindow->raise();
     pipPreviewWindow->activateWindow();
     refreshDetachedPip();
-    if (pipPreviewTimer)
+    if (pipPreviewTimer && !isPlaying)
         pipPreviewTimer->start();
 }
 
 void MainWindow::refreshDetachedPip()
 {
+    if (isPlaying) return;
     if (!toggleDetachedPipAct || !toggleDetachedPipAct->isChecked())
         return;
     if (!pipPreviewWindow || !pipPreviewLabel || !paint || !paint->getPaintArea())
@@ -10831,7 +10908,7 @@ void MainWindow::updateKeyframe(const QString& kfUuid, double localFr, const QVa
 }
 
 void MainWindow::loadSettings() {
-    QSettings settings("B-Line", "Storyboard"); // Adjust organization and app name
+    QSettings settings(QSettings::defaultFormat(), QSettings::UserScope, "B-Line", "Storyboard"); // Adjust organization and app name
     autoSave = settings.value("autoSave", false).toBool();
     lowLatencyScrubMode = settings.value("lowLatencyScrubMode", true).toBool();
 
@@ -10844,7 +10921,7 @@ void MainWindow::loadSettings() {
 }
 
 void MainWindow::saveSettings() {
-    QSettings settings("B-Line", "Storyboard");
+    QSettings settings(QSettings::defaultFormat(), QSettings::UserScope, "B-Line", "Storyboard");
     settings.setValue("autoSave", autoSave);
     settings.setValue("lowLatencyScrubMode", lowLatencyScrubMode);
 }
@@ -11157,6 +11234,15 @@ void MainWindow::setLayerAttribute(const QString& layerUuid, const QString& pane
 }
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
+    if (isPlaying && (obj == this || obj == paintCanvas || obj == paint->getPaintArea())) {
+        switch (event->type()) {
+        case QEvent::Show: case QEvent::Hide: case QEvent::WindowStateChange:
+        case QEvent::WindowActivate: case QEvent::WindowDeactivate:
+            QTimer::singleShot(0, this, [this] { refreshPlaybackView(); });
+            break;
+        default: break;
+        }
+    }
     if (obj == pipPreviewWindow && event->type() == QEvent::Close) {
         if (toggleDetachedPipAct && toggleDetachedPipAct->isChecked()) {
             toggleDetachedPipAct->setChecked(false);

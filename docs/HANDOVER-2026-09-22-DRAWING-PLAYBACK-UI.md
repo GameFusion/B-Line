@@ -25,6 +25,22 @@ limits are native stylus hardware, large production projects, long-duration A/V
 drift and the untested Windows Explorer branch. Audio mixing remains first-track
 only, as documented. These limits are not claims of completed validation.
 
+## Follow-up: one playback viewport and measured FPS
+
+Interactive playback now selects one visible editor by window focus, retains the
+last selected visible view while another control/window has focus, and falls back
+when that editor is hidden or minimized. Both hidden means no viewport rendering;
+transport/audio continue. Pause/Stop restore all editing views. The detached
+camera preview is suspended during playback. FPS is measured from distinct
+painted frames and displayed against the target rate; timer wakeups align to
+frame boundaries. See the current validation record in
+[EDITOR-PREVIEW-AND-EXPORT.md](EDITOR-PREVIEW-AND-EXPORT.md).
+
+Changes are in B-Line and the shared plugandpaint controller (`91a5566`). Tests exercise an
+animated panel through the actual MainWindow transport and count paint events
+on both widgets to verify inactive-view suppression, focus/visibility handoff,
+resume behavior, and stable snapshots on expose requests.
+
 ## Stop point and user priorities
 
 The user explicitly asked to **stop implementation and create a handover**. Implementation stopped. The changes below are unfinished, uncommitted, and not pushed. Do not interpret this document as evidence that the features work or that the current source builds.

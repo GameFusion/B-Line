@@ -307,6 +307,18 @@ int main(int argc,char **argv) {
     require(PlaybackTiming::timecode(33,30)=="00:00:00:01", "rounded millisecond cursor retains frame identity");
     require(PlaybackTiming::lastFrame(1000,24)==958, "natural end holds last valid frame");
     require(PlaybackTiming::frameTime(100,25)==80, "elapsed clock skips to current frame without accumulating drift");
+    PlaybackTiming::FrameRateCounter measured;
+    for(int i=0;i<=25;++i) {measured.record(i,i*40);measured.record(i,i*40+5);}
+    require(qAbs(measured.fps(1000)-25.0)<0.01,"FPS counts distinct painted frames rather than repeated repaints");
+    require(measured.fps(2200)==0.0,"FPS falls to zero when no new frame is painted");
+    measured.reset();require(measured.fps(0)==0.0,"viewport handoff resets FPS samples");
+    require(PlaybackTiming::nextFrameDelay(33,30)==1 && PlaybackTiming::nextFrameDelay(34,30)==33,
+            "playback scheduling follows fractional frame boundaries");
+    area.setFpsDisplay(true);area.setPlaybackFpsText("24.8 / 25 fps");
+    area.renderFrameToImage(exportAfter);
+    require(exportBefore==exportAfter,"measured FPS badge is excluded from movie output");
+    area.setFpsDisplay(false);
+
     int offscreenStrokes=0;
     QObject::connect(&area,&PaintArea::strokeCompleted,&area,[&](const QString &panelId,const QString &layerId,const GameFusion::BezierCurve &curve){
         require(panelId=="dense" && layerId=="dense-ink" && !curve.empty(),"late fit retains original panel and layer identity");++offscreenStrokes;

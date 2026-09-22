@@ -29,6 +29,28 @@ void addShot(QTreeWidgetItem*, const GameFusion::Shot&, float);
 #include <cstdio>
 #include <cstdlib>
 
+class PlaybackFixture : public MainWindow {
+public:
+    void prepareAnimation() {
+        timeLineView->clear();timeLineView->addTrack(new Track("Shots",0,10000,TrackType::Storyboard));
+        scriptBreakdown=new GameFusion::ScriptBreakdown("playback-fixture",25);
+        GameFusion::Scene scene;scene.uuid="playback-scene";scene.name="Playback fixture";
+        GameFusion::Shot shot;shot.uuid="playback-shot";shot.name="Motion";shot.frameCount=250;shot.startTime=0;shot.endTime=10000;
+        GameFusion::Panel panel;panel.uuid="playback-panel";panel.name="Moving ink";panel.startTime=0;panel.durationTime=10000;
+        GameFusion::Layer layer;layer.uuid="moving-ink";layer.name="Ink";
+        GameFusion::BezierCurve curve;curve+=GameFusion::BezierControl({30,40,0},{0,0,0},{0,0,0});curve+=GameFusion::BezierControl({280,150,0},{0,0,0},{0,0,0});
+        StrokeProperties props;props.foregroundColor=Qt::blue;props.maxWidth=8;curve.setStrokeProperties(props);curve.assess(20,false);layer.strokes.push_back(curve);
+        GameFusion::Layer::MotionKeyFrame a,b;a.time=0;b.time=250;b.x=200;layer.motionKeyframes={a,b};
+        panel.layers.push_back(layer);shot.panels.push_back(panel);scene.shots.push_back(shot);scriptBreakdown->getScenes().push_back(scene);
+        updateScenes();updateTimeline();timeLineView->setTimeCursor(0L);
+    }
+    void detachPreview(bool enabled) { toggleDetachedPipAct->setChecked(enabled); }
+};
+class PaintCounter : public QObject {
+public:
+    int paints=0;
+    bool eventFilter(QObject *,QEvent *e) override { if(e->type()==QEvent::Paint)++paints;return false; }
+};
 static int checks = 0;
 static void require(bool condition, const char *message) {
     ++checks;
@@ -43,9 +65,11 @@ int main(int argc,char **argv) {
     QTemporaryDir settings;
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,settings.path());
+    QSettings::setPath(QSettings::IniFormat,QSettings::SystemScope,settings.path());
+    require(QSettings(QSettings::defaultFormat(),QSettings::UserScope,"B-Line","Storyboard").fileName().startsWith(settings.path()),"fixture settings are isolated from user preferences");
     ProjectContext::instance().projectJson()["fps"]=25;
     ProjectContext::instance().projectJson()["start_tc"]="01:00:00:00";
-    MainWindow window;
+    PlaybackFixture window;
     auto *workspace=window.findChild<PaintCanvas*>();
     auto *editor=window.findChild<MainWindowPaint*>();
     QAction *embeddedLight=nullptr,*embeddedSelect=nullptr;
@@ -115,7 +139,7 @@ int main(int argc,char **argv) {
     search->setText("Shot 3");
     require(scene->child(0)->isHidden()&&!scene->child(2)->isHidden(), "shot search retains matching hierarchy");
     search->clear();
-    for(auto *a:filter->menu()->actions())if(a->text()=="Show panels")a->trigger();
+    for(auto *a:filter->menu()->actions())if(a->text()=="Show panels"){a->setChecked(true);a->trigger();}
     require(scene->child(0)->child(0)->isHidden(), "panel detail toggle works");
     for(auto *a:filter->menu()->actions())if(a->text()=="Show panels")a->trigger();
     window.resize(1500,950);window.show();pump(60);
@@ -134,6 +158,64 @@ int main(int argc,char **argv) {
     pump(40);
 
     window.grab().save("/tmp/boarder-playback-transport.png");
+    // Measure actual viewport paints while the real transport animates a panel.
+    window.stop();window.setPlaybackLoop(false);window.prepareAnimation();
+    auto *area=editor->getPaintArea();
+    PaintCounter mainPaints,workspacePaints;
+    area->installEventFilter(&mainPaints);workspace->viewport()->installEventFilter(&workspacePaints);
+    window.move(20,40);workspace->resize(900,600);workspace->move(500,80);
+    workspace->show();workspace->raise();workspace->activateWindow();pump(100);
+    window.play();pump(150);
+    require(area->playbackView()==PaintArea::PlaybackView::Workspace && !area->updatesEnabled(),
+            "focused workspace is sole playback viewport");
+    const QImage frozenMain=area->grab().toImage();
+    mainPaints.paints=workspacePaints.paints=0;pump(700);
+    require(workspacePaints.paints>8 && mainPaints.paints==0,"workspace playback leaves integrated paint surface frozen");
+    require(label->text().contains("Render ") && label->text().contains("Target 25 fps") &&
+            !label->text().contains("Render 0.0 fps"),"transport shows measured and target FPS");
+    fprintf(stdout,"Workspace playback: %s; paints main=%d workspace=%d\n",qPrintable(label->text()),mainPaints.paints,workspacePaints.paints);
+    require(area->grab().toImage()==frozenMain,"inactive integrated expose requests replay an unchanged snapshot");
+    workspace->grab().save("/tmp/boarder-active-playback-workspace.png");
+    window.grab().save("/tmp/boarder-active-playback-transport.png");
+    if (app.arguments().contains("--review")) { window.setPlaybackLoop(true);pump(30000);window.stop();return 0; }
+    window.raise();window.activateWindow();pump(100);
+    require(area->playbackView()==PaintArea::PlaybackView::Integrated && !workspace->viewport()->updatesEnabled(),
+            "focusing main window transfers playback without stopping transport");
+    const QImage frozenWorkspace=workspace->viewport()->grab().toImage();
+    mainPaints.paints=workspacePaints.paints=0;pump(240);
+    require(mainPaints.paints>2 && workspacePaints.paints==0,"main playback leaves workspace paint surface frozen");
+    require(workspace->viewport()->grab().toImage()==frozenWorkspace,"inactive workspace expose requests replay an unchanged snapshot");
+    workspace->raise();workspace->activateWindow();pump(80);
+    workspace->showMinimized();pump(100);
+    require(area->playbackView()==PaintArea::PlaybackView::Integrated,"minimized workspace falls back to visible main canvas");
+    workspace->showNormal();workspace->raise();workspace->activateWindow();pump(80);
+    workspace->close();pump(100);
+    require(area->playbackView()==PaintArea::PlaybackView::Integrated,"closed workspace falls back to main canvas");
+    window.hide();workspace->hide();pump(100);
+    const auto hiddenCursor=timeline->getCursorTime();
+    const auto hiddenComposite=area->compositedImage().cacheKey();
+    mainPaints.paints=workspacePaints.paints=0;pump(200);
+    require(area->playbackView()==PaintArea::PlaybackView::None && mainPaints.paints==0 && workspacePaints.paints==0,
+            "both hidden canvases suspend drawing");
+    require(timeline->getCursorTime()>hiddenCursor && area->compositedImage().cacheKey()==hiddenComposite,
+            "hidden playback advances clock while deferring compositing");
+    window.show();window.raise();window.activateWindow();pump(150);
+    require(area->playbackView()==PaintArea::PlaybackView::Integrated && area->compositedImage().cacheKey()!=hiddenComposite,
+            "revealed canvas catches up to current animated frame");
+    window.pause();workspace->show();pump(80);
+    require(area->playbackView()==PaintArea::PlaybackView::All && area->updatesEnabled() && workspace->viewport()->updatesEnabled(),
+            "Pause restores both editing viewports");
+    window.detachPreview(true);pump(100);
+    auto *preview=window.findChild<QWidget*>("detachedCameraPreview");auto *previewLabel=preview->findChild<QLabel*>();
+    window.play();pump(80);
+    const auto previewKey=previewLabel->pixmap().cacheKey();pump(160);
+    require(previewLabel->pixmap().cacheKey()==previewKey,"detached camera preview stays frozen during playback");
+    window.stop();pump(100);
+    require(area->playbackView()==PaintArea::PlaybackView::All && previewLabel->pixmap().cacheKey()!=previewKey,
+            "Stop restores editor and detached camera preview updates");
+    window.detachPreview(false);
+    area->removeEventFilter(&mainPaints);workspace->viewport()->removeEventFilter(&workspacePaints);
+
     if (app.arguments().contains("--audio")) {
         const QString wav=settings.filePath("transport-tone.wav");
         QFile file(wav);require(file.open(QIODevice::WriteOnly),"audio fixture opens");

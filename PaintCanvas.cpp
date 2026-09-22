@@ -8,6 +8,7 @@
 #include <QMouseEvent>
 #include <QScrollBar>
 #include <QSignalBlocker>
+#include <QScopedValueRollback>
 #include <QTabletEvent>
 #include <QToolBar>
 #include <QToolButton>
@@ -148,15 +149,17 @@ void PaintCanvas::setPaintArea(PaintArea *area)
     if (area) {
         for (auto *action : area->actions()) addAction(action);
         connect(area, &PaintArea::workspaceChanged, this, &PaintCanvas::invalidateDrawing);
+        connect(area, &PaintArea::playbackViewChanged, this, &PaintCanvas::updatePlaybackView);
         connect(area, &PaintArea::toolModeChanged, this, &PaintCanvas::updateToolActions);
         connect(area, &PaintArea::lightTableModeChanged, this, &PaintCanvas::updateLightTableAction);
         connect(area, &QObject::destroyed, this, [this] {
-            m_drawing = QPicture(); updateToolActions(); updateLightTableAction(); invalidateDrawing();
+            m_drawing = QPicture(); updateToolActions(); updateLightTableAction(); updatePlaybackView(); invalidateDrawing();
         });
     }
     m_drawing = QPicture();
     updateToolActions();
     updateLightTableAction();
+    updatePlaybackView();
     invalidateDrawing();
     if (area && isVisible() && !m_fitted) fitToBase();
 }
@@ -180,10 +183,23 @@ void PaintCanvas::setHistoryActions(QAction *undo, QAction *redo)
     }
 }
 
+void PaintCanvas::updatePlaybackView()
+{
+    const bool enabled = !m_area || m_area->playbackViewEnabled(PaintArea::PlaybackView::Workspace);
+    if (!enabled && viewport()->updatesEnabled() && isVisible()) {
+        QScopedValueRollback<bool> capture(m_capturingPlaybackSnapshot, true);
+        m_frozenPlaybackView = viewport()->grab();
+    }
+    if (enabled) m_frozenPlaybackView = QPixmap();
+    viewport()->setUpdatesEnabled(enabled);
+    m_dirty = true; // Catch up to the current frame when this view becomes active.
+    if (enabled) viewport()->update();
+}
+
 void PaintCanvas::invalidateDrawing()
 {
     m_dirty = true;
-    viewport()->update(); // Qt coalesces updates; no timer and no polling.
+    if (viewport()->updatesEnabled()) viewport()->update(); // Qt coalesces updates.
 }
 
 void PaintCanvas::updateToolActions()
@@ -219,6 +235,13 @@ void PaintCanvas::drawBackground(QPainter *painter, const QRectF &rect)
 
 void PaintCanvas::paintEvent(QPaintEvent *event)
 {
+    if (m_area && !m_capturingPlaybackSnapshot &&
+        !m_area->playbackViewEnabled(PaintArea::PlaybackView::Workspace)) {
+        QPainter painter(viewport());
+        painter.fillRect(viewport()->rect(), Qt::white);
+        painter.drawPixmap(QPoint(), m_frozenPlaybackView);
+        return;
+    }
     QGraphicsView::paintEvent(event);
     if (m_showPip && m_area && m_area->hasPipImage()) {
         QPainter painter(viewport());
@@ -231,6 +254,7 @@ void PaintCanvas::paintEvent(QPaintEvent *event)
         QPainter painter(viewport());
         m_area->drawPlaybackOverlay(painter, viewport()->rect());
     }
+    if (m_area) m_area->notifyPlaybackFramePainted(PaintArea::PlaybackView::Workspace);
 }
 
 void PaintCanvas::resizeEvent(QResizeEvent *event)
