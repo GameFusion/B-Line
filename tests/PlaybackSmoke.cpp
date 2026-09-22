@@ -60,6 +60,12 @@ static void pump(int ms) {
     QElapsedTimer timer; timer.start();
     while(timer.elapsed()<ms) {QCoreApplication::processEvents();QThread::msleep(2);}
 }
+static void waitForView(PaintArea *area, PaintArea::PlaybackView expected) {
+    // Native activation can settle after the first scheduled playback tick.
+    // Wait for the real handoff instead of assuming a fixed 100 ms deadline.
+    QElapsedTimer timer;timer.start();
+    while(area->playbackView()!=expected && timer.elapsed()<1000)pump(10);
+}
 int main(int argc,char **argv) {
     QApplication app(argc,argv);
     QTemporaryDir settings;
@@ -166,6 +172,7 @@ int main(int argc,char **argv) {
     window.move(20,40);workspace->resize(900,600);workspace->move(500,80);
     workspace->show();workspace->raise();workspace->activateWindow();pump(100);
     window.play();pump(150);
+    waitForView(area,PaintArea::PlaybackView::Workspace);
     require(area->playbackView()==PaintArea::PlaybackView::Workspace && !area->updatesEnabled(),
             "focused workspace is sole playback viewport");
     const QImage frozenMain=area->grab().toImage();
@@ -179,6 +186,11 @@ int main(int argc,char **argv) {
     window.grab().save("/tmp/boarder-active-playback-transport.png");
     if (app.arguments().contains("--review")) { window.setPlaybackLoop(true);pump(30000);window.stop();return 0; }
     window.raise();window.activateWindow();pump(100);
+    waitForView(area,PaintArea::PlaybackView::Integrated);
+    if (area->playbackView()!=PaintArea::PlaybackView::Integrated || workspace->viewport()->updatesEnabled())
+        qWarning()<<"Playback focus handoff:"<<"active"<<QApplication::activeWindow()
+                  <<"main"<<&window<<"workspace"<<workspace<<"view"<<int(area->playbackView())
+                  <<"main visible"<<area->isVisible()<<area->visibleRegion()<<"workspace visible"<<workspace->isVisible();
     require(area->playbackView()==PaintArea::PlaybackView::Integrated && !workspace->viewport()->updatesEnabled(),
             "focusing main window transfers playback without stopping transport");
     const QImage frozenWorkspace=workspace->viewport()->grab().toImage();

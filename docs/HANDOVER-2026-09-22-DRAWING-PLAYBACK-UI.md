@@ -41,6 +41,16 @@ animated panel through the actual MainWindow transport and count paint events
 on both widgets to verify inactive-view suppression, focus/visibility handoff,
 resume behavior, and stable snapshots on expose requests.
 
+## Follow-up: measured active-stroke latency
+
+Both canvases now retain the unchanged background during a held brush gesture,
+and the worker reuses the stable fitting prefix without changing finished
+geometry or pressure. The repeatable benchmark, raw timing records, quality
+checks and remaining costs are in [STROKE-LATENCY.md](STROKE-LATENCY.md).
+The main remaining renderer target is repainting the entire fitted pressure
+stroke; first-cache-fill latency and real stylus/display latency also need
+separate measurement. Source changes span B-Line and plugandpaint only.
+
 ## Stop point and user priorities
 
 The user explicitly asked to **stop implementation and create a handover**. Implementation stopped. The changes below are unfinished, uncommitted, and not pushed. Do not interpret this document as evidence that the features work or that the current source builds.

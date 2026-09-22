@@ -54,6 +54,8 @@ private:
     QLabel *m_zoomLabel;
     QAction *m_lightTable;
     QPicture m_drawing;
+    QImage m_strokeBackground;
+    QRectF m_strokeBackgroundRect;
     double m_sourceZoom = 1.0;
     bool m_dirty = true;
     bool m_fitted = false;

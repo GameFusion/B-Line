@@ -1,0 +1,856 @@
+{
+  "metadata": {
+    "date": "2026-09-22",
+    "cpu": "Apple M3 Max",
+    "os": "macOS 26.6.2",
+    "qt": "6.10.2",
+    "build": "Qt_6_10_2_for_macOS-Debug; -g, no optimization flag",
+    "baseline": {
+      "B-Line": "a36a11f838577bfba0fb82380b6ddab08fca1f9d",
+      "plugandpaint": "91a556690aa3ef349b8e6e1d0c96045eef8fcc29"
+    },
+    "units": "milliseconds; synthetic dispatched input to Qt paint completion, not hardware or display latency",
+    "input": "precise 4 ms timer; pressure brush, 20 assessed steps, 640x480 model, workspace 800x600, DPR 2",
+    "quality": "1095 incremental vs full fit comparisons; final worker geometry and pressure fingerprint matches baseline"
+  },
+  "fit_before": [
+    {
+      "dpr": 1,
+      "environment": "offscreen",
+      "qt": "6.10.2"
+    },
+    {
+      "case": "full-fit",
+      "fit": {
+        "count": 3,
+        "max_ms": 5.770458,
+        "p50_ms": 5.688792,
+        "p95_ms": 5.770458
+      },
+      "points": 64,
+      "sha256": "c8bcb376f2c99162fa0572f0d4f878bf209093214d6820574c64412c0bf95348"
+    },
+    {
+      "case": "full-fit",
+      "fit": {
+        "count": 3,
+        "max_ms": 27.902875,
+        "p50_ms": 27.880458,
+        "p95_ms": 27.902875
+      },
+      "points": 256,
+      "sha256": "e1b59a9c36ee418347439a856873054238011f498fd3a453719980ff0961bf0c"
+    },
+    {
+      "case": "full-fit",
+      "fit": {
+        "count": 3,
+        "max_ms": 117.546875,
+        "p50_ms": 112.948916,
+        "p95_ms": 117.546875
+      },
+      "points": 1024,
+      "sha256": "8205931d047a8188350d00e9c042eec48f7276460917d116c0641dd8c70b96d5"
+    },
+    {
+      "case": "growing-worker",
+      "fit": {
+        "count": 256,
+        "max_ms": 112.713708,
+        "p50_ms": 55.200541,
+        "p95_ms": 107.816125
+      },
+      "points": 1024,
+      "sha256": "dcb4f956725c86339056938ff7403c120e9b5822824134f6f83449da2160224b"
+    }
+  ],
+  "fit_after": [
+    {
+      "dpr": 1,
+      "environment": "offscreen",
+      "qt": "6.10.2"
+    },
+    {
+      "case": "full-fit",
+      "fit": {
+        "count": 3,
+        "max_ms": 5.895375,
+        "p50_ms": 5.62325,
+        "p95_ms": 5.895375
+      },
+      "points": 64,
+      "sha256": "c8bcb376f2c99162fa0572f0d4f878bf209093214d6820574c64412c0bf95348"
+    },
+    {
+      "case": "full-fit",
+      "fit": {
+        "count": 3,
+        "max_ms": 28.527417,
+        "p50_ms": 27.197,
+        "p95_ms": 28.527417
+      },
+      "points": 256,
+      "sha256": "e1b59a9c36ee418347439a856873054238011f498fd3a453719980ff0961bf0c"
+    },
+    {
+      "case": "full-fit",
+      "fit": {
+        "count": 3,
+        "max_ms": 117.316083,
+        "p50_ms": 113.749042,
+        "p95_ms": 117.316083
+      },
+      "points": 1024,
+      "sha256": "8205931d047a8188350d00e9c042eec48f7276460917d116c0641dd8c70b96d5"
+    },
+    {
+      "case": "growing-worker",
+      "fit": {
+        "count": 256,
+        "max_ms": 3.258334,
+        "p50_ms": 1.95175,
+        "p95_ms": 2.837458
+      },
+      "points": 1024,
+      "sha256": "dcb4f956725c86339056938ff7403c120e9b5822824134f6f83449da2160224b"
+    }
+  ],
+  "raster_before": [
+    {
+      "dpr": 2,
+      "environment": "offscreen",
+      "qt": "6.10.2"
+    },
+    {
+      "accepted": 384,
+      "background": "empty",
+      "case": "input-to-paint",
+      "completed": 12,
+      "gesture": "12-short-strokes",
+      "handler": {
+        "count": 396,
+        "max_ms": 2.86754099999996,
+        "p50_ms": 0.02095900000006168,
+        "p95_ms": 0.09024999999996908
+      },
+      "input": {
+        "count": 383,
+        "max_ms": 7.284333000000004,
+        "p50_ms": 4.212209000000001,
+        "p95_ms": 5.192125000000033
+      },
+      "input_to_paint": {
+        "count": 384,
+        "max_ms": 3.8791669999999954,
+        "p50_ms": 0.9206660000000966,
+        "p95_ms": 2.138750000000016
+      },
+      "paint": {
+        "count": 458,
+        "max_ms": 3.8079589999999826,
+        "p50_ms": 0.8857920000000377,
+        "p95_ms": 1.5014999999999645
+      },
+      "painted_samples": 384,
+      "release_to_commit": {
+        "count": 12,
+        "max_ms": 2.9703329999999823,
+        "p50_ms": 2.413041999999905,
+        "p95_ms": 2.9703329999999823
+      },
+      "submitted": 384,
+      "view": "integrated"
+    },
+    {
+      "accepted": 1024,
+      "background": "empty",
+      "case": "input-to-paint",
+      "completed": 1,
+      "gesture": "1024-point-stroke",
+      "handler": {
+        "count": 1025,
+        "max_ms": 2.400916999999936,
+        "p50_ms": 0.008125000000291038,
+        "p95_ms": 0.025584000000009155
+      },
+      "input": {
+        "count": 1023,
+        "max_ms": 11.01183299999957,
+        "p50_ms": 5.459041999999954,
+        "p95_ms": 9.566249999999854
+      },
+      "input_to_paint": {
+        "count": 1024,
+        "max_ms": 10.992416999999477,
+        "p50_ms": 5.333542000000307,
+        "p95_ms": 9.577290999999605
+      },
+      "paint": {
+        "count": 1078,
+        "max_ms": 10.983541999999943,
+        "p50_ms": 5.047250000000076,
+        "p95_ms": 9.547832999999628
+      },
+      "painted_samples": 1024,
+      "release_to_commit": {
+        "count": 1,
+        "max_ms": 154.94016700000066,
+        "p50_ms": 154.94016700000066,
+        "p95_ms": 154.94016700000066
+      },
+      "submitted": 1024,
+      "view": "integrated"
+    },
+    {
+      "accepted": 384,
+      "background": "300-stroke-light-table",
+      "case": "input-to-paint",
+      "completed": 12,
+      "gesture": "12-short-strokes",
+      "handler": {
+        "count": 396,
+        "max_ms": 2.980666999999812,
+        "p50_ms": 0.021167000000787084,
+        "p95_ms": 0.08016700000007404
+      },
+      "input": {
+        "count": 383,
+        "max_ms": 53.741165999999794,
+        "p50_ms": 41.05808400000001,
+        "p95_ms": 44.246000000001004
+      },
+      "input_to_paint": {
+        "count": 384,
+        "max_ms": 53.71799999999985,
+        "p50_ms": 40.97108300000036,
+        "p95_ms": 44.1064580000002
+      },
+      "paint": {
+        "count": 385,
+        "max_ms": 53.67708399999992,
+        "p50_ms": 40.91749999999956,
+        "p95_ms": 43.94645800000035
+      },
+      "painted_samples": 384,
+      "release_to_commit": {
+        "count": 12,
+        "max_ms": 3.1056250000001455,
+        "p50_ms": 2.675834000001487,
+        "p95_ms": 3.1056250000001455
+      },
+      "submitted": 384,
+      "view": "integrated"
+    },
+    {
+      "accepted": 1024,
+      "background": "300-stroke-light-table",
+      "case": "input-to-paint",
+      "completed": 1,
+      "gesture": "1024-point-stroke",
+      "handler": {
+        "count": 1025,
+        "max_ms": 2.834708000002138,
+        "p50_ms": 0.01754100000107428,
+        "p95_ms": 0.028874999999970896
+      },
+      "input": {
+        "count": 1023,
+        "max_ms": 62.172332999998616,
+        "p50_ms": 43.77358300000196,
+        "p95_ms": 47.92691700000432
+      },
+      "input_to_paint": {
+        "count": 1024,
+        "max_ms": 62.153707999999824,
+        "p50_ms": 43.75620899999922,
+        "p95_ms": 47.91570900000079
+      },
+      "paint": {
+        "count": 1027,
+        "max_ms": 62.115625000000364,
+        "p50_ms": 43.725500000000466,
+        "p95_ms": 47.88024999999834
+      },
+      "painted_samples": 1024,
+      "release_to_commit": {
+        "count": 1,
+        "max_ms": 118.52279200000339,
+        "p50_ms": 118.52279200000339,
+        "p95_ms": 118.52279200000339
+      },
+      "submitted": 1024,
+      "view": "integrated"
+    },
+    {
+      "accepted": 384,
+      "background": "empty",
+      "case": "input-to-paint",
+      "completed": 12,
+      "gesture": "12-short-strokes",
+      "handler": {
+        "count": 396,
+        "max_ms": 2.9138749999997344,
+        "p50_ms": 0.023249999999990223,
+        "p95_ms": 0.06991700000025958
+      },
+      "input": {
+        "count": 383,
+        "max_ms": 13.565291000000343,
+        "p50_ms": 9.007749999999987,
+        "p95_ms": 11.015041999999994
+      },
+      "input_to_paint": {
+        "count": 384,
+        "max_ms": 12.940458000000035,
+        "p50_ms": 8.962958000000071,
+        "p95_ms": 10.89145899999994
+      },
+      "paint": {
+        "count": 385,
+        "max_ms": 11.110250000000178,
+        "p50_ms": 8.643917000000101,
+        "p95_ms": 10.566332999999759
+      },
+      "painted_samples": 384,
+      "release_to_commit": {
+        "count": 12,
+        "max_ms": 3.025000000000091,
+        "p50_ms": 2.200417000000016,
+        "p95_ms": 3.025000000000091
+      },
+      "submitted": 384,
+      "view": "workspace"
+    },
+    {
+      "accepted": 1024,
+      "background": "empty",
+      "case": "input-to-paint",
+      "completed": 1,
+      "gesture": "1024-point-stroke",
+      "handler": {
+        "count": 1025,
+        "max_ms": 2.0630830000009155,
+        "p50_ms": 0.017708000000311586,
+        "p95_ms": 0.03370800000004692
+      },
+      "input": {
+        "count": 1023,
+        "max_ms": 21.787583000001177,
+        "p50_ms": 12.975000000000364,
+        "p95_ms": 18.66858300000058
+      },
+      "input_to_paint": {
+        "count": 1024,
+        "max_ms": 21.764415999999983,
+        "p50_ms": 12.950583000000734,
+        "p95_ms": 18.6924999999992
+      },
+      "paint": {
+        "count": 1027,
+        "max_ms": 22.67229199999929,
+        "p50_ms": 12.672040999999808,
+        "p95_ms": 18.425207999998747
+      },
+      "painted_samples": 1024,
+      "release_to_commit": {
+        "count": 1,
+        "max_ms": 120.04133300000103,
+        "p50_ms": 120.04133300000103,
+        "p95_ms": 120.04133300000103
+      },
+      "submitted": 1024,
+      "view": "workspace"
+    },
+    {
+      "accepted": 384,
+      "background": "300-stroke-light-table",
+      "case": "input-to-paint",
+      "completed": 12,
+      "gesture": "12-short-strokes",
+      "handler": {
+        "count": 396,
+        "max_ms": 3.332249999999476,
+        "p50_ms": 0.030917000000044936,
+        "p95_ms": 0.0913749999999709
+      },
+      "input": {
+        "count": 383,
+        "max_ms": 92.75941699999748,
+        "p50_ms": 83.36454099999901,
+        "p95_ms": 88.01150000000052
+      },
+      "input_to_paint": {
+        "count": 384,
+        "max_ms": 92.74458400000003,
+        "p50_ms": 83.30387500000143,
+        "p95_ms": 87.97100000000137
+      },
+      "paint": {
+        "count": 385,
+        "max_ms": 92.28033400000277,
+        "p50_ms": 82.9283749999995,
+        "p95_ms": 87.44879199999923
+      },
+      "painted_samples": 384,
+      "release_to_commit": {
+        "count": 12,
+        "max_ms": 3.442124999999578,
+        "p50_ms": 2.9063749999986612,
+        "p95_ms": 3.442124999999578
+      },
+      "submitted": 384,
+      "view": "workspace"
+    },
+    {
+      "accepted": 1024,
+      "background": "300-stroke-light-table",
+      "case": "input-to-paint",
+      "completed": 1,
+      "gesture": "1024-point-stroke",
+      "handler": {
+        "count": 1025,
+        "max_ms": 2.803375000003143,
+        "p50_ms": 0.026583999999274965,
+        "p95_ms": 0.0403329999971902
+      },
+      "input": {
+        "count": 1023,
+        "max_ms": 113.70533300000534,
+        "p50_ms": 86.5547910000023,
+        "p95_ms": 92.83054199999606
+      },
+      "input_to_paint": {
+        "count": 1024,
+        "max_ms": 113.67237500000192,
+        "p50_ms": 86.53679199999897,
+        "p95_ms": 92.8061250000028
+      },
+      "paint": {
+        "count": 1026,
+        "max_ms": 111.05924999999843,
+        "p50_ms": 86.21474999999919,
+        "p95_ms": 92.51108299999032
+      },
+      "painted_samples": 1024,
+      "release_to_commit": {
+        "count": 1,
+        "max_ms": 97.61650000000373,
+        "p50_ms": 97.61650000000373,
+        "p95_ms": 97.61650000000373
+      },
+      "submitted": 1024,
+      "view": "workspace"
+    }
+  ],
+  "raster_after": [
+    {
+      "dpr": 2,
+      "environment": "offscreen",
+      "qt": "6.10.2"
+    },
+    {
+      "accepted": 384,
+      "background": "empty",
+      "case": "input-to-paint",
+      "completed": 12,
+      "gesture": "12-short-strokes",
+      "handler": {
+        "count": 396,
+        "max_ms": 2.26175000000012,
+        "p50_ms": 0.017457999999976437,
+        "p95_ms": 0.08179100000006656
+      },
+      "input": {
+        "count": 383,
+        "max_ms": 6.599292000000105,
+        "p50_ms": 4.2157080000000065,
+        "p95_ms": 4.9922909999997955
+      },
+      "input_to_paint": {
+        "count": 384,
+        "max_ms": 2.71875,
+        "p50_ms": 0.8879589999999951,
+        "p95_ms": 1.0962919999999485
+      },
+      "paint": {
+        "count": 463,
+        "max_ms": 1.1314160000000584,
+        "p50_ms": 0.8576659999999947,
+        "p95_ms": 1.0394170000000003
+      },
+      "painted_samples": 384,
+      "release_to_commit": {
+        "count": 12,
+        "max_ms": 2.407624999999939,
+        "p50_ms": 2.193458000000078,
+        "p95_ms": 2.407624999999939
+      },
+      "submitted": 384,
+      "view": "integrated"
+    },
+    {
+      "accepted": 1024,
+      "background": "empty",
+      "case": "input-to-paint",
+      "completed": 1,
+      "gesture": "1024-point-stroke",
+      "handler": {
+        "count": 1025,
+        "max_ms": 1.9101250000003347,
+        "p50_ms": 0.009166999999251857,
+        "p95_ms": 0.029125000000021828
+      },
+      "input": {
+        "count": 1023,
+        "max_ms": 11.226958000000195,
+        "p50_ms": 5.63170799999989,
+        "p95_ms": 9.647167000000081
+      },
+      "input_to_paint": {
+        "count": 1024,
+        "max_ms": 11.191667000000052,
+        "p50_ms": 5.514999999999873,
+        "p95_ms": 9.638249999999971
+      },
+      "paint": {
+        "count": 1075,
+        "max_ms": 11.17791699999998,
+        "p50_ms": 5.250332999999955,
+        "p95_ms": 9.587166000000252
+      },
+      "painted_samples": 1024,
+      "release_to_commit": {
+        "count": 1,
+        "max_ms": 1.9937499999996362,
+        "p50_ms": 1.9937499999996362,
+        "p95_ms": 1.9937499999996362
+      },
+      "submitted": 1024,
+      "view": "integrated"
+    },
+    {
+      "accepted": 384,
+      "background": "300-stroke-light-table",
+      "case": "input-to-paint",
+      "completed": 12,
+      "gesture": "12-short-strokes",
+      "handler": {
+        "count": 396,
+        "max_ms": 3.3985000000000127,
+        "p50_ms": 0.017082999999956883,
+        "p95_ms": 0.08474999999998545
+      },
+      "input": {
+        "count": 383,
+        "max_ms": 47.18337500000007,
+        "p50_ms": 3.9922500000000127,
+        "p95_ms": 6.136541999999963
+      },
+      "input_to_paint": {
+        "count": 384,
+        "max_ms": 47.162291000000096,
+        "p50_ms": 0.5651249999999948,
+        "p95_ms": 0.8082919999999945
+      },
+      "paint": {
+        "count": 455,
+        "max_ms": 45.544624999999996,
+        "p50_ms": 0.5437090000000353,
+        "p95_ms": 0.7818749999999
+      },
+      "painted_samples": 384,
+      "release_to_commit": {
+        "count": 12,
+        "max_ms": 3.497833000000014,
+        "p50_ms": 2.7952080000000024,
+        "p95_ms": 3.497833000000014
+      },
+      "submitted": 384,
+      "view": "integrated"
+    },
+    {
+      "accepted": 1024,
+      "background": "300-stroke-light-table",
+      "case": "input-to-paint",
+      "completed": 1,
+      "gesture": "1024-point-stroke",
+      "handler": {
+        "count": 1025,
+        "max_ms": 2.704458000000159,
+        "p50_ms": 0.010167000000024018,
+        "p95_ms": 0.026832999999896856
+      },
+      "input": {
+        "count": 1023,
+        "max_ms": 39.331165999999996,
+        "p50_ms": 5.309666000000107,
+        "p95_ms": 9.262833000000683
+      },
+      "input_to_paint": {
+        "count": 1024,
+        "max_ms": 39.302958,
+        "p50_ms": 5.168667000000141,
+        "p95_ms": 9.250374999999622
+      },
+      "paint": {
+        "count": 1079,
+        "max_ms": 48.12816600000042,
+        "p50_ms": 4.901958999999806,
+        "p95_ms": 9.21875
+      },
+      "painted_samples": 1024,
+      "release_to_commit": {
+        "count": 1,
+        "max_ms": 2.787333000000217,
+        "p50_ms": 2.787333000000217,
+        "p95_ms": 2.787333000000217
+      },
+      "submitted": 1024,
+      "view": "integrated"
+    },
+    {
+      "accepted": 384,
+      "background": "empty",
+      "case": "input-to-paint",
+      "completed": 12,
+      "gesture": "12-short-strokes",
+      "handler": {
+        "count": 396,
+        "max_ms": 2.7283749999999145,
+        "p50_ms": 0.021709000000100787,
+        "p95_ms": 0.09295899999983703
+      },
+      "input": {
+        "count": 383,
+        "max_ms": 9.547166999999945,
+        "p50_ms": 4.200541999999928,
+        "p95_ms": 5.406292000000008
+      },
+      "input_to_paint": {
+        "count": 384,
+        "max_ms": 9.529667000000018,
+        "p50_ms": 1.0950829999999883,
+        "p95_ms": 1.5877499999999145
+      },
+      "paint": {
+        "count": 464,
+        "max_ms": 12.677167000000054,
+        "p50_ms": 0.8116249999998217,
+        "p95_ms": 1.2580419999999322
+      },
+      "painted_samples": 384,
+      "release_to_commit": {
+        "count": 12,
+        "max_ms": 2.754707999999937,
+        "p50_ms": 2.3511250000000246,
+        "p95_ms": 2.754707999999937
+      },
+      "submitted": 384,
+      "view": "workspace"
+    },
+    {
+      "accepted": 1024,
+      "background": "empty",
+      "case": "input-to-paint",
+      "completed": 1,
+      "gesture": "1024-point-stroke",
+      "handler": {
+        "count": 1025,
+        "max_ms": 2.173416999999972,
+        "p50_ms": 0.016332999999974618,
+        "p95_ms": 0.03554200000007768
+      },
+      "input": {
+        "count": 1023,
+        "max_ms": 14.629707999999937,
+        "p50_ms": 7.0575840000001335,
+        "p95_ms": 13.00366699999995
+      },
+      "input_to_paint": {
+        "count": 1024,
+        "max_ms": 14.59945800000014,
+        "p50_ms": 7.0324999999998,
+        "p95_ms": 12.98174999999992
+      },
+      "paint": {
+        "count": 1059,
+        "max_ms": 20.33616600000005,
+        "p50_ms": 6.539041999999881,
+        "p95_ms": 12.664416999999958
+      },
+      "painted_samples": 1024,
+      "release_to_commit": {
+        "count": 1,
+        "max_ms": 21.560082999999395,
+        "p50_ms": 21.560082999999395,
+        "p95_ms": 21.560082999999395
+      },
+      "submitted": 1024,
+      "view": "workspace"
+    },
+    {
+      "accepted": 384,
+      "background": "300-stroke-light-table",
+      "case": "input-to-paint",
+      "completed": 12,
+      "gesture": "12-short-strokes",
+      "handler": {
+        "count": 396,
+        "max_ms": 2.997333000000026,
+        "p50_ms": 0.028042000000027656,
+        "p95_ms": 0.09429199999999582
+      },
+      "input": {
+        "count": 383,
+        "max_ms": 53.37391600000001,
+        "p50_ms": 4.312000000000012,
+        "p95_ms": 6.3085419999999885
+      },
+      "input_to_paint": {
+        "count": 384,
+        "max_ms": 53.334790999999996,
+        "p50_ms": 1.1405419999998685,
+        "p95_ms": 1.4180000000000064
+      },
+      "paint": {
+        "count": 456,
+        "max_ms": 84.13866699999971,
+        "p50_ms": 0.8110839999999371,
+        "p95_ms": 1.0607919999999922
+      },
+      "painted_samples": 384,
+      "release_to_commit": {
+        "count": 12,
+        "max_ms": 3.1071249999999964,
+        "p50_ms": 2.800625000000082,
+        "p95_ms": 3.1071249999999964
+      },
+      "submitted": 384,
+      "view": "workspace"
+    },
+    {
+      "accepted": 1024,
+      "background": "300-stroke-light-table",
+      "case": "input-to-paint",
+      "completed": 1,
+      "gesture": "1024-point-stroke",
+      "handler": {
+        "count": 1025,
+        "max_ms": 2.788292000000183,
+        "p50_ms": 0.014791999999943073,
+        "p95_ms": 0.03899999999998727
+      },
+      "input": {
+        "count": 1023,
+        "max_ms": 43.724375,
+        "p50_ms": 7.043625000000247,
+        "p95_ms": 13.020375000000058
+      },
+      "input_to_paint": {
+        "count": 1024,
+        "max_ms": 43.693125,
+        "p50_ms": 7.0047920000001795,
+        "p95_ms": 12.994000000000597
+      },
+      "paint": {
+        "count": 1064,
+        "max_ms": 96.6717920000001,
+        "p50_ms": 6.532040999999936,
+        "p95_ms": 12.619040999999925
+      },
+      "painted_samples": 1024,
+      "release_to_commit": {
+        "count": 1,
+        "max_ms": 2.8812920000000304,
+        "p50_ms": 2.8812920000000304,
+        "p95_ms": 2.8812920000000304
+      },
+      "submitted": 1024,
+      "view": "workspace"
+    }
+  ],
+  "native_workspace_before": [
+    {
+      "accepted": 384,
+      "background": "300-stroke-light-table",
+      "case": "input-to-paint",
+      "completed": 12,
+      "gesture": "12-short-strokes",
+      "handler": {
+        "count": 396,
+        "max_ms": 3.511040999997931,
+        "p50_ms": 0.03187500000012733,
+        "p95_ms": 0.0934159999997064
+      },
+      "input": {
+        "count": 383,
+        "max_ms": 85.4119580000006,
+        "p50_ms": 37.59458300000006,
+        "p95_ms": 74.48637499999677
+      },
+      "input_to_paint": {
+        "count": 384,
+        "max_ms": 40.88824999999997,
+        "p50_ms": 35.146458999999595,
+        "p95_ms": 37.59008300000005
+      },
+      "paint": {
+        "count": 559,
+        "max_ms": 39.738625000001775,
+        "p50_ms": 34.97045900000012,
+        "p95_ms": 37.24920800000109
+      },
+      "painted_samples": 384,
+      "release_to_commit": {
+        "count": 12,
+        "max_ms": 11.334374999998545,
+        "p50_ms": 4.273499999999785,
+        "p95_ms": 11.334374999998545
+      },
+      "submitted": 384,
+      "view": "workspace"
+    }
+  ],
+  "native_workspace_after": [
+    {
+      "accepted": 384,
+      "background": "300-stroke-light-table",
+      "case": "input-to-paint",
+      "completed": 12,
+      "gesture": "12-short-strokes",
+      "handler": {
+        "count": 396,
+        "max_ms": 3.306083000000001,
+        "p50_ms": 0.022832999999991443,
+        "p95_ms": 0.09354100000018661
+      },
+      "input": {
+        "count": 383,
+        "max_ms": 29.563750000000027,
+        "p50_ms": 4.345499999999902,
+        "p95_ms": 9.153082999999924
+      },
+      "input_to_paint": {
+        "count": 384,
+        "max_ms": 29.257541000000174,
+        "p50_ms": 0.4435000000000855,
+        "p95_ms": 0.7998330000000351
+      },
+      "paint": {
+        "count": 459,
+        "max_ms": 37.74195899999995,
+        "p50_ms": 0.3046669999999949,
+        "p95_ms": 0.41124999999999545
+      },
+      "painted_samples": 384,
+      "release_to_commit": {
+        "count": 12,
+        "max_ms": 8.26233400000001,
+        "p50_ms": 6.265290999999934,
+        "p95_ms": 8.26233400000001
+      },
+      "submitted": 384,
+      "view": "workspace"
+    }
+  ]
+}

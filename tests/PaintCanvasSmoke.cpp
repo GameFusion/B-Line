@@ -114,9 +114,52 @@ static void lightTableChecks(QApplication &app) {
             "panel switch excludes the default active layer from faded background");
 }
 
+static void strokeBackgroundChecks(QApplication &app) {
+    QTemporaryDir assets;QDir().mkpath(assets.filePath("movies"));
+    QImage reference(320,240,QImage::Format_ARGB32_Premultiplied);reference.fill(QColor(80,100,120));
+    reference.save(assets.filePath("movies/reference.png"));
+    PaintArea area;area.setDimensions(320,240,320,240);
+    area.toggleOutputFrame(false);area.toggleActionSafe(false);area.toggleTitleSafe(false);area.setPipDisplay(false);
+    GameFusion::Panel panel;panel.uuid="stroke-cache";panel.image="reference.png";area.setProjectPath(assets.path());
+    GameFusion::Layer ink;ink.uuid="ink";ink.strokes.push_back(line(-70,70,300,70,Qt::red));
+    GameFusion::Layer bg;bg.uuid="bg";bg.opacity=.5;bg.x=10;
+    bg.strokes.push_back(line(-70,130,370,130,Qt::blue));panel.layers={ink,bg};
+    area.setPanel(panel);area.setActiveLayer("ink");area.setLightTableMode(true);
+    PaintCanvas view;view.resize(800,600);view.setPaintArea(&area);view.show();app.processEvents();view.fitToBase();
+    sendMouse(view,QEvent::MouseButtonPress,{40,200},Qt::LeftButton,Qt::LeftButton);
+    sendMouse(view,QEvent::MouseMove,{90,205},Qt::NoButton,Qt::LeftButton);
+    const QRectF bounds(-160,-80,900,600);
+    auto background=area.strokeBackground(bounds,2);
+    require(!background.isNull() && background.size()==QSize(1800,1200),"stroke background is bounded to the visible area at screen density");
+    require(background.cacheKey()==area.strokeBackground(bounds,2).cacheKey(),"held stroke reuses unchanged background pixels");
+    const QImage held=view.viewport()->grab().toImage();
+    const QPoint inkPixel=view.mapFromScene(QPointF(100,70))*held.devicePixelRatio();
+    require(held.pixelColor(inkPixel).red()>240 && held.pixelColor(inkPixel).green()<10,
+            "actual held workspace keeps cached ink aligned with scene coordinates");
+    auto render=[&](bool cached){
+        QImage image(1800,1200,QImage::Format_ARGB32_Premultiplied);image.fill(Qt::white);
+        QPicture commands=area.workspacePicture(bounds,2,!cached);
+        QPainter p(&image);p.scale(2,2);p.translate(160,80);
+        if(cached)p.drawImage(bounds,area.strokeBackground(bounds,2));
+        p.scale(qreal(commands.logicalDpiX())/image.logicalDpiX(),qreal(commands.logicalDpiY())/image.logicalDpiY());
+        p.drawPicture(QPointF(),commands);p.end();return image;
+    };
+    require(render(false)==render(true),"cached stroke scene matches full light-table rendering including off-canvas ink and opacity");
+    area.setLightTableMode(false);
+    require(background.cacheKey()!=area.strokeBackground(bounds,2).cacheKey() && render(false)==render(true),
+            "light-table changes refresh the held-stroke background");
+    background=area.strokeBackground(bounds,2);area.setLayerVisibility("bg",false);
+    require(background.cacheKey()!=area.strokeBackground(bounds,2).cacheKey() && render(false)==render(true),
+            "layer changes refresh the held-stroke background");
+    require(area.strokeBackground(QRectF(0,0,100,80),1).size()==QSize(100,80),"resize and density changes refresh the cache");
+    sendMouse(view,QEvent::MouseButtonRelease,{90,205},Qt::LeftButton,Qt::NoButton);area.finishPendingStrokes();
+    require(area.strokeBackground(bounds,2).isNull(),"release stops using the stroke background cache");
+}
+
 int main(int argc,char **argv) {
     QApplication app(argc,argv);
     lightTableChecks(app);
+    strokeBackgroundChecks(app);
     PaintArea area;
     area.setDimensions(320,240,320,240);
     area.toggleOutputFrame(false); area.toggleActionSafe(false); area.toggleTitleSafe(false); area.setPipDisplay(false);
