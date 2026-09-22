@@ -59,6 +59,7 @@
 #include <QJsonArray>
 
 #include <QUndoStack>
+#include <QUndoView>
 
 #include <QSettings>
 #include <QDateTime>
@@ -2038,14 +2039,45 @@ MainWindow::MainWindow(QWidget *parent)
     logger->setServerConfig("http://localhost:50000", "your-secret-token-here");
     // Undo & Redo actions, menu system
 
-    // Create Edit menu
-    QMenu* editMenu = menuBar()->addMenu(tr("Edit"));
+    // Populate the Designer menu; adding another leaves the first Edit menu empty.
+    QMenu* editMenu = ui->menuEdit;
     undoAction = undoStack->createUndoAction(this, tr("Undo"));
     redoAction = undoStack->createRedoAction(this, tr("Redo"));
-    undoAction->setShortcut(QKeySequence::Undo); // Ctrl+Z
-    redoAction->setShortcut(QKeySequence::Redo); // Ctrl+Y
+    undoAction->setObjectName("actionUndo");
+    redoAction->setObjectName("actionRedo");
+    undoAction->setShortcuts(QKeySequence::Undo);
+    auto redoShortcuts = QKeySequence::keyBindings(QKeySequence::Redo);
+    const QKeySequence shiftRedo(Qt::CTRL | Qt::SHIFT | Qt::Key_Z);
+    redoShortcuts.removeAll(shiftRedo);
+    redoShortcuts.prepend(shiftRedo); // Command+Shift+Z on macOS; retain Ctrl+Y on Windows.
+    redoAction->setShortcuts(redoShortcuts);
     editMenu->addAction(undoAction);
     editMenu->addAction(redoAction);
+
+    auto *historyDock = new QDockWidget(tr("Undo History"), this);
+    historyDock->setObjectName("dockUndoHistory");
+    historyDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    auto *historyContent = new QWidget(historyDock);
+    auto *historyLayout = new QVBoxLayout(historyContent);
+    auto *historyHint = new QLabel(tr("Select an action to return to the state after it."), historyContent);
+    historyHint->setWordWrap(true);
+    historyLayout->addWidget(historyHint);
+    auto *historyView = new QUndoView(undoStack, historyContent);
+    historyView->setObjectName("undoHistoryView");
+    historyView->setEmptyLabel(tr("Initial State"));
+    historyView->setAlternatingRowColors(true);
+    historyLayout->addWidget(historyView);
+    historyDock->setWidget(historyContent);
+    addDockWidget(Qt::LeftDockWidgetArea, historyDock);
+    historyDock->hide();
+    auto *historyAction = historyDock->toggleViewAction();
+    historyAction->setObjectName("actionUndoHistory");
+    connect(historyAction, &QAction::triggered, historyDock, [historyDock](bool visible) {
+        if (visible) historyDock->raise();
+    });
+    editMenu->addSeparator();
+    editMenu->addAction(historyAction);
+    ui->menuWindows->addAction(historyAction);
 
     // Import actions
 
@@ -11257,11 +11289,11 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
         QKeyEvent *keyEvent = static_cast<QKeyEvent*>(event);
         QKeySequence pressed(keyEvent->modifiers() | keyEvent->key());
 
-        if (pressed == QKeySequence::Undo) {
+        if (undoAction->shortcuts().contains(pressed)) {
             undoAction->trigger();   // Ctrl+Z ou cmd+Z sur Mac
             return true;             // eat event
         }
-        if (pressed == QKeySequence::Redo) {
+        if (redoAction->shortcuts().contains(pressed)) {
             redoAction->trigger();   // Ctrl+Y / Ctrl+Shift+Z selon plateforme
             return true;
         }

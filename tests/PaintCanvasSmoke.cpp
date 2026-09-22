@@ -83,16 +83,16 @@ static void lightTableChecks(QApplication &app) {
     require(second.findChild<QAction*>("workspaceLightTable")->isChecked(),"new workspace inherits current light-table state");
     QImage faded=pictureImage(area);
     auto expectedFade=[](QColor c){return QColor(qRound(255*0.75+c.red()*0.25),qRound(255*0.75+c.green()*0.25),qRound(255*0.75+c.blue()*0.25));};
-    auto near=[](QColor a,QColor b){return qAbs(a.red()-b.red())<=2&&qAbs(a.green()-b.green())<=2&&qAbs(a.blue()-b.blue())<=2;};
-    require(near(pixel(faded,200,200),expectedFade(pixel(normal,200,200))),"panel reference image fades to 25 percent");
-    require(near(pixel(faded,260,180),expectedFade(pixel(normal,260,180))),"image layer fades with background");
-    require(near(pixel(faded,150,150),expectedFade(pixel(normal,150,150))),"background overlap and multiply blend fade once as a group");
-    require(near(pixel(faded,-70,150),expectedFade(pixel(normal,-70,150))),"light table preserves off-canvas background strokes");
+    auto colorsNear=[](QColor a,QColor b){return qAbs(a.red()-b.red())<=2&&qAbs(a.green()-b.green())<=2&&qAbs(a.blue()-b.blue())<=2;};
+    require(colorsNear(pixel(faded,200,200),expectedFade(pixel(normal,200,200))),"panel reference image fades to 25 percent");
+    require(colorsNear(pixel(faded,260,180),expectedFade(pixel(normal,260,180))),"image layer fades with background");
+    require(colorsNear(pixel(faded,150,150),expectedFade(pixel(normal,150,150))),"background overlap and multiply blend fade once as a group");
+    require(colorsNear(pixel(faded,-70,150),expectedFade(pixel(normal,-70,150))),"light table preserves off-canvas background strokes");
     require(pixel(faded,-70,60).red()>240 && pixel(faded,-70,60).green()<10,"active off-canvas ink stays full strength");
     QImage integrated(320,240,QImage::Format_ARGB32_Premultiplied);integrated.fill(Qt::white);
     {QPainter p(&integrated);area.renderScene(p);}
-    require(near(integrated.pixelColor(150,150),pixel(faded,150,150)) &&
-            near(integrated.pixelColor(200,200),pixel(faded,200,200)),"integrated and workspace light table agree");
+    require(colorsNear(integrated.pixelColor(150,150),pixel(faded,150,150)) &&
+            colorsNear(integrated.pixelColor(200,200),pixel(faded,200,200)),"integrated and workspace light table agree");
     QImage exportAfter(320,240,QImage::Format_ARGB32_Premultiplied);area.renderFrameToImage(exportAfter);
     require(exportBefore==exportAfter && area.compositedImage().pixelColor(140,60).green()<10,
             "light table leaves active ink in export and camera source composite");

@@ -11,6 +11,7 @@
 #include <QPainter>
 #include <QTimer>
 #include <QPixmapCache>
+#include <QAccessible>
 
 namespace {
 class ShotRowDelegate : public QStyledItemDelegate {
@@ -86,6 +87,13 @@ ShotListPresentation::ShotListPresentation(QTreeWidget *tree) : QObject(tree),m_
     for(int col=1;col<tree->columnCount();++col) {auto *a=columns->addAction(tree->headerItem()->text(col));a->setCheckable(true);a->setData(col);a->setChecked(settings.value(QString("shotList/column%1").arg(col),col==1||col==3||col==6||col==7).toBool());m_columns<<a;connect(a,&QAction::toggled,this,[this,a,col](bool on){QSettings(QSettings::defaultFormat(), QSettings::UserScope, "B-Line", "Storyboard").setValue(QString("shotList/column%1").arg(col),on);applyView();});}
     menu->addSeparator();menu->addAction(tr("Expand all"),tree,&QTreeWidget::expandAll);menu->addAction(tr("Collapse all"),tree,&QTreeWidget::collapseAll);
     tree->setItemDelegate(new ShotRowDelegate(tree));tree->setIndentation(14);tree->setMouseTracking(true);tree->setWordWrap(false);tree->setTextElideMode(Qt::ElideRight);tree->setUniformRowHeights(false);tree->setFrameShape(QFrame::NoFrame);tree->setAnimated(false);
+    // Qt 6.10's collapse path removes visible rows without invalidating its
+    // accessibility child cache. UIA can then revisit a previous sibling forever.
+    // Reset synchronously, before selection/focus queries can traverse stale rows.
+    connect(tree, &QTreeView::collapsed, this, [tree] {
+        QAccessibleTableModelChangeEvent event(tree, QAccessibleTableModelChangeEvent::ModelReset);
+        QAccessible::updateAccessibility(&event);
+    });
     connect(m_search,&QLineEdit::textChanged,this,[this]{refresh();});
     // Model insertions are coalesced after population, preserving existing items/IDs.
     auto *refreshTimer=new QTimer(this);refreshTimer->setSingleShot(true);
