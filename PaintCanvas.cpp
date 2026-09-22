@@ -222,12 +222,16 @@ void PaintCanvas::drawBackground(QPainter *painter, const QRectF &rect)
         const QTransform source = QTransform::fromScale(m_sourceZoom, m_sourceZoom);
         m_viewBackgroundRect = source.mapRect(visible);
         const qreal density = zoomFactor() * viewport()->devicePixelRatioF() / m_sourceZoom;
+        m_area->setWorkspaceStrokeViewport(m_viewBackgroundRect, density);
         m_viewBackground = m_area->viewportBackground(m_viewBackgroundRect, density);
-        m_drawing = m_area->workspacePicture(m_viewBackgroundRect, density, m_viewBackground.isNull());
+        m_drawing = m_area->workspacePicture(m_viewBackgroundRect, density, m_viewBackground.isNull(), m_viewBackground.isNull());
     }
     painter->save();
     painter->scale(1.0 / m_sourceZoom, 1.0 / m_sourceZoom);
     if (!m_viewBackground.isNull()) painter->drawImage(m_viewBackgroundRect, m_viewBackground);
+    if (!m_viewBackground.isNull() && (!m_area->interactionActive() || m_area->workspaceInteractionActive()))
+        m_area->drawLiveStroke(*painter, m_viewBackgroundRect,
+                              zoomFactor() * viewport()->devicePixelRatioF() / m_sourceZoom);
     // QPicture uses a fixed logical DPI; compensate so model pixels stay pixels
     // on macOS, offscreen tests and HiDPI screens alike.
     painter->scale(qreal(m_drawing.logicalDpiX()) / painter->device()->logicalDpiX(),

@@ -1,5 +1,9 @@
 # Active-stroke latency — 22 September 2026
 
+Follow-up: [DRAWING-PREVIEW-PERFORMANCE.md](DRAWING-PREVIEW-PERFORMANCE.md) records
+worker-rendered previews, retained light-table backgrounds and newer measurements.
+The measurements and implementation description below are the earlier baseline.
+
 The active drawing path now reuses completed fitting work and retains the
 unchanged scene background during a brush gesture. Input samples still reach the
 active canvas immediately; fitting runs on its worker thread. The other editor,

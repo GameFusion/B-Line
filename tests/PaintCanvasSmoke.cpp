@@ -138,7 +138,7 @@ static void strokeBackgroundChecks(QApplication &app) {
             "actual held workspace keeps cached ink aligned with scene coordinates");
     auto render=[&](bool cached){
         QImage image(1800,1200,QImage::Format_ARGB32_Premultiplied);image.fill(Qt::white);
-        QPicture commands=area.workspacePicture(bounds,2,!cached);
+        QPicture commands=area.workspacePicture(cached?bounds:QRectF(),2,!cached);
         QPainter p(&image);p.scale(2,2);p.translate(160,80);
         if(cached)p.drawImage(bounds,area.viewportBackground(bounds,2));
         p.scale(qreal(commands.logicalDpiX())/image.logicalDpiX(),qreal(commands.logicalDpiY())/image.logicalDpiY());
@@ -153,7 +153,8 @@ static void strokeBackgroundChecks(QApplication &app) {
             "layer changes refresh the held-stroke background");
     require(area.viewportBackground(QRectF(0,0,100,80),1).size()==QSize(100,80),"resize and density changes refresh the cache");
     sendMouse(view,QEvent::MouseButtonRelease,{90,205},Qt::LeftButton,Qt::NoButton);area.finishPendingStrokes();
-    require(area.viewportBackground(bounds,2).isNull(),"release stops using the stroke background cache");
+    require(!area.viewportBackground(bounds,2).isNull() && render(false)==render(true),
+            "release refreshes the retained background with committed ink");
     area.setToolMode(PaintArea::ToolMode::Select);
     area.setPlaybackMode(true);area.setCurrentTime(0);
     background=area.viewportBackground(bounds,2);
@@ -179,8 +180,8 @@ static void strokeBackgroundChecks(QApplication &app) {
             "panel transition replaces the cached reference image and ink");
     QImage exportBefore(320,240,QImage::Format_ARGB32_Premultiplied),exportAfter(exportBefore.size(),exportBefore.format());
     area.renderFrameToImage(exportBefore);area.setPlaybackMode(false);area.renderFrameToImage(exportAfter);
-    require(area.viewportBackground(bounds,2).isNull() && exportBefore==exportAfter,
-            "pause releases the playback cache and preserves exported pixels");
+    require(!area.viewportBackground(bounds,2).isNull() && exportBefore==exportAfter,
+            "pause retains the editing background and preserves exported pixels");
 }
 
 int main(int argc,char **argv) {

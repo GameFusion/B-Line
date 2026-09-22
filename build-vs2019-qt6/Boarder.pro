@@ -369,3 +369,5 @@ macx-xcode {
 QT += multimedia multimediawidgets
 SOURCES += ../ShotListPresentation.cpp ../MoviePlayerWindow.cpp
 HEADERS += ../ShotListPresentation.h ../MoviePlayerWindow.h ../PlaybackTiming.h
+
+HEADERS += $$GF/Applications/plugandpaint/app/StrokeRenderer.h

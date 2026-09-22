@@ -64,6 +64,24 @@ validation, reproduction and the remaining panel-transition stalls. Historical
 large-project acceptance limits below are superseded only for this tested project;
 long-duration A/V drift and multi-track mixing remain separate work.
 
+## Follow-up: worker-rendered drawing previews
+
+Long-stroke input-to-Qt-paint p95 now measures 0.79–1.31 ms across the paired raster
+fixtures, down from 9.24–12.62 ms. The worker rasterizes fitted previews into
+bounded private images; both canvases retain immediate raw input and identical
+final fitted geometry. Light-table backgrounds remain cached between gestures,
+and release waits for the committed curve before refreshing the document.
+
+Changes span B-Line and plugandpaint (`71f8528`); TimeLineProject and GameFusion
+require no new changes. Native drawing/preview checks, fitting equivalence,
+playback and movie export pass. The supplied project still paints all 63 panels
+at 23.93 fps in the native workspace. See
+[DRAWING-PREVIEW-PERFORMANCE.md](DRAWING-PREVIEW-PERFORMANCE.md) for full results,
+raw data and reproduction. Short-stroke p95 is slightly higher in some cases;
+final committed refresh still costs about 13–32 ms, and native worst-case stalls
+remain. Next measurements should distinguish refined-preview delivery from the
+immediate raw tip, then target final rasterization and real stylus/display delay.
+
 ## Stop point and user priorities
 
 The user explicitly asked to **stop implementation and create a handover**. Implementation stopped. The changes below are unfinished, uncommitted, and not pushed. Do not interpret this document as evidence that the features work or that the current source builds.

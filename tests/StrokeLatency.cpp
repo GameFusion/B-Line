@@ -10,6 +10,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMouseEvent>
+#include <QTabletEvent>
+#include <QPointingDevice>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QTimer>
@@ -95,12 +97,14 @@ struct Samples {
     QElapsedTimer clock;
     bool collecting=false;
     size_t painted=0;
-    int paints=0;
-    std::vector<double> inputs,latencies,paintTimes,handlers,intervals;
+    int paints=0,committed=0;
+    std::vector<double> inputs,latencies,paintTimes,handlers,intervals,releases,releasePaints;
     void didPaint(double start) {
         if(!collecting)return;
         ++paints; const double end=clock.nsecsElapsed()/1e6; paintTimes.push_back(end-start);
         while(painted<inputs.size())latencies.push_back(end-inputs[painted++]);
+        while(releasePaints.size()<size_t(committed) && releasePaints.size()<releases.size())
+            releasePaints.push_back(end-releases[releasePaints.size()]);
     }
 };
 class MeasuredArea:public PaintArea {
@@ -135,12 +139,15 @@ static void uiBenchmark(QApplication &app,bool workspace,bool dense,bool rapid) 
     QEventLoop settle;QTimer::singleShot(100,&settle,&QEventLoop::quit);settle.exec();view.fitToBase();app.processEvents();
     Samples samples;samples.clock.start();samples.collecting=true;
     if(workspace)view.samples=&samples;else area.samples=&samples;
-    std::vector<double> commits,releases;int completed=0,accepted=0;
+    std::vector<double> commits;auto &releases=samples.releases;int completed=0,accepted=0;
     QObject::connect(&area,&PaintArea::newPointAvailable,&area,[&]{++accepted;});
     QObject::connect(&area,&PaintArea::layerModified,&area,[&](const GameFusion::Layer &layer){
-        if(int(layer.strokes.size())>completed){completed=int(layer.strokes.size());
+        if(int(layer.strokes.size())>completed){completed=int(layer.strokes.size());samples.committed=completed;
             if(completed<=int(releases.size()))commits.push_back(samples.clock.nsecsElapsed()/1e6-releases[completed-1]);}
     });
+    const bool tablet=app.arguments().contains("--tablet");
+    QPointingDevice penDevice("Latency pen",1,QInputDevice::DeviceType::Stylus,QPointingDevice::PointerType::Pen,
+                             QInputDevice::Capability::Position|QInputDevice::Capability::Pressure,1,1);
     auto send=[&](QEvent::Type type,int i){
         const QPointF pos=workspace?view.mapFromScene(point(i)):point(i)*area.zoomFactor();
         QWidget *target=workspace?view.viewport():&area;
@@ -151,7 +158,15 @@ static void uiBenchmark(QApplication &app,bool workspace,bool dense,bool rapid) 
         }else releases.push_back(start);
         QMouseEvent event(type,pos,target->mapToGlobal(pos.toPoint()),type==QEvent::MouseMove?Qt::NoButton:Qt::LeftButton,
                           type==QEvent::MouseButtonRelease?Qt::NoButton:Qt::LeftButton,Qt::NoModifier);
-        QCoreApplication::sendEvent(target,&event);samples.handlers.push_back(samples.clock.nsecsElapsed()/1e6-start);
+        if(tablet){
+            const auto tabletType=type==QEvent::MouseButtonPress?QEvent::TabletPress:
+                type==QEvent::MouseButtonRelease?QEvent::TabletRelease:QEvent::TabletMove;
+            const qreal pressure=type==QEvent::MouseButtonRelease?0:.5+.45*std::sin(i*.019);
+            QTabletEvent tabletEvent(tabletType,&penDevice,pos,target->mapToGlobal(pos.toPoint()),pressure,
+                                     0,0,0,0,0,Qt::NoModifier,event.button(),event.buttons());
+            QCoreApplication::sendEvent(target,&tabletEvent);
+        }else QCoreApplication::sendEvent(target,&event);
+        samples.handlers.push_back(samples.clock.nsecsElapsed()/1e6-start);
     };
     const int pointsPerStroke=rapid?32:1024,strokes=rapid?12:1;
     for(int stroke=0;stroke<strokes;++stroke){
@@ -171,9 +186,10 @@ static void uiBenchmark(QApplication &app,bool workspace,bool dense,bool rapid) 
     }
     area.finishPendingStrokes();app.processEvents();samples.collecting=false;
     report({{"case","input-to-paint"},{"view",workspace?"workspace":"integrated"},{"background",dense?"300-stroke-light-table":"empty"},
-            {"gesture",rapid?"12-short-strokes":"1024-point-stroke"},{"input",distribution(samples.intervals)},
+            {"gesture",rapid?"12-short-strokes":"1024-point-stroke"},{"device",tablet?"variable-pressure-tablet":"mouse"},{"input",distribution(samples.intervals)},
             {"handler",distribution(samples.handlers)},{"input_to_paint",distribution(samples.latencies)},
             {"paint",distribution(samples.paintTimes)},{"release_to_commit",distribution(commits)},
+            {"release_to_committed_paint",distribution(samples.releasePaints)},
             {"submitted",int(samples.inputs.size())},{"accepted",accepted},{"painted_samples",int(samples.painted)},{"completed",completed}});
     if(accepted!=int(samples.inputs.size()) || samples.painted!=samples.inputs.size()){
         fprintf(stderr,"FAIL: input interrupted or window occluded; reject this timing run\n");std::exit(1);
