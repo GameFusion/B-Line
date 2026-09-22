@@ -1,0 +1,23 @@
+B-Line 1.0.2 - Windows x64 - 22 September 2026
+
+Fixes an unresponsive interface after collapsing a scene and selecting a shot
+in a later scene. The Shot List now refreshes Qt's accessibility row cache
+immediately, preventing Windows accessibility navigation from looping.
+
+This release includes the shared drawing workspace, smoother stroke previews,
+elapsed-time playback for silent sequences, native audio transport, timeline
+painting improvements, Shot List controls, and movie export with a preview player.
+
+Optimized Release build with Qt 6.10.2 and MSVC 14.50 (/O2, /OPT:REF, /OPT:ICF).
+Qt, MSVC and FFmpeg runtime dependencies are included. Regression coverage
+includes scene collapse/expand and later-scene selection, playback/audio,
+drawing, timeline painting, stroke previews, MP4 encoding and movie playback.
+
+Close B-Line before installation. For an existing installation, use its
+maintenance tool to uninstall the old application, then install this release.
+Keep projects outside the application installation directory. The installer
+does not recursively delete an existing directory or include user settings.
+
+The Windows executable and installer are unsigned.
+Source: https://github.com/GameFusion/B-Line
+The build manifest records the source revision and executable checksum.
